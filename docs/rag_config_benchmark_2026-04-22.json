@@ -1,0 +1,4106 @@
+{
+  "created_at": "2026-04-22T00:17:51",
+  "benchmark_scope": "Sprint 3 Batch 7 local offline retrieval benchmark",
+  "source_pdf": "materials/book_embNLP_draft.pdf",
+  "pages_with_text": 163,
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "chunking_unit": "characters, page-scoped recursive splitting",
+  "chunk_sizes": [
+    256,
+    512,
+    1024
+  ],
+  "overlaps": [
+    0,
+    50,
+    100
+  ],
+  "top_ks": [
+    3,
+    5,
+    10
+  ],
+  "coarse_thresholds": [
+    0.5,
+    0.65,
+    0.8,
+    1.0,
+    1.2
+  ],
+  "refined_thresholds": [
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85
+  ],
+  "queries": [
+    {
+      "id": "Q1",
+      "query": "What are word embeddings and why are they useful in NLP?",
+      "type": "in_scope",
+      "keywords": [
+        "word embedding",
+        "word embeddings",
+        "natural language processing",
+        "semantic",
+        "vector",
+        "vectors"
+      ]
+    },
+    {
+      "id": "Q2",
+      "query": "What is the difference between static word embeddings and contextualized embeddings?",
+      "type": "in_scope",
+      "keywords": [
+        "static",
+        "contextualized",
+        "contextualised",
+        "contextual",
+        "word2vec",
+        "bert",
+        "elmo"
+      ]
+    },
+    {
+      "id": "Q3",
+      "query": "What are sentence and document embeddings?",
+      "type": "in_scope",
+      "keywords": [
+        "sentence",
+        "document",
+        "embeddings",
+        "universal sentence encoder",
+        "paragraph"
+      ]
+    },
+    {
+      "id": "Q4",
+      "query": "What is the weather in Sydney tomorrow?",
+      "type": "out_of_scope",
+      "keywords": [
+        "weather",
+        "sydney",
+        "tomorrow",
+        "forecast"
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "chunk_size": 256,
+      "overlap": 0,
+      "chunk_count": 1689,
+      "avg_chunk_chars": 218.7,
+      "p95_chunk_chars": 253,
+      "chunk_seconds": 0.0028,
+      "embedding_seconds": 0.5122,
+      "retrieval_matrix_seconds": 0.0023,
+      "avg_in_scope_best_distance": 0.2673,
+      "out_scope_best_distance": 0.6036,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2517,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2517,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 180,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]."
+            },
+            {
+              "rank": 2,
+              "distance": 0.2694,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word"
+            },
+            {
+              "rank": 3,
+              "distance": 0.2736,
+              "page": 14,
+              "chunk_id": "p14_c5",
+              "char_len": 248,
+              "keyword_hit": true,
+              "preview": "conventional word embeddings, the input to these models is not words in isolation, but words along with their contexts. Contextualized representations are currently dominating almost all standard NLP benchmarks. Also, th"
+            },
+            {
+              "rank": 4,
+              "distance": 0.2815,
+              "page": 96,
+              "chunk_id": "p96_c7",
+              "char_len": 241,
+              "keyword_hit": true,
+              "preview": "(for which embeddings are available); (3) It allows the model to share knowledge among words that have similar structures (look similar) with the hope that they share semantics, for instance, cognates across different la"
+            },
+            {
+              "rank": 5,
+              "distance": 0.2823,
+              "page": 149,
+              "chunk_id": "p149_c5",
+              "char_len": 251,
+              "keyword_hit": true,
+              "preview": "2(11):559\u2013572, 1901. doi: 10.1080/14786440109462720. Maria Pelevina, Nikolay Arefyev, Chris Biemann, and Alexander Panchenko. Making sense of word embeddings. In Proceedings of the 1st Workshop on Representation Learning"
+            },
+            {
+              "rank": 6,
+              "distance": 0.2849,
+              "page": 47,
+              "chunk_id": "p47_c14",
+              "char_len": 158,
+              "keyword_hit": false,
+              "preview": "the ability of embedding models in capturing different meanings of a word. For an embedding model to succeed on these benchmarks, it is often enough to encode"
+            },
+            {
+              "rank": 7,
+              "distance": 0.2872,
+              "page": 2,
+              "chunk_id": "p2_c3",
+              "char_len": 182,
+              "keyword_hit": true,
+              "preview": "sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector"
+            },
+            {
+              "rank": 8,
+              "distance": 0.2872,
+              "page": 13,
+              "chunk_id": "p13_c9",
+              "char_len": 250,
+              "keyword_hit": false,
+              "preview": "embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated research in other areas of representation, such as emb"
+            },
+            {
+              "rank": 9,
+              "distance": 0.2917,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 232,
+              "keyword_hit": false,
+              "preview": "chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to explain and analyze the e"
+            },
+            {
+              "rank": 10,
+              "distance": 0.2927,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "rithms, has played a central role in the development in NLP. Embedding techniques initially focused on words but the attention soon started to shift to other forms: from graph structures, such as knowledge bases, to othe"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2433,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2433,
+              "page": 88,
+              "chunk_id": "p88_c8",
+              "char_len": 254,
+              "keyword_hit": true,
+              "preview": "Interestingly, contextualized embeddings not only can capture various semantic roles of a word, but also its syntactic properties [ Hewitt and Manning , 2019, Goldberg, 2019]. In contrast to static word embeddings which "
+            },
+            {
+              "rank": 2,
+              "distance": 0.2556,
+              "page": 88,
+              "chunk_id": "p88_c5",
+              "char_len": 241,
+              "keyword_hit": true,
+              "preview": "even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of the limitations"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3143,
+              "page": 14,
+              "chunk_id": "p14_c5",
+              "char_len": 248,
+              "keyword_hit": true,
+              "preview": "conventional word embeddings, the input to these models is not words in isolation, but words along with their contexts. Contextualized representations are currently dominating almost all standard NLP benchmarks. Also, th"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3213,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 208,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con-"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3442,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 211,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3604,
+              "page": 90,
+              "chunk_id": "p90_c4",
+              "char_len": 252,
+              "keyword_hit": true,
+              "preview": "the embedding of that word which is contextualized to its context. Hence, though the authors of Context2vec did not explicitly view the approach as a means of computing dynamic word embeddings, it is highly similar to su"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3609,
+              "page": 81,
+              "chunk_id": "p81_c2",
+              "char_len": 248,
+              "keyword_hit": true,
+              "preview": "appears. In the word-based model (a) For each input word, the static embedding is looked up from a pre-trained semantic space. Embeddings are introduced as fea- tures, usually in the input layer. In the sense based model"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3647,
+              "page": 133,
+              "chunk_id": "p133_c3",
+              "char_len": 234,
+              "keyword_hit": true,
+              "preview": "Luis Espinosa-Anke and Steven Schockaert. Se VeN: Augmenting word embeddings with unsupervised relation vectors. In Proc. of COLING, pages 2653\u20132665, 2018. Kawin Ethayarajh. How contextual are contextualized word represe"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3692,
+              "page": 90,
+              "chunk_id": "p90_c5",
+              "char_len": 253,
+              "keyword_hit": true,
+              "preview": "word embeddings and constitutes one of the bases for this field of research. The most important distinguishing factor to subsequent techniques is that Context2vec ignores the target word while computing the contextualize"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3727,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 196,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.3068,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.3068,
+              "page": 16,
+              "chunk_id": "p16_c10",
+              "char_len": 169,
+              "keyword_hit": false,
+              "preview": "the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representation that encodes the semantics (or"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3184,
+              "page": 2,
+              "chunk_id": "p2_c3",
+              "char_len": 182,
+              "keyword_hit": true,
+              "preview": "sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3219,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 232,
+              "keyword_hit": true,
+              "preview": "chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to explain and analyze the e"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3257,
+              "page": 41,
+              "chunk_id": "p41_c12",
+              "char_len": 172,
+              "keyword_hit": true,
+              "preview": "ommend the book from this editorial of S\u00f8gaard et al. [2019]. In the following we split the different types of word embedding by their source of supervision: sentence-level"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3374,
+              "page": 114,
+              "chunk_id": "p114_c4",
+              "char_len": 248,
+              "keyword_hit": true,
+              "preview": "similar tasks where data is available [ Peng et al. , 2017, Ruder, 2017], its current utility for certain settings has also been discussed Bingel and S\u00f8gaard [2017]. In the context of sentence embeddings, Subramanian et "
+            },
+            {
+              "rank": 6,
+              "distance": 0.3426,
+              "page": 91,
+              "chunk_id": "p91_c4",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "Figure 6.6 provides a high-level illustration of the integration of contextualized word embeddings into an NLP model. At the training time, for each word (e.g., cell in the figure) in a given input text, the language mod"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3472,
+              "page": 115,
+              "chunk_id": "p115_c8",
+              "char_len": 251,
+              "keyword_hit": true,
+              "preview": "to test and apply sentence embeddings on. Finally, semantic and syntactic probing tasks have also been proposed as a way to have a more linguistically-grounded evalu- ation of sentence embedding techniques [Conneau et al"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3512,
+              "page": 114,
+              "chunk_id": "p114_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 108 7. SENTENCE AND DOCUMENT EMBEDDINGS vantage of both modalities for language understanding. Kiela et al. [2018] pro- posed a sentence embedding model that aims at predicting visual features from"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3674,
+              "page": 2,
+              "chunk_id": "p2_c4",
+              "char_len": 237,
+              "keyword_hit": true,
+              "preview": "space models and word embeddings (e.g., Word2Vec and GloVe) and then moves to other types of embeddings, such as word sense, sentence and document, and graph embeddings. We also provide an overview on the status of the r"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3677,
+              "page": 96,
+              "chunk_id": "p96_c7",
+              "char_len": 241,
+              "keyword_hit": true,
+              "preview": "(for which embeddings are available); (3) It allows the model to share knowledge among words that have similar structures (look similar) with the hope that they share semantics, for instance, cognates across different la"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.6036,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.6036,
+              "page": 108,
+              "chunk_id": "p108_c3",
+              "char_len": 215,
+              "keyword_hit": true,
+              "preview": "T window The expandedwindowwill give us time to catch the thieves Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and negative (F) pairs from the WiC dataset."
+            },
+            {
+              "rank": 2,
+              "distance": 0.6879,
+              "page": 137,
+              "chunk_id": "p137_c11",
+              "char_len": 63,
+              "keyword_hit": false,
+              "preview": "Australia, 2018. URL https://www.aclweb.org/anthology/P18-1031."
+            },
+            {
+              "rank": 3,
+              "distance": 0.7233,
+              "page": 47,
+              "chunk_id": "p47_c3",
+              "char_len": 249,
+              "keyword_hit": false,
+              "preview": "and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The SimLex-999 dataset is designed with the intention to high"
+            },
+            {
+              "rank": 4,
+              "distance": 0.7318,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 198,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally"
+            },
+            {
+              "rank": 5,
+              "distance": 0.7944,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 215,
+              "keyword_hit": false,
+              "preview": "F land The pilot managed tolandthe airplane safely The enemylandedseveral of our aircrafts T air Airpollution Open a window and let in someair T beat Webeatthe competition AgassibeatBecker in the tennis championship"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8076,
+              "page": 11,
+              "chunk_id": "p11_c4",
+              "char_len": 249,
+              "keyword_hit": false,
+              "preview": "tions. Using this representation, it is not possible to encode the conceptual similar- ity between \u201cnoon\u201d and \u201cmidday\u201d. Even worse, the two similar looking words such \u201cdesk\u201d and \u201cdesks\u201d (which would have similar string-b"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8211,
+              "page": 4,
+              "chunk_id": "p4_c13",
+              "char_len": 202,
+              "keyword_hit": false,
+              "preview": "6.2 Background: Transformer model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 77 6.2.1 Self-attention . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 78"
+            },
+            {
+              "rank": 8,
+              "distance": 0.828,
+              "page": 36,
+              "chunk_id": "p36_c2",
+              "char_len": 252,
+              "keyword_hit": false,
+              "preview": "A stop word has a high P value, resulting in a reduced overall PMI value. PMI values can range from \u2212 inf to + inf. Negative values indicate a co-occurrence which is less likely to happen than by chance. Given that these"
+            },
+            {
+              "rank": 9,
+              "distance": 0.8297,
+              "page": 47,
+              "chunk_id": "p47_c4",
+              "char_len": 206,
+              "keyword_hit": false,
+              "preview": "ity: For instance the score assigned to the pair \u201csunset\u201d:\u201csunrise\u201d is lower than that for \u201cbed\u201d:\u201cbedroom\u201d and \u201cpaper\u201d:\u201cwood\u201d. Given the variability in the notion of similarity, one might expect word embed-"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8302,
+              "page": 47,
+              "chunk_id": "p47_c9",
+              "char_len": 248,
+              "keyword_hit": false,
+              "preview": "context matrix where rows are words and columns are WordNet supersenses (which are 41 in total). The columns in this matrix are aligned with the columns in the corre- sponding word representation matrix (which is to be e"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.3363,
+      "score": 71.726
+    },
+    {
+      "chunk_size": 256,
+      "overlap": 50,
+      "chunk_count": 1689,
+      "avg_chunk_chars": 242.2,
+      "p95_chunk_chars": 256,
+      "chunk_seconds": 0.0034,
+      "embedding_seconds": 0.4755,
+      "retrieval_matrix_seconds": 0.0003,
+      "avg_in_scope_best_distance": 0.2607,
+      "out_scope_best_distance": 0.6479,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2517,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2517,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 180,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]."
+            },
+            {
+              "rank": 2,
+              "distance": 0.2694,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word"
+            },
+            {
+              "rank": 3,
+              "distance": 0.2845,
+              "page": 149,
+              "chunk_id": "p149_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ce , 2(11):559\u2013572, 1901. doi: 10.1080/14786440109462720. Maria Pelevina, Nikolay Arefyev, Chris Biemann, and Alexander Panchenko. Making sense of word embeddings. In Proceedings of the 1st Workshop on Representation Lea"
+            },
+            {
+              "rank": 4,
+              "distance": 0.2927,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "rithms, has played a central role in the development in NLP. Embedding techniques initially focused on words but the attention soon started to shift to other forms: from graph structures, such as knowledge bases, to othe"
+            },
+            {
+              "rank": 5,
+              "distance": 0.2961,
+              "page": 96,
+              "chunk_id": "p96_c7",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "n its subwords (for which embeddings are available); (3) It allows the model to share knowledge among words that have similar structures (look similar) with the hope that they share semantics, for instance, cognates acro"
+            },
+            {
+              "rank": 6,
+              "distance": 0.2968,
+              "page": 16,
+              "chunk_id": "p16_c10",
+              "char_len": 219,
+              "keyword_hit": true,
+              "preview": "linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representation that encodes the semantics (or"
+            },
+            {
+              "rank": 7,
+              "distance": 0.2993,
+              "page": 88,
+              "chunk_id": "p88_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": ". Interestingly, contextualized embeddings not only can capture various semantic roles of a word, but also its syntactic properties [ Hewitt and Manning , 2019, Goldberg, 2019]. In contrast to static word embeddings whic"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3211,
+              "page": 13,
+              "chunk_id": "p13_c9",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated research in other areas of representation, such "
+            },
+            {
+              "rank": 9,
+              "distance": 0.3272,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "zed embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to e"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3275,
+              "page": 91,
+              "chunk_id": "p91_c4",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "Figure 6.6 provides a high-level illustration of the integration of contextualized word embeddings into an NLP model. At the training time, for each word (e.g., cell in the figure) in a given input text, the language mod"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.242,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.242,
+              "page": 88,
+              "chunk_id": "p88_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": ". Interestingly, contextualized embeddings not only can capture various semantic roles of a word, but also its syntactic properties [ Hewitt and Manning , 2019, Goldberg, 2019]. In contrast to static word embeddings whic"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3213,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 208,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con-"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3238,
+              "page": 88,
+              "chunk_id": "p88_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "rmer fills the even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of "
+            },
+            {
+              "rank": 4,
+              "distance": 0.3437,
+              "page": 80,
+              "chunk_id": "p80_c3",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "static word embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings have provided significant gains "
+            },
+            {
+              "rank": 5,
+              "distance": 0.3442,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 211,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3658,
+              "page": 133,
+              "chunk_id": "p133_c3",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": ", pages 58\u201368, 2017. Luis Espinosa-Anke and Steven Schockaert. Se VeN: Augmenting word embeddings with unsupervised relation vectors. In Proc. of COLING, pages 2653\u20132665, 2018. Kawin Ethayarajh. How contextual are contex"
+            },
+            {
+              "rank": 7,
+              "distance": 0.37,
+              "page": 90,
+              "chunk_id": "p90_c4",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "as the embedding of that word which is contextualized to its context. Hence, though the authors of Context2vec did not explicitly view the approach as a means of computing dynamic word embeddings, it is highly similar to"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3727,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 196,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3746,
+              "page": 14,
+              "chunk_id": "p14_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ly from conventional word embeddings, the input to these models is not words in isolation, but words along with their contexts. Contextualized representations are currently dominating almost all standard NLP benchmarks. "
+            },
+            {
+              "rank": 10,
+              "distance": 0.4004,
+              "page": 34,
+              "chunk_id": "p34_c1",
+              "char_len": 217,
+              "keyword_hit": false,
+              "preview": "DRAFT 28 3. WORD EMBEDDINGS ring a semantic relationship between these two words. We will talk more about the ambiguity issue in Chapter 5. In this chapter, we will specifically talk about word embeddings. Word embed-"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2883,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2883,
+              "page": 16,
+              "chunk_id": "p16_c10",
+              "char_len": 219,
+              "keyword_hit": false,
+              "preview": "linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representation that encodes the semantics (or"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3426,
+              "page": 91,
+              "chunk_id": "p91_c4",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "Figure 6.6 provides a high-level illustration of the integration of contextualized word embeddings into an NLP model. At the training time, for each word (e.g., cell in the figure) in a given input text, the language mod"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3442,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "zed embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to e"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3474,
+              "page": 2,
+              "chunk_id": "p2_c3",
+              "char_len": 232,
+              "keyword_hit": true,
+              "preview": "bases, to other types of textual content, such as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3512,
+              "page": 114,
+              "chunk_id": "p114_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 108 7. SENTENCE AND DOCUMENT EMBEDDINGS vantage of both modalities for language understanding. Kiela et al. [2018] pro- posed a sentence embedding model that aims at predicting visual features from"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3561,
+              "page": 115,
+              "chunk_id": "p115_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "able to test and apply sentence embeddings on. Finally, semantic and syntactic probing tasks have also been proposed as a way to have a more linguistically-grounded evalu- ation of sentence embedding techniques [Conneau "
+            },
+            {
+              "rank": 7,
+              "distance": 0.3636,
+              "page": 123,
+              "chunk_id": "p123_c8",
+              "char_len": 240,
+              "keyword_hit": true,
+              "preview": "embeddings. arXiv preprint arXiv:1602.01925, 2016. Sanjeev Arora, Yingyu Liang, and T engyu Ma. A simple but tough-to-beat base- line for sentence embeddings. In Proceedings of the International Conference on Learning Re"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3752,
+              "page": 120,
+              "chunk_id": "p120_c6",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "ed \u201cembeddings\u201d. This development path has revolu- tionalized other fields of research such as graph embeddings (Chapter 4) or resulted in the emergence of other fields of research, such as sense embeddings (Chapter 5), "
+            },
+            {
+              "rank": 9,
+              "distance": 0.3754,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3845,
+              "page": 112,
+              "chunk_id": "p112_c1",
+              "char_len": 211,
+              "keyword_hit": true,
+              "preview": "DRAFT 106 7. SENTENCE AND DOCUMENT EMBEDDINGS This motivation has led to several specific models with small variations. A pop- ular example of this kind of model is Skip-Thought vectors [Kiros et al. , 2015]. In"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.6479,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.6479,
+              "page": 108,
+              "chunk_id": "p108_c3",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ssibeatBecker in the tennis championship T window The expandedwindowwill give us time to catch the thieves Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and nega"
+            },
+            {
+              "rank": 2,
+              "distance": 0.7038,
+              "page": 47,
+              "chunk_id": "p47_c3",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "south and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The SimLex-999 dataset is designed with the intention t"
+            },
+            {
+              "rank": 3,
+              "distance": 0.7318,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 198,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally"
+            },
+            {
+              "rank": 4,
+              "distance": 0.7959,
+              "page": 11,
+              "chunk_id": "p11_c4",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "senta- tions. Using this representation, it is not possible to encode the conceptual similar- ity between \u201cnoon\u201d and \u201cmidday\u201d. Even worse, the two similar looking words such \u201cdesk\u201d and \u201cdesks\u201d (which would have similar s"
+            },
+            {
+              "rank": 5,
+              "distance": 0.7963,
+              "page": 4,
+              "chunk_id": "p4_c13",
+              "char_len": 253,
+              "keyword_hit": false,
+              "preview": ". . . . . . . . . . . . . . . . . . . . . . . . 74 6.2 Background: Transformer model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 77 6.2.1 Self-attention . . . . . . . . . . . . . . . . . . . . . . . . . ."
+            },
+            {
+              "rank": 6,
+              "distance": 0.7999,
+              "page": 47,
+              "chunk_id": "p47_c9",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "m word- context matrix where rows are words and columns are WordNet supersenses (which are 41 in total). The columns in this matrix are aligned with the columns in the corre- sponding word representation matrix (which is"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8125,
+              "page": 137,
+              "chunk_id": "p137_c11",
+              "char_len": 114,
+              "keyword_hit": false,
+              "preview": "Volume 1: Long Papers) , pages 328\u2013339, Melbourne, Australia, 2018. URL https://www.aclweb.org/anthology/P18-1031."
+            },
+            {
+              "rank": 8,
+              "distance": 0.8241,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "ifythe margins The endjustifiesthe means F land The pilot managed tolandthe airplane safely The enemylandedseveral of our aircrafts T air Airpollution Open a window and let in someair T beat Webeatthe competition Agassib"
+            },
+            {
+              "rank": 9,
+              "distance": 0.8384,
+              "page": 36,
+              "chunk_id": "p36_c2",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "ly. A stop word has a high P value, resulting in a reduced overall PMI value. PMI values can range from \u2212 inf to + inf. Negative values indicate a co-occurrence which is less likely to happen than by chance. Given that t"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8385,
+              "page": 45,
+              "chunk_id": "p45_c12",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "\u201d and \u201cbike\u201d) or antonymy (\u201csunset\u201d and \u201csunrise\u201d). While words that are semantically sim- ilar can be technically substituted with each other in a context, related words are enough to co-occur in the same context (e.g.,"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.3872,
+      "score": 72.744
+    },
+    {
+      "chunk_size": 256,
+      "overlap": 100,
+      "chunk_count": 1689,
+      "avg_chunk_chars": 248.2,
+      "p95_chunk_chars": 256,
+      "chunk_seconds": 0.0043,
+      "embedding_seconds": 0.5312,
+      "retrieval_matrix_seconds": 0.0003,
+      "avg_in_scope_best_distance": 0.2788,
+      "out_scope_best_distance": 0.6479,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2517,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2517,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 180,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]."
+            },
+            {
+              "rank": 2,
+              "distance": 0.2694,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word"
+            },
+            {
+              "rank": 3,
+              "distance": 0.2845,
+              "page": 149,
+              "chunk_id": "p149_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ce , 2(11):559\u2013572, 1901. doi: 10.1080/14786440109462720. Maria Pelevina, Nikolay Arefyev, Chris Biemann, and Alexander Panchenko. Making sense of word embeddings. In Proceedings of the 1st Workshop on Representation Lea"
+            },
+            {
+              "rank": 4,
+              "distance": 0.2927,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "rithms, has played a central role in the development in NLP. Embedding techniques initially focused on words but the attention soon started to shift to other forms: from graph structures, such as knowledge bases, to othe"
+            },
+            {
+              "rank": 5,
+              "distance": 0.2961,
+              "page": 96,
+              "chunk_id": "p96_c7",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "n its subwords (for which embeddings are available); (3) It allows the model to share knowledge among words that have similar structures (look similar) with the hope that they share semantics, for instance, cognates acro"
+            },
+            {
+              "rank": 6,
+              "distance": 0.2993,
+              "page": 88,
+              "chunk_id": "p88_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": ". Interestingly, contextualized embeddings not only can capture various semantic roles of a word, but also its syntactic properties [ Hewitt and Manning , 2019, Goldberg, 2019]. In contrast to static word embeddings whic"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3211,
+              "page": 13,
+              "chunk_id": "p13_c9",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated research in other areas of representation, such "
+            },
+            {
+              "rank": 8,
+              "distance": 0.3266,
+              "page": 16,
+              "chunk_id": "p16_c10",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representa"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3272,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "zed embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to e"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3275,
+              "page": 91,
+              "chunk_id": "p91_c4",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "Figure 6.6 provides a high-level illustration of the integration of contextualized word embeddings into an NLP model. At the training time, for each word (e.g., cell in the figure) in a given input text, the language mod"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.242,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.242,
+              "page": 88,
+              "chunk_id": "p88_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": ". Interestingly, contextualized embeddings not only can capture various semantic roles of a word, but also its syntactic properties [ Hewitt and Manning , 2019, Goldberg, 2019]. In contrast to static word embeddings whic"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3213,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 208,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con-"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3238,
+              "page": 88,
+              "chunk_id": "p88_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "rmer fills the even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of "
+            },
+            {
+              "rank": 4,
+              "distance": 0.3437,
+              "page": 80,
+              "chunk_id": "p80_c3",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "static word embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings have provided significant gains "
+            },
+            {
+              "rank": 5,
+              "distance": 0.3442,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 211,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3658,
+              "page": 133,
+              "chunk_id": "p133_c3",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": ", pages 58\u201368, 2017. Luis Espinosa-Anke and Steven Schockaert. Se VeN: Augmenting word embeddings with unsupervised relation vectors. In Proc. of COLING, pages 2653\u20132665, 2018. Kawin Ethayarajh. How contextual are contex"
+            },
+            {
+              "rank": 7,
+              "distance": 0.37,
+              "page": 90,
+              "chunk_id": "p90_c4",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "as the embedding of that word which is contextualized to its context. Hence, though the authors of Context2vec did not explicitly view the approach as a means of computing dynamic word embeddings, it is highly similar to"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3727,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 196,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3746,
+              "page": 14,
+              "chunk_id": "p14_c5",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ly from conventional word embeddings, the input to these models is not words in isolation, but words along with their contexts. Contextualized representations are currently dominating almost all standard NLP benchmarks. "
+            },
+            {
+              "rank": 10,
+              "distance": 0.3876,
+              "page": 88,
+              "chunk_id": "p88_c11",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "on- text) and provide specialized embeddings for individual words which are adjusted to their context. Figure 6.6 provides an illustration: to produce a dynamic embedding for the target word (i.e., cell) the contextualiz"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.3426,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.3426,
+              "page": 91,
+              "chunk_id": "p91_c4",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "Figure 6.6 provides a high-level illustration of the integration of contextualized word embeddings into an NLP model. At the training time, for each word (e.g., cell in the figure) in a given input text, the language mod"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3442,
+              "page": 15,
+              "chunk_id": "p15_c6",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "zed embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We also cover in the same chapter some of the efforts to e"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3512,
+              "page": 114,
+              "chunk_id": "p114_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 108 7. SENTENCE AND DOCUMENT EMBEDDINGS vantage of both modalities for language understanding. Kiela et al. [2018] pro- posed a sentence embedding model that aims at predicting visual features from"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3561,
+              "page": 115,
+              "chunk_id": "p115_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "able to test and apply sentence embeddings on. Finally, semantic and syntactic probing tasks have also been proposed as a way to have a more linguistically-grounded evalu- ation of sentence embedding techniques [Conneau "
+            },
+            {
+              "rank": 5,
+              "distance": 0.3571,
+              "page": 123,
+              "chunk_id": "p123_c8",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ltilingual word embeddings. arXiv preprint arXiv:1602.01925, 2016. Sanjeev Arora, Yingyu Liang, and T engyu Ma. A simple but tough-to-beat base- line for sentence embeddings. In Proceedings of the International Conferenc"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3668,
+              "page": 120,
+              "chunk_id": "p120_c6",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "led \u201cembeddings\u201d. This development path has revolu- tionalized other fields of research such as graph embeddings (Chapter 4) or resulted in the emergence of other fields of research, such as sense embeddings (Chapter 5),"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3708,
+              "page": 115,
+              "chunk_id": "p115_c9",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "tion of sentence embedding techniques [Conneau et al., 2018a]. Perone et al. [2018] provide an extensive empirical comparison involving both downstram and linguistic probing tasks. Document level. The evaluation at the d"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3751,
+              "page": 41,
+              "chunk_id": "p41_c13",
+              "char_len": 212,
+              "keyword_hit": true,
+              "preview": "lowing we split the different types of word embedding by their source of supervision: sentence-level (Section 3.5.1), document-level (Section 3.5.2), word-level (Section 3.5.3) and unsu- pervised (Section 3.5.4)."
+            },
+            {
+              "rank": 9,
+              "distance": 0.3754,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 203,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word"
+            },
+            {
+              "rank": 10,
+              "distance": 0.383,
+              "page": 2,
+              "chunk_id": "p2_c3",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ures, such as knowledge bases, to other types of textual content, such as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.6479,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.6479,
+              "page": 108,
+              "chunk_id": "p108_c3",
+              "char_len": 256,
+              "keyword_hit": true,
+              "preview": "ssibeatBecker in the tennis championship T window The expandedwindowwill give us time to catch the thieves Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and nega"
+            },
+            {
+              "rank": 2,
+              "distance": 0.7038,
+              "page": 47,
+              "chunk_id": "p47_c3",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "south and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The SimLex-999 dataset is designed with the intention t"
+            },
+            {
+              "rank": 3,
+              "distance": 0.7318,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 198,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally"
+            },
+            {
+              "rank": 4,
+              "distance": 0.7959,
+              "page": 11,
+              "chunk_id": "p11_c4",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "senta- tions. Using this representation, it is not possible to encode the conceptual similar- ity between \u201cnoon\u201d and \u201cmidday\u201d. Even worse, the two similar looking words such \u201cdesk\u201d and \u201cdesks\u201d (which would have similar s"
+            },
+            {
+              "rank": 5,
+              "distance": 0.7983,
+              "page": 4,
+              "chunk_id": "p4_c13",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": ". . . . . . . . . . . . . . . . . . . . . . . . . 74 6.2 Background: Transformer model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 77 6.2.1 Self-attention . . . . . . . . . . . . . . . . . . . . . . . . ."
+            },
+            {
+              "rank": 6,
+              "distance": 0.7999,
+              "page": 47,
+              "chunk_id": "p47_c9",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "m word- context matrix where rows are words and columns are WordNet supersenses (which are 41 in total). The columns in this matrix are aligned with the columns in the corre- sponding word representation matrix (which is"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8241,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "ifythe margins The endjustifiesthe means F land The pilot managed tolandthe airplane safely The enemylandedseveral of our aircrafts T air Airpollution Open a window and let in someair T beat Webeatthe competition Agassib"
+            },
+            {
+              "rank": 8,
+              "distance": 0.8378,
+              "page": 5,
+              "chunk_id": "p5_c2",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": ". . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Prediction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 89 6.4.3 Training . . . . . . . . . . . . . . . . . . . . . . . . . . . . "
+            },
+            {
+              "rank": 9,
+              "distance": 0.8384,
+              "page": 36,
+              "chunk_id": "p36_c2",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "ly. A stop word has a high P value, resulting in a reduced overall PMI value. PMI values can range from \u2212 inf to + inf. Negative values indicate a co-occurrence which is less likely to happen than by chance. Given that t"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8385,
+              "page": 45,
+              "chunk_id": "p45_c12",
+              "char_len": 256,
+              "keyword_hit": false,
+              "preview": "\u201d and \u201cbike\u201d) or antonymy (\u201csunset\u201d and \u201csunrise\u201d). While words that are semantically sim- ilar can be technically substituted with each other in a context, related words are enough to co-occur in the same context (e.g.,"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.3691,
+      "score": 72.382
+    },
+    {
+      "chunk_size": 512,
+      "overlap": 0,
+      "chunk_count": 846,
+      "avg_chunk_chars": 437.7,
+      "p95_chunk_chars": 509,
+      "chunk_seconds": 0.0031,
+      "embedding_seconds": 0.3958,
+      "retrieval_matrix_seconds": 0.0001,
+      "avg_in_scope_best_distance": 0.2846,
+      "out_scope_best_distance": 0.7258,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2722,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2722,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 434,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 2,
+              "distance": 0.2847,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 509,
+              "keyword_hit": true,
+              "preview": "sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings (e.g"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3107,
+              "page": 80,
+              "chunk_id": "p80_c3",
+              "char_len": 493,
+              "keyword_hit": true,
+              "preview": "language processing systems. Usually, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding "
+            },
+            {
+              "rank": 4,
+              "distance": 0.3187,
+              "page": 13,
+              "chunk_id": "p13_c5",
+              "char_len": 312,
+              "keyword_hit": true,
+              "preview": "embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated research in other areas of representation, such as emb"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3209,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3259,
+              "page": 14,
+              "chunk_id": "p14_c3",
+              "char_len": 471,
+              "keyword_hit": true,
+              "preview": "conventional word embeddings, the input to these models is not words in isolation, but words along with their contexts. Contextualized representations are currently dominating almost all standard NLP benchmarks. Also, th"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3262,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 470,
+              "keyword_hit": true,
+              "preview": "embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings have provided significant gains in almost an"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3266,
+              "page": 16,
+              "chunk_id": "p16_c5",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representa"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3324,
+              "page": 33,
+              "chunk_id": "p33_c1",
+              "char_len": 448,
+              "keyword_hit": true,
+              "preview": "DRAFT 27 C H A P T E R 3 Word Embeddings Section 1.3 briefly discussed the Vector Space Model (VSM). We saw in that section how objects can be represented using continuous vectors in an imaginary space and how distances "
+            },
+            {
+              "rank": 10,
+              "distance": 0.3343,
+              "page": 123,
+              "chunk_id": "p123_c3",
+              "char_len": 476,
+              "keyword_hit": true,
+              "preview": "Carl Allen and Timothy Hospedales. Analogies explained: T owards understanding word embeddings. In International Conference on Machine Learning , pages 223\u2013 231, 2019. David Alvarez-Melis and T ommi Jaakkola. Gromov-Wass"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2823,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2823,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 465,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3302,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 460,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 3,
+              "distance": 0.3476,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 487,
+              "keyword_hit": true,
+              "preview": "even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of the limitations"
+            },
+            {
+              "rank": 4,
+              "distance": 0.373,
+              "page": 80,
+              "chunk_id": "p80_c4",
+              "char_len": 505,
+              "keyword_hit": true,
+              "preview": "usually results in improved generalisation power of the system, hence improved per- formance. However, pre-trained word embeddings, such as Word2vec and GloVe, com- pute a single static representation for each word. The "
+            },
+            {
+              "rank": 5,
+              "distance": 0.373,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 473,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3754,
+              "page": 82,
+              "chunk_id": "p82_c1",
+              "char_len": 506,
+              "keyword_hit": true,
+              "preview": "DRAFT 76 6. CONTEXTUALIZED EMBEDDINGS a sequence of words is on the shoulders of the main system, which has to deal with ambiguity, syntactic nuances, agreement, negation, etc. Knowledge-based sense representations (disc"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3919,
+              "page": 90,
+              "chunk_id": "p90_c2",
+              "char_len": 468,
+              "keyword_hit": true,
+              "preview": "ing of this technique in comparison with Word2vec CBOW. Context2vec embeds sentential contexts and target words in the same semantic space. The encoded representation for the context of a target word can be taken as the "
+            },
+            {
+              "rank": 8,
+              "distance": 0.3977,
+              "page": 88,
+              "chunk_id": "p88_c4",
+              "char_len": 504,
+              "keyword_hit": true,
+              "preview": "notated data or external lexical resources and can be learned in an unsupervised manner. More importantly, their introduction to neural models does not require ex- tra efforts such as word sense disambiguation as they fu"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3979,
+              "page": 88,
+              "chunk_id": "p88_c6",
+              "char_len": 168,
+              "keyword_hit": true,
+              "preview": "their context. Figure 6.6 provides an illustration: to produce a dynamic embedding for the target word (i.e., cell) the contextualized model analyzes the whole context."
+            },
+            {
+              "rank": 10,
+              "distance": 0.4025,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 434,
+              "keyword_hit": false,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2994,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2994,
+              "page": 15,
+              "chunk_id": "p15_c3",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied wi"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3042,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 509,
+              "keyword_hit": true,
+              "preview": "sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings (e.g"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3479,
+              "page": 113,
+              "chunk_id": "p113_c3",
+              "char_len": 501,
+              "keyword_hit": true,
+              "preview": "2. Machine Translation. An external task that has been used to learn sentence embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary to unsupervised metho"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3508,
+              "page": 120,
+              "chunk_id": "p120_c3",
+              "char_len": 453,
+              "keyword_hit": true,
+              "preview": "cient way of processing large amounts of texts and directly computing dense compact representations. Since then, the term \u201crepresentation\u201d was almost fully substituted with their dense version, called \u201cembeddings\u201d. This "
+            },
+            {
+              "rank": 5,
+              "distance": 0.354,
+              "page": 112,
+              "chunk_id": "p112_c6",
+              "char_len": 396,
+              "keyword_hit": true,
+              "preview": "Section 6.4). The most common strategies are retrieving a single contextualized em- beddings as sentence embedding, or performing an average between all contextual- ized embeddings of the sentence. 7.2 SUPERVISED SENTENC"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3679,
+              "page": 115,
+              "chunk_id": "p115_c4",
+              "char_len": 494,
+              "keyword_hit": true,
+              "preview": "underlying sentence representations directly. Second, the language understanding benchmarks GLUE [ Wang et al. , 2019b] and SuperGLUE [ Wang et al. , 2019a] are mostly composed of sentence-level tasks (cf. Section 6.7), "
+            },
+            {
+              "rank": 7,
+              "distance": 0.3777,
+              "page": 110,
+              "chunk_id": "p110_c5",
+              "char_len": 419,
+              "keyword_hit": true,
+              "preview": "have be taken as a reference for writing this section: (1) The Current Best of Universal Word Embeddings and Sentence Embeddings - https://medium.com/huggingface/universal-word-sentence-embeddings-ce48ddc8f c3a (last vis"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3791,
+              "page": 131,
+              "chunk_id": "p131_c4",
+              "char_len": 473,
+              "keyword_hit": true,
+              "preview": "Baroni. What you can cram into a single $&!#* vector: Probing sentence embed- dings for linguistic properties. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Pa"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3812,
+              "page": 110,
+              "chunk_id": "p110_c2",
+              "char_len": 504,
+              "keyword_hit": true,
+              "preview": "notated text corpora as only source for building their sentence embeddings. This is similar to conventional word embeddings models (see Section 3.2), which only need for a large corpus in order to build their vector repr"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3878,
+              "page": 41,
+              "chunk_id": "p41_c6",
+              "char_len": 482,
+              "keyword_hit": true,
+              "preview": "dimensional vector space. Intuitively, these spaces preserve similar properties than standard monolingual word embeddings. For a more comprehensive overview of cross-lingual word embeddings we rec- ommend the book from t"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.7258,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.7258,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 438,
+              "keyword_hit": true,
+              "preview": "Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and negative (F) pairs from the WiC dataset. downstream NLP application. Given their desirable fine-tuning property"
+            },
+            {
+              "rank": 2,
+              "distance": 0.7595,
+              "page": 47,
+              "chunk_id": "p47_c2",
+              "char_len": 456,
+              "keyword_hit": false,
+              "preview": "and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The SimLex-999 dataset is designed with the intention to high"
+            },
+            {
+              "rank": 3,
+              "distance": 0.8367,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally looking for a represe"
+            },
+            {
+              "rank": 4,
+              "distance": 0.8379,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 511,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 5,
+              "distance": 0.8499,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8537,
+              "page": 11,
+              "chunk_id": "p11_c2",
+              "char_len": 459,
+              "keyword_hit": false,
+              "preview": "ent representation and there is no notion of \u201csimilarity\u201d between these representa- tions. Using this representation, it is not possible to encode the conceptual similar- ity between \u201cnoon\u201d and \u201cmidday\u201d. Even worse, the "
+            },
+            {
+              "rank": 7,
+              "distance": 0.856,
+              "page": 153,
+              "chunk_id": "p153_c3",
+              "char_len": 512,
+              "keyword_hit": false,
+              "preview": "tion extraction with matrix factorization and universal schemas. In Proc. of HL T- NAACL, pages 74\u201384, 2013. Anna Rogers, Aleksandr Drozd, and Bofang Li. The (too many) problems of analogical reasoning with word vectors."
+            },
+            {
+              "rank": 8,
+              "distance": 0.8661,
+              "page": 45,
+              "chunk_id": "p45_c6",
+              "char_len": 438,
+              "keyword_hit": false,
+              "preview": "as long as they have any semantic relationship, such as meronymy (e.g., \u201cwheel\u201d and \u201cbike\u201d) or antonymy (\u201csunset\u201d and \u201csunrise\u201d). While words that are semantically sim- ilar can be technically substituted with each other"
+            },
+            {
+              "rank": 9,
+              "distance": 0.8713,
+              "page": 36,
+              "chunk_id": "p36_c2",
+              "char_len": 503,
+              "keyword_hit": false,
+              "preview": "on highly sparse data and that they are not easily interpretable (it is hard to define what it means for two words to be very \u201cunrelated\u201d), we usually ignore negative values and replace them with 0, hence Positive PMI (P"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8741,
+              "page": 4,
+              "chunk_id": "p4_c8",
+              "char_len": 97,
+              "keyword_hit": false,
+              "preview": "6.3.3 RNN-based models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 85"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.4412,
+      "score": 74.594
+    },
+    {
+      "chunk_size": 512,
+      "overlap": 50,
+      "chunk_count": 846,
+      "avg_chunk_chars": 465.2,
+      "p95_chunk_chars": 512,
+      "chunk_seconds": 0.0026,
+      "embedding_seconds": 0.4211,
+      "retrieval_matrix_seconds": 0.0002,
+      "avg_in_scope_best_distance": 0.2846,
+      "out_scope_best_distance": 0.7477,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2722,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2722,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 434,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 2,
+              "distance": 0.2854,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings ("
+            },
+            {
+              "rank": 3,
+              "distance": 0.3209,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3214,
+              "page": 48,
+              "chunk_id": "p48_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "he use of neu- ral networks for NLP, Collobert et al. [2011] used a wide range of tasks including part of speech tagging, chunking, named entity recognition, and semantic role la- beling. Though the goal in this work was"
+            },
+            {
+              "rank": 5,
+              "distance": 0.327,
+              "page": 13,
+              "chunk_id": "p13_c5",
+              "char_len": 363,
+              "keyword_hit": true,
+              "preview": "alised embedding techniques emerged, such as sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated res"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3324,
+              "page": 33,
+              "chunk_id": "p33_c1",
+              "char_len": 448,
+              "keyword_hit": true,
+              "preview": "DRAFT 27 C H A P T E R 3 Word Embeddings Section 1.3 briefly discussed the Vector Space Model (VSM). We saw in that section how objects can be represented using continuous vectors in an imaginary space and how distances "
+            },
+            {
+              "rank": 7,
+              "distance": 0.3338,
+              "page": 13,
+              "chunk_id": "p13_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "Word2vec was one of the massive waves from this tsunami and once again accelerated the research in semantic representation. Despite not being \u201cdeep\u201d, the model was a very efficient way of constructing compact vector repr"
+            },
+            {
+              "rank": 8,
+              "distance": 0.338,
+              "page": 16,
+              "chunk_id": "p16_c5",
+              "char_len": 305,
+              "keyword_hit": true,
+              "preview": "such as English are less morphologically diverse. Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect "
+            },
+            {
+              "rank": 9,
+              "distance": 0.3381,
+              "page": 133,
+              "chunk_id": "p133_c5",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ean Chapter of the Association for Computational Linguistics , pages 462\u2013471, 2014. Manaal Faruqui, Jesse Dodge, Sujay K. Jauhar, Chris Dyer, Eduard Hovy, and Noah A. Smith. Retrofitting word vectors to semantic lexicons"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3426,
+              "page": 64,
+              "chunk_id": "p64_c7",
+              "char_len": 132,
+              "keyword_hit": false,
+              "preview": "lation embeddings are concerned (cf. Section 4.3), their main application has been to model relationships of pairs of words. As more"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2823,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2823,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 465,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3302,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 460,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 3,
+              "distance": 0.3395,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ere the former fills the even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumven"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3696,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "of the issues associated with static word embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings ha"
+            },
+            {
+              "rank": 5,
+              "distance": 0.373,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 473,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3754,
+              "page": 82,
+              "chunk_id": "p82_c1",
+              "char_len": 506,
+              "keyword_hit": true,
+              "preview": "DRAFT 76 6. CONTEXTUALIZED EMBEDDINGS a sequence of words is on the shoulders of the main system, which has to deal with ambiguity, syntactic nuances, agreement, negation, etc. Knowledge-based sense representations (disc"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3797,
+              "page": 90,
+              "chunk_id": "p90_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "nd illustrates the different context model- ing of this technique in comparison with Word2vec CBOW. Context2vec embeds sentential contexts and target words in the same semantic space. The encoded representation for the c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3907,
+              "page": 80,
+              "chunk_id": "p80_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "space usually results in improved generalisation power of the system, hence improved per- formance. However, pre-trained word embeddings, such as Word2vec and GloVe, com- pute a single static representation for each word"
+            },
+            {
+              "rank": 9,
+              "distance": 0.393,
+              "page": 88,
+              "chunk_id": "p88_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "on an- notated data or external lexical resources and can be learned in an unsupervised manner. More importantly, their introduction to neural models does not require ex- tra efforts such as word sense disambiguation as "
+            },
+            {
+              "rank": 10,
+              "distance": 0.4025,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 434,
+              "keyword_hit": false,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2994,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2994,
+              "page": 15,
+              "chunk_id": "p15_c3",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied wi"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3095,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings ("
+            },
+            {
+              "rank": 3,
+              "distance": 0.3545,
+              "page": 113,
+              "chunk_id": "p113_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "pervision. 2. Machine Translation. An external task that has been used to learn sentence embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary to unsuper"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3604,
+              "page": 120,
+              "chunk_id": "p120_c3",
+              "char_len": 504,
+              "keyword_hit": true,
+              "preview": "a massive boost. Neural networks provided an effi- cient way of processing large amounts of texts and directly computing dense compact representations. Since then, the term \u201crepresentation\u201d was almost fully substituted w"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3629,
+              "page": 115,
+              "chunk_id": "p115_c4",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as to compare the underlying sentence representations directly. Second, the language understanding benchmarks GLUE [ Wang et al. , 2019b] and SuperGLUE [ Wang et al. , 2019a] are mostly composed of sentence-level tasks ("
+            },
+            {
+              "rank": 6,
+              "distance": 0.3865,
+              "page": 131,
+              "chunk_id": "p131_c4",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "laume Lample, Lo\u00efc Barrault, and Marco Baroni. What you can cram into a single $&!#* vector: Probing sentence embed- dings for linguistic properties. In Proceedings of the 56th Annual Meeting of the Association for Compu"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3884,
+              "page": 80,
+              "chunk_id": "p80_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ost neural natural language processing systems. Usually, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system look"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3887,
+              "page": 112,
+              "chunk_id": "p112_c6",
+              "char_len": 447,
+              "keyword_hit": true,
+              "preview": "g from a pre-trained language model like BERT (see Section 6.4). The most common strategies are retrieving a single contextualized em- beddings as sentence embedding, or performing an average between all contextual- ized"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3891,
+              "page": 112,
+              "chunk_id": "p112_c5",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "lized embed- dings (cf. Chapter 6). In this case, given a pre-trained language model it is straight- forward to obtain a representation of a given sentence. Reducing the complexity of pre-trained language models to obtai"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3907,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.7477,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.7477,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 489,
+              "keyword_hit": true,
+              "preview": "pandedwindowwill give us time to catch the thieves Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and negative (F) pairs from the WiC dataset. downstream NLP appl"
+            },
+            {
+              "rank": 2,
+              "distance": 0.7668,
+              "page": 47,
+              "chunk_id": "p47_c2",
+              "char_len": 507,
+              "keyword_hit": false,
+              "preview": "ne-grained distinctions such as that between south and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The SimLex"
+            },
+            {
+              "rank": 3,
+              "distance": 0.8293,
+              "page": 11,
+              "chunk_id": "p11_c2",
+              "char_len": 510,
+              "keyword_hit": false,
+              "preview": "t limitation: each word is assigned with a differ- ent representation and there is no notion of \u201csimilarity\u201d between these representa- tions. Using this representation, it is not possible to encode the conceptual similar"
+            },
+            {
+              "rank": 4,
+              "distance": 0.8352,
+              "page": 149,
+              "chunk_id": "p149_c6",
+              "char_len": 94,
+              "keyword_hit": false,
+              "preview": "8-1-4503-4993-2. doi: 10.1145/3110025.3110086. URL http://doi.acm.org/10.1145/3110025.3110086."
+            },
+            {
+              "rank": 5,
+              "distance": 0.8367,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally looking for a represe"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8379,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 511,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8499,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 8,
+              "distance": 0.8519,
+              "page": 62,
+              "chunk_id": "p62_c2",
+              "char_len": 511,
+              "keyword_hit": false,
+              "preview": "PMI to three arguments. A simpler and more efficient alternative was proposed in Espinosa- Anke and Schockaert [2018], where relation vectors were learned by averaging the word vectors of the context words appearing in s"
+            },
+            {
+              "rank": 9,
+              "distance": 0.856,
+              "page": 153,
+              "chunk_id": "p153_c3",
+              "char_len": 512,
+              "keyword_hit": false,
+              "preview": "tion extraction with matrix factorization and universal schemas. In Proc. of HL T- NAACL, pages 74\u201384, 2013. Anna Rogers, Aleksandr Drozd, and Bofang Li. The (too many) problems of analogical reasoning with word vectors."
+            },
+            {
+              "rank": 10,
+              "distance": 0.8737,
+              "page": 94,
+              "chunk_id": "p94_c5",
+              "char_len": 508,
+              "keyword_hit": false,
+              "preview": "volutionized the NLP field in 2018/2019. Similarly to GPT, BERT is based on the Transformer architecture; however, BERT makes use of the full encoder-decoder architecture (see 6.2 for more details). The essential improve"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.4631,
+      "score": 75.032
+    },
+    {
+      "chunk_size": 512,
+      "overlap": 100,
+      "chunk_count": 846,
+      "avg_chunk_chars": 475.5,
+      "p95_chunk_chars": 512,
+      "chunk_seconds": 0.0035,
+      "embedding_seconds": 0.481,
+      "retrieval_matrix_seconds": 0.0001,
+      "avg_in_scope_best_distance": 0.2846,
+      "out_scope_best_distance": 0.7584,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2722,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2722,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 434,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 2,
+              "distance": 0.2854,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings ("
+            },
+            {
+              "rank": 3,
+              "distance": 0.3209,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3214,
+              "page": 48,
+              "chunk_id": "p48_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "he use of neu- ral networks for NLP, Collobert et al. [2011] used a wide range of tasks including part of speech tagging, chunking, named entity recognition, and semantic role la- beling. Though the goal in this work was"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3324,
+              "page": 33,
+              "chunk_id": "p33_c1",
+              "char_len": 448,
+              "keyword_hit": true,
+              "preview": "DRAFT 27 C H A P T E R 3 Word Embeddings Section 1.3 briefly discussed the Vector Space Model (VSM). We saw in that section how objects can be represented using continuous vectors in an imaginary space and how distances "
+            },
+            {
+              "rank": 6,
+              "distance": 0.3338,
+              "page": 13,
+              "chunk_id": "p13_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "Word2vec was one of the massive waves from this tsunami and once again accelerated the research in semantic representation. Despite not being \u201cdeep\u201d, the model was a very efficient way of constructing compact vector repr"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3381,
+              "page": 133,
+              "chunk_id": "p133_c5",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ean Chapter of the Association for Computational Linguistics , pages 462\u2013471, 2014. Manaal Faruqui, Jesse Dodge, Sujay K. Jauhar, Chris Dyer, Eduard Hovy, and Noah A. Smith. Retrofitting word vectors to semantic lexicons"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3388,
+              "page": 13,
+              "chunk_id": "p13_c5",
+              "char_len": 413,
+              "keyword_hit": true,
+              "preview": "of lexical seman- tics resulted in dozens of specialised embedding techniques emerged, such as sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of whic"
+            },
+            {
+              "rank": 9,
+              "distance": 0.343,
+              "page": 2,
+              "chunk_id": "p2_c3",
+              "char_len": 367,
+              "keyword_hit": true,
+              "preview": "development in contextualized representations (e.g., ELMo, BERT) and explain their potential in NLP. Throughout the book the reader can find both essential information for un- derstanding a certain topic from scratch, an"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3444,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "of the issues associated with static word embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings ha"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2823,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2823,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 465,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3302,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 460,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 3,
+              "distance": 0.3395,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ere the former fills the even positions and the latter the odd ones. 6.3 CONTEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumven"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3696,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "of the issues associated with static word embeddings and provide reliable means for capturing semantic and syntactic prop- erties of natural language in context. Despite their young age, contextualized word embeddings ha"
+            },
+            {
+              "rank": 5,
+              "distance": 0.373,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 473,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3754,
+              "page": 82,
+              "chunk_id": "p82_c1",
+              "char_len": 506,
+              "keyword_hit": true,
+              "preview": "DRAFT 76 6. CONTEXTUALIZED EMBEDDINGS a sequence of words is on the shoulders of the main system, which has to deal with ambiguity, syntactic nuances, agreement, negation, etc. Knowledge-based sense representations (disc"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3797,
+              "page": 90,
+              "chunk_id": "p90_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "nd illustrates the different context model- ing of this technique in comparison with Word2vec CBOW. Context2vec embeds sentential contexts and target words in the same semantic space. The encoded representation for the c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3907,
+              "page": 80,
+              "chunk_id": "p80_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "space usually results in improved generalisation power of the system, hence improved per- formance. However, pre-trained word embeddings, such as Word2vec and GloVe, com- pute a single static representation for each word"
+            },
+            {
+              "rank": 9,
+              "distance": 0.393,
+              "page": 88,
+              "chunk_id": "p88_c4",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "on an- notated data or external lexical resources and can be learned in an unsupervised manner. More importantly, their introduction to neural models does not require ex- tra efforts such as word sense disambiguation as "
+            },
+            {
+              "rank": 10,
+              "distance": 0.3944,
+              "page": 14,
+              "chunk_id": "p14_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "the context in which they appear. For instance, the termmouse can refer to unrelated meanings (rodent and computer device) depending on the context in which it appears. Word embeddings are static in nature; the embedding"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2994,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2994,
+              "page": 15,
+              "chunk_id": "p15_c3",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied wi"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3095,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as sentences and documents. This book provides a high level synthesis of the main embedding techniques in NLP, in the broad sense. The book starts by explaining conventional word vector space models and word embeddings ("
+            },
+            {
+              "rank": 3,
+              "distance": 0.3545,
+              "page": 113,
+              "chunk_id": "p113_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "pervision. 2. Machine Translation. An external task that has been used to learn sentence embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary to unsuper"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3629,
+              "page": 115,
+              "chunk_id": "p115_c4",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "as to compare the underlying sentence representations directly. Second, the language understanding benchmarks GLUE [ Wang et al. , 2019b] and SuperGLUE [ Wang et al. , 2019a] are mostly composed of sentence-level tasks ("
+            },
+            {
+              "rank": 5,
+              "distance": 0.369,
+              "page": 112,
+              "chunk_id": "p112_c6",
+              "char_len": 497,
+              "keyword_hit": true,
+              "preview": "al strategies to re- trieve such sentence embedding from a pre-trained language model like BERT (see Section 6.4). The most common strategies are retrieving a single contextualized em- beddings as sentence embedding, or "
+            },
+            {
+              "rank": 6,
+              "distance": 0.3752,
+              "page": 120,
+              "chunk_id": "p120_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "rienced a massive boost. Neural networks provided an effi- cient way of processing large amounts of texts and directly computing dense compact representations. Since then, the term \u201crepresentation\u201d was almost fully subst"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3857,
+              "page": 110,
+              "chunk_id": "p110_c5",
+              "char_len": 511,
+              "keyword_hit": true,
+              "preview": "casual survey on sentence embeddings, we would recommend the following two blog posts which have be taken as a reference for writing this section: (1) The Current Best of Universal Word Embeddings and Sentence Embeddings"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3865,
+              "page": 131,
+              "chunk_id": "p131_c4",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "laume Lample, Lo\u00efc Barrault, and Marco Baroni. What you can cram into a single $&!#* vector: Probing sentence embed- dings for linguistic properties. In Proceedings of the 56th Annual Meeting of the Association for Compu"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3884,
+              "page": 80,
+              "chunk_id": "p80_c3",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ost neural natural language processing systems. Usually, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system look"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3891,
+              "page": 112,
+              "chunk_id": "p112_c5",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "lized embed- dings (cf. Chapter 6). In this case, given a pre-trained language model it is straight- forward to obtain a representation of a given sentence. Reducing the complexity of pre-trained language models to obtai"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.7584,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.7584,
+              "page": 47,
+              "chunk_id": "p47_c2",
+              "char_len": 512,
+              "keyword_hit": false,
+              "preview": "m, fine-grained distinctions such as that between south and north might be critical: there is a huge difference between answering \u201caround sunset\u201d and \u201caround sunrise\u201d when asked \u201cwhen is best to visit the museum?\u201d. The S"
+            },
+            {
+              "rank": 2,
+              "distance": 0.7864,
+              "page": 108,
+              "chunk_id": "p108_c2",
+              "char_len": 512,
+              "keyword_hit": true,
+              "preview": "ionship T window The expandedwindowwill give us time to catch the thieves Y ou have a two-hourwindowof clear weather to finish working on the lawn T able 6.1: Sample positive (T) and negative (F) pairs from the WiC datas"
+            },
+            {
+              "rank": 3,
+              "distance": 0.836,
+              "page": 11,
+              "chunk_id": "p11_c2",
+              "char_len": 512,
+              "keyword_hit": false,
+              "preview": "rst limitation: each word is assigned with a differ- ent representation and there is no notion of \u201csimilarity\u201d between these representa- tions. Using this representation, it is not possible to encode the conceptual simil"
+            },
+            {
+              "rank": 4,
+              "distance": 0.8367,
+              "page": 10,
+              "chunk_id": "p10_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 4 1. INTRODUCTION Figure 1.1: A toy vocabulary of ten words with their corresponding one-hot repre- sentations. \u201cnoon\u201d and \u201cmidday\u201d) will have totally different representations. We are ideally looking for a represe"
+            },
+            {
+              "rank": 5,
+              "distance": 0.8379,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 511,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8499,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 500,
+              "keyword_hit": false,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8519,
+              "page": 62,
+              "chunk_id": "p62_c2",
+              "char_len": 511,
+              "keyword_hit": false,
+              "preview": "PMI to three arguments. A simpler and more efficient alternative was proposed in Espinosa- Anke and Schockaert [2018], where relation vectors were learned by averaging the word vectors of the context words appearing in s"
+            },
+            {
+              "rank": 8,
+              "distance": 0.856,
+              "page": 153,
+              "chunk_id": "p153_c3",
+              "char_len": 512,
+              "keyword_hit": false,
+              "preview": "tion extraction with matrix factorization and universal schemas. In Proc. of HL T- NAACL, pages 74\u201384, 2013. Anna Rogers, Aleksandr Drozd, and Bofang Li. The (too many) problems of analogical reasoning with word vectors."
+            },
+            {
+              "rank": 9,
+              "distance": 0.8571,
+              "page": 42,
+              "chunk_id": "p42_c6",
+              "char_len": 274,
+              "keyword_hit": false,
+              "preview": "quares regression problem, whose exact solution can be efficiently computed. Note that this approach relies on a bilingual dictionary containing the training pairs (x1, z1), ..., (xn, zn). How- ever, once the matrix W ha"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8648,
+              "page": 120,
+              "chunk_id": "p120_c6",
+              "char_len": 228,
+              "keyword_hit": false,
+              "preview": "n biases to- wards these datasets, which is inevitable, and highlights the need for the introduction of new datasets or benchmarks for more rigorous evaluation of our models and for measuring our progress towards concret"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.4738,
+      "score": 75.246
+    },
+    {
+      "chunk_size": 1024,
+      "overlap": 0,
+      "chunk_count": 454,
+      "avg_chunk_chars": 816.5,
+      "p95_chunk_chars": 1018,
+      "chunk_seconds": 0.0025,
+      "embedding_seconds": 0.2983,
+      "retrieval_matrix_seconds": 0.0001,
+      "avg_in_scope_best_distance": 0.2974,
+      "out_scope_best_distance": 0.8341,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2849,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2849,
+              "page": 47,
+              "chunk_id": "p47_c4",
+              "char_len": 158,
+              "keyword_hit": false,
+              "preview": "the ability of embedding models in capturing different meanings of a word. For an embedding model to succeed on these benchmarks, it is often enough to encode"
+            },
+            {
+              "rank": 2,
+              "distance": 0.2992,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3187,
+              "page": 13,
+              "chunk_id": "p13_c3",
+              "char_len": 312,
+              "keyword_hit": true,
+              "preview": "embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated research in other areas of representation, such as emb"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3266,
+              "page": 16,
+              "chunk_id": "p16_c3",
+              "char_len": 255,
+              "keyword_hit": true,
+              "preview": "Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representa"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3308,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 950,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word embeddings and m"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3327,
+              "page": 48,
+              "chunk_id": "p48_c3",
+              "char_len": 933,
+              "keyword_hit": true,
+              "preview": "nature. In fact, word embedding performance does not necessarily correlate across tasks [ Schnabel et al. , 2015]. This makes it impossible to prescribe a single best- performing solution for all NLP tasks. For instance,"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3329,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 928,
+              "keyword_hit": true,
+              "preview": "5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We a"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3334,
+              "page": 13,
+              "chunk_id": "p13_c2",
+              "char_len": 984,
+              "keyword_hit": true,
+              "preview": "and the way of collecting \u201csimilarity\u201d clues and constructing the space have gone un- der enormous changes. Earlier approaches were based on collecting word statistics, usually in terms of occurrence and co-occurrence fr"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3384,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3432,
+              "page": 117,
+              "chunk_id": "p117_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8.1. BIAS IN WORD EMBEDDINGS 111 he maestro, skipper, protege, philosopher, captain, architect, financier, warrior, broadcaster, magician she homemaker, nurse, receptionist, librarian, socialite, hairdresser, nanny"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2842,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2842,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 986,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 2,
+              "distance": 0.3322,
+              "page": 88,
+              "chunk_id": "p88_c2",
+              "char_len": 996,
+              "keyword_hit": true,
+              "preview": "Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of the limitations associated with word and sense embeddings, bringing about multiple advantages,"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3447,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3496,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3782,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 1002,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the context window (as in C"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3809,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 976,
+              "keyword_hit": true,
+              "preview": "trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding for a given word and feeds the corresponding embedding to the subsequent layers "
+            },
+            {
+              "rank": 7,
+              "distance": 0.3957,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 953,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3998,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 586,
+              "keyword_hit": true,
+              "preview": "it appears in different contexts. Therefore, unlike static word embeddings, contex- tualized embeddings are assigned to tokens as opposed to types. Instead of receiving words as distinct units and providing independent w"
+            },
+            {
+              "rank": 9,
+              "distance": 0.4094,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 928,
+              "keyword_hit": true,
+              "preview": "5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We a"
+            },
+            {
+              "rank": 10,
+              "distance": 0.4319,
+              "page": 133,
+              "chunk_id": "p133_c1",
+              "char_len": 1009,
+              "keyword_hit": true,
+              "preview": "DRAFT BIBLIOGRAPHY 127 Katrin Erk and Sebastian Pad\u00f3. A structured vector space model for word meaning in context. In Proceedings of the Conference on Empirical Methods in Natural Language Processing, pages 897\u2013906, 2008"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.3232,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.3232,
+              "page": 113,
+              "chunk_id": "p113_c2",
+              "char_len": 659,
+              "keyword_hit": true,
+              "preview": "embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary to unsupervised methods of training sentence representations from an unlabeled corpus. For instance"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3482,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 928,
+              "keyword_hit": true,
+              "preview": "5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent models and how they are tied with language models. We a"
+            },
+            {
+              "rank": 3,
+              "distance": 0.352,
+              "page": 110,
+              "chunk_id": "p110_c1",
+              "char_len": 1020,
+              "keyword_hit": true,
+              "preview": "DRAFT 104 C H A P T E R 7 Sentence and Document Embeddings In the first part of the book we focus on some of the smallest units in language, mostly at the word-level. However, in most applications dealing with natural la"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3588,
+              "page": 115,
+              "chunk_id": "p115_c1",
+              "char_len": 1007,
+              "keyword_hit": true,
+              "preview": "DRAFT 7.4. APPLICATION AND EVALUATION 109 Kusner et al. [2015] also showed that relying on the word embeddings of a given doc- ument is in most cases enough to be able to infer a reliable semantic similarity metric among"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3672,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3716,
+              "page": 112,
+              "chunk_id": "p112_c3",
+              "char_len": 725,
+              "keyword_hit": true,
+              "preview": "pre-trained language models to obtaining an embedding per sentence has obvious advantages in similarity, clustering and retrieval tasks that would require heavy com- putations otherwise. Reimers and Gurevych [2019] discu"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3734,
+              "page": 115,
+              "chunk_id": "p115_c2",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "but a few, can often be framed as sentence classification. In order to provide a uni- fied framework with different tasks, two efforts have been presented. First, SentEval [Conneau and Kiela , 2018] contains a variety of"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3764,
+              "page": 120,
+              "chunk_id": "p120_c2",
+              "char_len": 947,
+              "keyword_hit": true,
+              "preview": "cient way of processing large amounts of texts and directly computing dense compact representations. Since then, the term \u201crepresentation\u201d was almost fully substituted with their dense version, called \u201cembeddings\u201d. This "
+            },
+            {
+              "rank": 9,
+              "distance": 0.3895,
+              "page": 16,
+              "chunk_id": "p16_c3",
+              "char_len": 255,
+              "keyword_hit": false,
+              "preview": "Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect from an embedding is a machine-readable representa"
+            },
+            {
+              "rank": 10,
+              "distance": 0.4096,
+              "page": 111,
+              "chunk_id": "p111_c3",
+              "char_len": 912,
+              "keyword_hit": true,
+              "preview": "sentence representations directly as part of the training process. 7.1.2 SENTENCE-LEVEL TRAINING In order to overcome the lack of sensitivity of bag-of-word models to word order, di- rect training on sentences has been u"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.8341,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.8341,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 1022,
+              "keyword_hit": true,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 2,
+              "distance": 0.8459,
+              "page": 47,
+              "chunk_id": "p47_c1",
+              "char_len": 991,
+              "keyword_hit": false,
+              "preview": "DRAFT 3.6. EVALUATION 41 deal with different notions of similarity, which might not necessarily match attribu- tional similarity. For instance, word embeddings to be used for a POS tagging model do not need to encode fin"
+            },
+            {
+              "rank": 3,
+              "distance": 0.8664,
+              "page": 110,
+              "chunk_id": "p110_c3",
+              "char_len": 212,
+              "keyword_hit": false,
+              "preview": "c3a (last visited on December 2019); and (2) On sentence representations, pt. 1: what can you fit into a single #$!%&% blog post? - https://supernlp.github.io/2018/11/26/sentreps/ (last visited on December 2019)."
+            },
+            {
+              "rank": 4,
+              "distance": 0.8713,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 987,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 5,
+              "distance": 0.8891,
+              "page": 138,
+              "chunk_id": "p138_c3",
+              "char_len": 409,
+              "keyword_hit": false,
+              "preview": "bedding via dynamic mapping matrix. In Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing (Volume 1: Long Pap"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8916,
+              "page": 122,
+              "chunk_id": "p122_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8916,
+              "page": 6,
+              "chunk_id": "p6_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 8,
+              "distance": 0.8936,
+              "page": 94,
+              "chunk_id": "p94_c3",
+              "char_len": 806,
+              "keyword_hit": false,
+              "preview": "use of the full encoder-decoder architecture (see 6.2 for more details). The essential improvement over GPT is that BERT provides a solution for making Transformers bidirectional. This addition enables BERT to perform a "
+            },
+            {
+              "rank": 9,
+              "distance": 0.8948,
+              "page": 5,
+              "chunk_id": "p5_c4",
+              "char_len": 104,
+              "keyword_hit": false,
+              "preview": "Author\u2019s Biography . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 157"
+            },
+            {
+              "rank": 10,
+              "distance": 0.8972,
+              "page": 95,
+              "chunk_id": "p95_c2",
+              "char_len": 969,
+              "keyword_hit": false,
+              "preview": "sometimes replaces the word with a random word (10% chance) or with the same word (10%). It is important to note that the model is not provided with the information on missing words (or words that have been replaced). Th"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.5367,
+      "score": 78.464
+    },
+    {
+      "chunk_size": 1024,
+      "overlap": 50,
+      "chunk_count": 454,
+      "avg_chunk_chars": 844.0,
+      "p95_chunk_chars": 1024,
+      "chunk_seconds": 0.0031,
+      "embedding_seconds": 0.2993,
+      "retrieval_matrix_seconds": 0.0001,
+      "avg_in_scope_best_distance": 0.3118,
+      "out_scope_best_distance": 0.8341,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2992,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2992,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 2,
+              "distance": 0.327,
+              "page": 13,
+              "chunk_id": "p13_c3",
+              "char_len": 363,
+              "keyword_hit": true,
+              "preview": "alised embedding techniques emerged, such as sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated res"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3308,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 950,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word embeddings and m"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3345,
+              "page": 13,
+              "chunk_id": "p13_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "r, the interpretation of the hypothesis and the way of collecting \u201csimilarity\u201d clues and constructing the space have gone un- der enormous changes. Earlier approaches were based on collecting word statistics, usually in "
+            },
+            {
+              "rank": 5,
+              "distance": 0.3361,
+              "page": 123,
+              "chunk_id": "p123_c2",
+              "char_len": 1022,
+              "keyword_hit": true,
+              "preview": "dales. Analogies explained: T owards understanding word embeddings. In International Conference on Machine Learning , pages 223\u2013 231, 2019. David Alvarez-Melis and T ommi Jaakkola. Gromov-Wasserstein alignment of word em"
+            },
+            {
+              "rank": 6,
+              "distance": 0.338,
+              "page": 16,
+              "chunk_id": "p16_c3",
+              "char_len": 305,
+              "keyword_hit": true,
+              "preview": "such as English are less morphologically diverse. Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect "
+            },
+            {
+              "rank": 7,
+              "distance": 0.3384,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 8,
+              "distance": 0.3412,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "ally, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding for a given word and feeds the c"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3414,
+              "page": 61,
+              "chunk_id": "p61_c2",
+              "char_len": 1008,
+              "keyword_hit": true,
+              "preview": "e relations between concepts is to leverage a text corpus, as is the case for word embeddings (see Chapter 3). In fact, a common way to model these relations is precisely via standard word embeddings [ Mikolov et al. , 2"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3432,
+              "page": 117,
+              "chunk_id": "p117_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8.1. BIAS IN WORD EMBEDDINGS 111 he maestro, skipper, protege, philosopher, captain, architect, financier, warrior, broadcaster, magician she homemaker, nurse, receptionist, librarian, socialite, hairdresser, nanny"
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2842,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2842,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 986,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 2,
+              "distance": 0.3447,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3496,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 4,
+              "distance": 0.356,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 636,
+              "keyword_hit": true,
+              "preview": "same word can be assigned different embeddings if it appears in different contexts. Therefore, unlike static word embeddings, contex- tualized embeddings are assigned to tokens as opposed to types. Instead of receiving w"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3715,
+              "page": 88,
+              "chunk_id": "p88_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "TEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of the limitations associated with word and sense embeddings, bringin"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3782,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 1002,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the context window (as in C"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3957,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 953,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.4033,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "ally, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding for a given word and feeds the c"
+            },
+            {
+              "rank": 9,
+              "distance": 0.427,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 979,
+              "keyword_hit": true,
+              "preview": "uation techniques for this type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent mode"
+            },
+            {
+              "rank": 10,
+              "distance": 0.4319,
+              "page": 133,
+              "chunk_id": "p133_c1",
+              "char_len": 1009,
+              "keyword_hit": true,
+              "preview": "DRAFT BIBLIOGRAPHY 127 Katrin Erk and Sebastian Pad\u00f3. A structured vector space model for word meaning in context. In Proceedings of the Conference on Empirical Methods in Natural Language Processing, pages 897\u2013906, 2008"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.352,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.352,
+              "page": 110,
+              "chunk_id": "p110_c1",
+              "char_len": 1020,
+              "keyword_hit": true,
+              "preview": "DRAFT 104 C H A P T E R 7 Sentence and Document Embeddings In the first part of the book we focus on some of the smallest units in language, mostly at the word-level. However, in most applications dealing with natural la"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3588,
+              "page": 115,
+              "chunk_id": "p115_c1",
+              "char_len": 1007,
+              "keyword_hit": true,
+              "preview": "DRAFT 7.4. APPLICATION AND EVALUATION 109 Kusner et al. [2015] also showed that relying on the word embeddings of a given doc- ument is in most cases enough to be able to infer a reliable semantic similarity metric among"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3633,
+              "page": 112,
+              "chunk_id": "p112_c3",
+              "char_len": 776,
+              "keyword_hit": true,
+              "preview": "on of a given sentence. Reducing the complexity of pre-trained language models to obtaining an embedding per sentence has obvious advantages in similarity, clustering and retrieval tasks that would require heavy com- put"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3672,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3708,
+              "page": 113,
+              "chunk_id": "p113_c2",
+              "char_len": 710,
+              "keyword_hit": true,
+              "preview": "external task that has been used to learn sentence embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary to unsupervised methods of training sentence rep"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3764,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 979,
+              "keyword_hit": true,
+              "preview": "uation techniques for this type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such embeddings and then describe the prominent mode"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3817,
+              "page": 115,
+              "chunk_id": "p115_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "to name but a few, can often be framed as sentence classification. In order to provide a uni- fied framework with different tasks, two efforts have been presented. First, SentEval [Conneau and Kiela , 2018] contains a va"
+            },
+            {
+              "rank": 8,
+              "distance": 0.4128,
+              "page": 16,
+              "chunk_id": "p16_c3",
+              "char_len": 305,
+              "keyword_hit": false,
+              "preview": "such as English are less morphologically diverse. Semantics. Semantics is the area of linguistics that studies meaning. This is clearly the area which is the central focus of this book. In fact, what we generally expect "
+            },
+            {
+              "rank": 9,
+              "distance": 0.4185,
+              "page": 13,
+              "chunk_id": "p13_c3",
+              "char_len": 363,
+              "keyword_hit": true,
+              "preview": "alised embedding techniques emerged, such as sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of which are based on Word2vec. This also accelerated res"
+            },
+            {
+              "rank": 10,
+              "distance": 0.4202,
+              "page": 113,
+              "chunk_id": "p113_c1",
+              "char_len": 999,
+              "keyword_hit": true,
+              "preview": "DRAFT 7.2. SUPERVISED SENTENCE EMBEDDINGS 107 Figure 7.1 : High-level overview of unsupervised sentence embedding techniques. On the top an approach based on generation and at the bottom an approach based on classificati"
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.8341,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.8341,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 1022,
+              "keyword_hit": true,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 2,
+              "distance": 0.8459,
+              "page": 47,
+              "chunk_id": "p47_c1",
+              "char_len": 991,
+              "keyword_hit": false,
+              "preview": "DRAFT 3.6. EVALUATION 41 deal with different notions of similarity, which might not necessarily match attribu- tional similarity. For instance, word embeddings to be used for a POS tagging model do not need to encode fin"
+            },
+            {
+              "rank": 3,
+              "distance": 0.8713,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 987,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 4,
+              "distance": 0.8769,
+              "page": 123,
+              "chunk_id": "p123_c3",
+              "char_len": 109,
+              "keyword_hit": false,
+              "preview": "al transfer and beyond. TACL, 7:597\u2013610, 2019. URL https://transacl.org/ojs/index.php/tacl/article/view/1742."
+            },
+            {
+              "rank": 5,
+              "distance": 0.8845,
+              "page": 110,
+              "chunk_id": "p110_c3",
+              "char_len": 263,
+              "keyword_hit": false,
+              "preview": "gface/universal-word-sentence-embeddings-ce48ddc8f c3a (last visited on December 2019); and (2) On sentence representations, pt. 1: what can you fit into a single #$!%&% blog post? - https://supernlp.github.io/2018/11/26"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8916,
+              "page": 122,
+              "chunk_id": "p122_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8916,
+              "page": 6,
+              "chunk_id": "p6_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 8,
+              "distance": 0.9002,
+              "page": 95,
+              "chunk_id": "p95_c2",
+              "char_len": 1020,
+              "keyword_hit": false,
+              "preview": "e special [MASK] token (that has 80% chance), BERT sometimes replaces the word with a random word (10% chance) or with the same word (10%). It is important to note that the model is not provided with the information on m"
+            },
+            {
+              "rank": 9,
+              "distance": 0.9014,
+              "page": 3,
+              "chunk_id": "p3_c3",
+              "char_len": 1023,
+              "keyword_hit": false,
+              "preview": ". . . . . . . . . . . . . . . . . . 25 2.3.4 PPDB: The Paraphrase Database . . . . . . . . . . . . . . . . . . . . . . . . . 25 3 Word Embeddings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . "
+            },
+            {
+              "rank": 10,
+              "distance": 0.9065,
+              "page": 138,
+              "chunk_id": "p138_c3",
+              "char_len": 460,
+              "keyword_hit": false,
+              "preview": "ng Xu, Kang Liu, and Jun Zhao. Knowledge graph em- bedding via dynamic mapping matrix. In Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference"
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.5223,
+      "score": 78.176
+    },
+    {
+      "chunk_size": 1024,
+      "overlap": 100,
+      "chunk_count": 454,
+      "avg_chunk_chars": 861.9,
+      "p95_chunk_chars": 1024,
+      "chunk_seconds": 0.0034,
+      "embedding_seconds": 0.2998,
+      "retrieval_matrix_seconds": 0.0001,
+      "avg_in_scope_best_distance": 0.3118,
+      "out_scope_best_distance": 0.8341,
+      "coverage_by_top_k": {
+        "3": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "query_results": [
+        {
+          "id": "Q1",
+          "query": "What are word embeddings and why are they useful in NLP?",
+          "type": "in_scope",
+          "best_distance": 0.2992,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2992,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3308,
+              "page": 120,
+              "chunk_id": "p120_c1",
+              "char_len": 950,
+              "keyword_hit": true,
+              "preview": "DRAFT 114 C H A P T E R 9 Conclusions In this book, we aimed at providing a high-level introduction to various embeddings used in Natural Language Processing. T o this end, we covered early works in word embeddings and m"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3345,
+              "page": 13,
+              "chunk_id": "p13_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "r, the interpretation of the hypothesis and the way of collecting \u201csimilarity\u201d clues and constructing the space have gone un- der enormous changes. Earlier approaches were based on collecting word statistics, usually in "
+            },
+            {
+              "rank": 4,
+              "distance": 0.3384,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3388,
+              "page": 13,
+              "chunk_id": "p13_c3",
+              "char_len": 413,
+              "keyword_hit": true,
+              "preview": "of lexical seman- tics resulted in dozens of specialised embedding techniques emerged, such as sense embedding (Chapter 5), retrofitted embeddings (Section 3.4), and cross-lingual em- beddings (Section 3.5), many of whic"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3398,
+              "page": 133,
+              "chunk_id": "p133_c3",
+              "char_len": 495,
+              "keyword_hit": true,
+              "preview": "es 462\u2013471, 2014. Manaal Faruqui, Jesse Dodge, Sujay K. Jauhar, Chris Dyer, Eduard Hovy, and Noah A. Smith. Retrofitting word vectors to semantic lexicons. In Proceedings of NAACL , pages 1606\u20131615, 2015. Manaal Faruqui,"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3412,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "ally, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding for a given word and feeds the c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.343,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 367,
+              "keyword_hit": true,
+              "preview": "development in contextualized representations (e.g., ELMo, BERT) and explain their potential in NLP. Throughout the book the reader can find both essential information for un- derstanding a certain topic from scratch, an"
+            },
+            {
+              "rank": 9,
+              "distance": 0.3432,
+              "page": 117,
+              "chunk_id": "p117_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8.1. BIAS IN WORD EMBEDDINGS 111 he maestro, skipper, protege, philosopher, captain, architect, financier, warrior, broadcaster, magician she homemaker, nurse, receptionist, librarian, socialite, hairdresser, nanny"
+            },
+            {
+              "rank": 10,
+              "distance": 0.3435,
+              "page": 123,
+              "chunk_id": "p123_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "pedales. Analogies explained: T owards understanding word embeddings. In International Conference on Machine Learning , pages 223\u2013 231, 2019. David Alvarez-Melis and T ommi Jaakkola. Gromov-Wasserstein alignment of word "
+            }
+          ]
+        },
+        {
+          "id": "Q2",
+          "query": "What is the difference between static word embeddings and contextualized embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.2842,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.2842,
+              "page": 81,
+              "chunk_id": "p81_c1",
+              "char_len": 986,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.1. THE NEED FOR CONTEXTUALIZATION 75 Figure 6.1: Context-independent (static) embeddings are fixed points in the seman- tic space: they do not change, irrespective of the context in which the target word appears."
+            },
+            {
+              "rank": 2,
+              "distance": 0.3447,
+              "page": 80,
+              "chunk_id": "p80_c1",
+              "char_len": 1016,
+              "keyword_hit": true,
+              "preview": "DRAFT 74 C H A P T E R 6 Contextualized Embeddings This chapter provides an introduction to contextualized word (CW) embeddings. CW can be considered as the new generation of word (and sense) embeddings. The dis- tinguis"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3496,
+              "page": 14,
+              "chunk_id": "p14_c1",
+              "char_len": 964,
+              "keyword_hit": true,
+              "preview": "DRAFT 8 1. INTRODUCTION Word embeddings proved to be potent keepers of semantic; their integration in various benchmarks resulted in considerable improvements Baroni et al. [2014]. However, they still suffered from a maj"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3715,
+              "page": 88,
+              "chunk_id": "p88_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "TEXTUALIZED WORD EMBEDDINGS Unlike static word embeddings, contextualized embeddings are representations of words in context. They can circumvent many of the limitations associated with word and sense embeddings, bringin"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3782,
+              "page": 90,
+              "chunk_id": "p90_c1",
+              "char_len": 1002,
+              "keyword_hit": true,
+              "preview": "DRAFT 84 6. CONTEXTUALIZED EMBEDDINGS Figure 6.7: Architecture of Context2vec and how it differs from Word2vec CBOW: instead of modeling the context by naively averaging embeddings of words in the context window (as in C"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3819,
+              "page": 88,
+              "chunk_id": "p88_c3",
+              "char_len": 687,
+              "keyword_hit": true,
+              "preview": "tualized word em- beddings are dynamic in that the same word can be assigned different embeddings if it appears in different contexts. Therefore, unlike static word embeddings, contex- tualized embeddings are assigned to"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3957,
+              "page": 89,
+              "chunk_id": "p89_c1",
+              "char_len": 953,
+              "keyword_hit": true,
+              "preview": "DRAFT 6.3. CONTEXTUALIZED WORD EMBEDDINGS 83 Figure 6.6 : Unlike static (context-independent) word embeddings, contextualized (dynamic) embeddings are not fixed: they adapt to their representation to the con- text. The c"
+            },
+            {
+              "rank": 8,
+              "distance": 0.4033,
+              "page": 80,
+              "chunk_id": "p80_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "ally, an NLP system is provided with large pre- trained word embeddings for all the words in the vocabulary of the target language. 1 At the input layer, the system looks up the embedding for a given word and feeds the c"
+            },
+            {
+              "rank": 9,
+              "distance": 0.4212,
+              "page": 89,
+              "chunk_id": "p89_c2",
+              "char_len": 847,
+              "keyword_hit": true,
+              "preview": "s in different contexts. With the introduction of word embeddings [ Collobert et al. , 2011, Mikolov et al. , 2013c] and the efficacy of neural networks, and in the light of meaning con- flation deficiency of word embedd"
+            },
+            {
+              "rank": 10,
+              "distance": 0.4242,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "wledge-based) are discussed, followed by evaluation techniques for this type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such em"
+            }
+          ]
+        },
+        {
+          "id": "Q3",
+          "query": "What are sentence and document embeddings?",
+          "type": "in_scope",
+          "best_distance": 0.352,
+          "coverage_by_top_k": {
+            "3": true,
+            "5": true,
+            "10": true
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.352,
+              "page": 110,
+              "chunk_id": "p110_c1",
+              "char_len": 1020,
+              "keyword_hit": true,
+              "preview": "DRAFT 104 C H A P T E R 7 Sentence and Document Embeddings In the first part of the book we focus on some of the smallest units in language, mostly at the word-level. However, in most applications dealing with natural la"
+            },
+            {
+              "rank": 2,
+              "distance": 0.3586,
+              "page": 112,
+              "chunk_id": "p112_c3",
+              "char_len": 826,
+              "keyword_hit": true,
+              "preview": "l it is straight- forward to obtain a representation of a given sentence. Reducing the complexity of pre-trained language models to obtaining an embedding per sentence has obvious advantages in similarity, clustering and"
+            },
+            {
+              "rank": 3,
+              "distance": 0.3588,
+              "page": 115,
+              "chunk_id": "p115_c1",
+              "char_len": 1007,
+              "keyword_hit": true,
+              "preview": "DRAFT 7.4. APPLICATION AND EVALUATION 109 Kusner et al. [2015] also showed that relying on the word embeddings of a given doc- ument is in most cases enough to be able to infer a reliable semantic similarity metric among"
+            },
+            {
+              "rank": 4,
+              "distance": 0.3619,
+              "page": 15,
+              "chunk_id": "p15_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "wledge-based) are discussed, followed by evaluation techniques for this type of representation. 5. Chapter 6 is about the recent branch of contextualized embeddings. In this chapter, we first explain the need for such em"
+            },
+            {
+              "rank": 5,
+              "distance": 0.3672,
+              "page": 2,
+              "chunk_id": "p2_c1",
+              "char_len": 1021,
+              "keyword_hit": true,
+              "preview": "DRAFT ABSTRACT Embeddings have been one of the dominating buzzwords since the early 2010s for Natural Language Processing (NLP). Encoding information into a low-dimensional vector representation, which is easily integrab"
+            },
+            {
+              "rank": 6,
+              "distance": 0.3817,
+              "page": 115,
+              "chunk_id": "p115_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "to name but a few, can often be framed as sentence classification. In order to provide a uni- fied framework with different tasks, two efforts have been presented. First, SentEval [Conneau and Kiela , 2018] contains a va"
+            },
+            {
+              "rank": 7,
+              "distance": 0.3893,
+              "page": 113,
+              "chunk_id": "p113_c2",
+              "char_len": 759,
+              "keyword_hit": true,
+              "preview": "external supervision. 2. Machine Translation. An external task that has been used to learn sentence embeddings is neural machine translation. The signal that translations of differ- ent sentences provide is complementary"
+            },
+            {
+              "rank": 8,
+              "distance": 0.4003,
+              "page": 2,
+              "chunk_id": "p2_c2",
+              "char_len": 367,
+              "keyword_hit": true,
+              "preview": "development in contextualized representations (e.g., ELMo, BERT) and explain their potential in NLP. Throughout the book the reader can find both essential information for un- derstanding a certain topic from scratch, an"
+            },
+            {
+              "rank": 9,
+              "distance": 0.4062,
+              "page": 110,
+              "chunk_id": "p110_c3",
+              "char_len": 313,
+              "keyword_hit": true,
+              "preview": "nd Sentence Embeddings - https://medium.com/huggingface/universal-word-sentence-embeddings-ce48ddc8f c3a (last visited on December 2019); and (2) On sentence representations, pt. 1: what can you fit into a single #$!%&% "
+            },
+            {
+              "rank": 10,
+              "distance": 0.4105,
+              "page": 120,
+              "chunk_id": "p120_c2",
+              "char_len": 1024,
+              "keyword_hit": true,
+              "preview": "epresentation experienced a massive boost. Neural networks provided an effi- cient way of processing large amounts of texts and directly computing dense compact representations. Since then, the term \u201crepresentation\u201d was "
+            }
+          ]
+        },
+        {
+          "id": "Q4",
+          "query": "What is the weather in Sydney tomorrow?",
+          "type": "out_of_scope",
+          "best_distance": 0.8341,
+          "coverage_by_top_k": {
+            "3": false,
+            "5": false,
+            "10": false
+          },
+          "top_results": [
+            {
+              "rank": 1,
+              "distance": 0.8341,
+              "page": 108,
+              "chunk_id": "p108_c1",
+              "char_len": 1022,
+              "keyword_hit": true,
+              "preview": "DRAFT 102 6. CONTEXTUALIZED EMBEDDINGS Label Target Contexts F bed There\u2019s a lot of trash on thebed of the river I keep a glass of water next to mybed when I sleep F justify Justifythe margins The endjustifiesthe means F"
+            },
+            {
+              "rank": 2,
+              "distance": 0.8459,
+              "page": 47,
+              "chunk_id": "p47_c1",
+              "char_len": 991,
+              "keyword_hit": false,
+              "preview": "DRAFT 3.6. EVALUATION 41 deal with different notions of similarity, which might not necessarily match attribu- tional similarity. For instance, word embeddings to be used for a POS tagging model do not need to encode fin"
+            },
+            {
+              "rank": 3,
+              "distance": 0.8713,
+              "page": 5,
+              "chunk_id": "p5_c1",
+              "char_len": 987,
+              "keyword_hit": false,
+              "preview": "DRAFT v 6.4 Transformer-based Models: BERT . . . . . . . . . . . . . . . . . . . . . . . . . . . . 87 6.4.1 Masked Language Modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 88 6.4.2 Next Sentence Predic"
+            },
+            {
+              "rank": 4,
+              "distance": 0.8816,
+              "page": 110,
+              "chunk_id": "p110_c3",
+              "char_len": 313,
+              "keyword_hit": false,
+              "preview": "nd Sentence Embeddings - https://medium.com/huggingface/universal-word-sentence-embeddings-ce48ddc8f c3a (last visited on December 2019); and (2) On sentence representations, pt. 1: what can you fit into a single #$!%&% "
+            },
+            {
+              "rank": 5,
+              "distance": 0.8846,
+              "page": 45,
+              "chunk_id": "p45_c3",
+              "char_len": 1024,
+              "keyword_hit": false,
+              "preview": "orward fea- ture to evaluate meaning representations. In particular, the semantic similarity of small lexical units such as words, in which compositionality is not required, has re- ceived the most attention. Word simila"
+            },
+            {
+              "rank": 6,
+              "distance": 0.8916,
+              "page": 122,
+              "chunk_id": "p122_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 7,
+              "distance": 0.8916,
+              "page": 6,
+              "chunk_id": "p6_c1",
+              "char_len": 5,
+              "keyword_hit": false,
+              "preview": "DRAFT"
+            },
+            {
+              "rank": 8,
+              "distance": 0.8946,
+              "page": 19,
+              "chunk_id": "p19_c3",
+              "char_len": 1024,
+              "keyword_hit": false,
+              "preview": "d \u201cmatch stopped the rain\u201d (and many other ungrammatical sequences constructed using these words) will have an identical BoW representation. Recurrent Neural Networks (RNN) have succesfully come into play to address the "
+            },
+            {
+              "rank": 9,
+              "distance": 0.9014,
+              "page": 3,
+              "chunk_id": "p3_c3",
+              "char_len": 1023,
+              "keyword_hit": false,
+              "preview": ". . . . . . . . . . . . . . . . . . 25 2.3.4 PPDB: The Paraphrase Database . . . . . . . . . . . . . . . . . . . . . . . . . 25 3 Word Embeddings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . "
+            },
+            {
+              "rank": 10,
+              "distance": 0.9024,
+              "page": 95,
+              "chunk_id": "p95_c2",
+              "char_len": 1024,
+              "keyword_hit": false,
+              "preview": "h the special [MASK] token (that has 80% chance), BERT sometimes replaces the word with a random word (10% chance) or with the same word (10%). It is important to note that the model is not provided with the information "
+            }
+          ]
+        }
+      ],
+      "separation_margin": 0.5223,
+      "score": 78.176
+    }
+  ],
+  "best_config": {
+    "chunk_size": 1024,
+    "overlap": 0,
+    "recommended_top_k": 5,
+    "recommended_similarity_distance_threshold": 0.65,
+    "score": 78.464,
+    "chunk_count": 454,
+    "avg_in_scope_best_distance": 0.2974,
+    "out_scope_best_distance": 0.8341,
+    "coverage_by_top_k": {
+      "3": 1.0,
+      "5": 1.0,
+      "10": 1.0
+    },
+    "separation_margin": 0.5367,
+    "threshold_selection_basis": {
+      "max_in_scope_best_distance": 0.3232,
+      "min_out_of_scope_best_distance": 0.8341,
+      "selected_threshold": 0.65,
+      "rationale": "Selected between the hardest in-scope query and the out-of-scope query for the chosen config, while keeping a practical buffer above in-scope matches."
+    }
+  },
+  "threshold_evaluations_all_configs": [
+    {
+      "threshold": 0.5,
+      "false_fallback_count": 0,
+      "false_accept_count": 0,
+      "true_answer_count": 27,
+      "true_fallback_count": 9
+    },
+    {
+      "threshold": 0.65,
+      "false_fallback_count": 0,
+      "false_accept_count": 3,
+      "true_answer_count": 27,
+      "true_fallback_count": 6
+    },
+    {
+      "threshold": 0.8,
+      "false_fallback_count": 0,
+      "false_accept_count": 6,
+      "true_answer_count": 27,
+      "true_fallback_count": 3
+    },
+    {
+      "threshold": 1.0,
+      "false_fallback_count": 0,
+      "false_accept_count": 9,
+      "true_answer_count": 27,
+      "true_fallback_count": 0
+    },
+    {
+      "threshold": 1.2,
+      "false_fallback_count": 0,
+      "false_accept_count": 9,
+      "true_answer_count": 27,
+      "true_fallback_count": 0
+    }
+  ],
+  "threshold_evaluations_best_config": [
+    {
+      "threshold": 0.55,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.6,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.65,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.7,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.75,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.8,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 0,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 1
+    },
+    {
+      "threshold": 0.85,
+      "false_fallback_count_for_best_config": 0,
+      "false_accept_count_for_best_config": 1,
+      "true_answer_count_for_best_config": 3,
+      "true_fallback_count_for_best_config": 0
+    }
+  ],
+  "total_seconds": 11.2269,
+  "limitations": [
+    "This is a heuristic Sprint 3 benchmark, not a fully labelled IR evaluation set.",
+    "Keyword-hit coverage approximates relevance; final Precision@K/Recall@K needs a manually labelled course-question set.",
+    "Only one real PDF was used in this batch; PPTX and DOCX support remain future expansion items."
+  ]
+}
