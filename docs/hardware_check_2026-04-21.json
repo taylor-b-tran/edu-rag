@@ -1,0 +1,43 @@
+﻿{
+    "checked_at":  "2026-04-21 22:39:58 +10:00",
+    "machine":  {
+                    "manufacturer":  "Micro-Star International Co., Ltd.",
+                    "model":  "MS-7E56",
+                    "total_ram_gb":  61.56,
+                    "os":  "Microsoft Windows 11 Pro",
+                    "os_version":  "10.0.26200"
+                },
+    "cpu":  {
+                "name":  "AMD Ryzen 7 9800X3D 8-Core Processor           ",
+                "physical_cores":  8,
+                "logical_processors":  16,
+                "max_clock_mhz":  4700
+            },
+    "gpu_windows":  [
+                        {
+                            "name":  "AMD Radeon(TM) Graphics",
+                            "adapter_ram_gb":  2,
+                            "driver_version":  "32.0.11034.2",
+                            "video_processor":  "AMD Radeon Graphics Processor (0x13C0)"
+                        },
+                        {
+                            "name":  "NVIDIA GeForce RTX 5080",
+                            "adapter_ram_gb":  4,
+                            "driver_version":  "32.0.15.9571",
+                            "video_processor":  "NVIDIA GeForce RTX 5080"
+                        }
+                    ],
+    "gpu_nvidia_smi":  [
+                           {
+                               "name":  "NVIDIA GeForce RTX 5080",
+                               "memory_total_mb":  16303,
+                               "memory_free_mb":  12430,
+                               "driver_version":  "595.71",
+                               "cuda_version":  "13.2"
+                           }
+                       ],
+    "docker":  {
+                   "version":  "Docker version 29.4.0, build 9d7ad9f",
+                   "compose_version":  "Docker Compose version v5.1.2"
+               }
+}

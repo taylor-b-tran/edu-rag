@@ -1,0 +1,86 @@
+{
+  "tested_at": "2026-04-22 00:10:42",
+  "model": "qwen3:14b",
+  "query": "What are word embeddings and why are they useful in NLP?",
+  "collection": "edurag_csit321_batch5_poc",
+  "top_k": 5,
+  "retrieved_sources": [
+    {
+      "source_id": "S1",
+      "distance": 0.6517,
+      "document_name": "book_embNLP_draft.pdf",
+      "page_number": 120,
+      "chunk_index": 128
+    },
+    {
+      "source_id": "S2",
+      "distance": 0.6643,
+      "document_name": "book_embNLP_draft.pdf",
+      "page_number": 80,
+      "chunk_index": 88
+    },
+    {
+      "source_id": "S3",
+      "distance": 0.6691,
+      "document_name": "book_embNLP_draft.pdf",
+      "page_number": 2,
+      "chunk_index": 1
+    },
+    {
+      "source_id": "S4",
+      "distance": 0.6782,
+      "document_name": "book_embNLP_draft.pdf",
+      "page_number": 14,
+      "chunk_index": 19
+    },
+    {
+      "source_id": "S5",
+      "distance": 0.6792,
+      "document_name": "book_embNLP_draft.pdf",
+      "page_number": 110,
+      "chunk_index": 118
+    }
+  ],
+  "variants": [
+    {
+      "id": "V1",
+      "name": "Minimal Grounded Answer",
+      "latency_seconds": 5.8,
+      "response": "Word embeddings are low-dimensional vector representations of words that capture semantic and syntactic relationships. They are useful in NLP because they allow machines to process and understand human language more effectively by converting text into numerical formats. Additionally, they enable models to generalize better and improve performance in various NLP tasks.",
+      "citation_count": 0,
+      "done_reason": "stop",
+      "eval_count": 60,
+      "prompt_eval_count": 1493
+    },
+    {
+      "id": "V2",
+      "name": "Evidence-First With Citations",
+      "latency_seconds": 2.05,
+      "response": "Answer: Word embeddings are low-dimensional vector representations of words that capture semantic and syntactic relationships [S3]. They are useful in NLP because they allow for efficient processing of text and improve the performance of machine learning models by representing words in a dense, continuous space [S1]. Static word embeddings, however, do not account for context, which can lead to ambiguities, while contextualized embeddings address this by adapting representations based on the surrounding text [S4]. \n\nSources used: [S1], [S3], [S4]",
+      "citation_count": 3,
+      "done_reason": "stop",
+      "eval_count": 111,
+      "prompt_eval_count": 1520
+    },
+    {
+      "id": "V3",
+      "name": "Student Teaching Style",
+      "latency_seconds": 2.63,
+      "response": "Word embeddings are numerical representations of words in a low-dimensional space, capturing their semantic and syntactic relationships (S3). They are useful in NLP because they allow machines to understand and process human language more effectively by converting text into dense, compact vectors that can be used in machine learning models (S1). Static embeddings, like Word2Vec and GloVe, assign a single vector to each word, but they cannot capture context-dependent meanings (S4). Contextualized embeddings, such as ELMo and BERT, address this by generating dynamic representations that change based on the word's context, improving performance in various NLP tasks (S2).  \n\nStudy tip: Practice by comparing static and contextualized embeddings using example words with multiple meanings.",
+      "citation_count": 0,
+      "done_reason": "stop",
+      "eval_count": 152,
+      "prompt_eval_count": 1504
+    },
+    {
+      "id": "V4",
+      "name": "Safety-First RAG Guardrail",
+      "latency_seconds": 1.61,
+      "response": "Answer: Word embeddings are low-dimensional vector representations of words that capture semantic and syntactic relationships between words. They are useful in NLP because they allow for efficient processing of text data and enable models to understand the meaning and context of words, leading to improved performance in various NLP tasks.\n\nConfidence: High  \nSources: [S1], [S2], [S3], [S4]",
+      "citation_count": 4,
+      "done_reason": "stop",
+      "eval_count": 82,
+      "prompt_eval_count": 1525
+    }
+  ]
+}
