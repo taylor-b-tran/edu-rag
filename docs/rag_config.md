@@ -160,3 +160,111 @@ Create a labelled set of 20-30 course-specific questions, then measure `Precisio
 ## 10. Handoff
 
 This configuration gives Sprint 4 implementation a stable backend default to build from. If future batches add PPTX/DOCX ingestion, hybrid retrieval, reranking, or OpenAI fallback models, those changes should be added as new benchmark rows rather than silently replacing this Sprint 3 baseline.
+
+
+
+
+# Retrieval Edge Cases
+
+This section defines how the retrieval pipeline must behave when queries fall outside normal operating conditions. Four edge cases are specified below, each with trigger conditions, expected system behaviour, and the exact fallback response the user should receive.
+
+---
+
+## Threshold and Scoring Context
+
+EduRAG uses cosine similarity scoring between query embeddings and indexed chunk embeddings. The configured similarity threshold gates which chunks are passed to the generation step. The table below summarises the scoring bands referenced throughout this section.
+
+| Band | Similarity Score | Interpretation |
+|---|---|---|
+| Strong match | ≥ 0.75 | Chunk is relevant; pass to generation |
+| Borderline match | 0.50 – 0.74 | Chunk may be tangentially relevant; apply borderline logic (see Case B) |
+| No match | < 0.50 | No usable chunk; apply no-match logic (see Case A) |
+
+---
+
+## 1. Case A: No Chunks Match Above Threshold
+
+**Trigger condition:** The vector search returns zero chunks with a similarity score at or above the configured threshold for the submitted query.
+
+### System Behaviour
+
+1. The retrieval step returns an empty result set to the generation layer.
+2. The generation layer must not attempt to synthesise an answer from zero context. It must not hallucinate course content.
+3. The system logs the query text, the top-1 similarity score returned (even though it is below threshold), and a `RETRIEVAL_EMPTY` event code for monitoring.
+4. The fallback response is returned directly to the user without any generation step.
+
+
+### Fallback Response
+
+> I wasn't able to find any course material closely matching your question. This could mean the topic hasn't been covered in the uploaded documents yet, or the question is phrased in a way that doesn't closely match the available content.
+
+> Try rephrasing your question using terms from your course slides or notes, or check whether the relevant document has been uploaded to the system. If you believe this material should be available, please contact your course coordinator.
+
+
+---
+
+## 2. Case B: Chunks Match but Similarity Is Borderline
+
+**Trigger condition:** One or more chunks are returned with similarity scores in the borderline band (0.50–0.74 by default). No chunk meets the strong-match threshold.
+
+### System Behaviour
+
+1. The retrieval step returns the borderline chunks to the generation layer, flagged with a `BORDERLINE` metadata tag.
+2. The generation layer produces an answer grounded in those chunks but must include a confidence caveat in the response.
+3. The response must display the source document name and page or slide number for each chunk used, so the user can verify the answer against the original material.
+4. The system logs a `RETRIEVAL_BORDERLINE` event with the top-1 score and the number of borderline chunks used.
+
+
+### Fallback Response Template
+*(Generation result is inserted at `{answer}`)*
+
+> {answer}
+> **Low confidence, please verify.** The above answer is based on content that only partially matches your question. The source material used was: {source_list}. We recommend checking these sections directly before relying on this answer.
+
+### Example Rendered Output
+
+> Malware static analysis involves examining a binary without executing it, focusing on file headers, strings, and disassembly.
+> **Low confidence, please verify.** The above answer is based on content that only partially matches your question. The source material used was: *Week 5 – Malware Attack Technologies.pdf, slide 12*. We recommend checking these sections directly before relying on this answer.
+
+---
+
+## 3. Case C: Query Is Nonsense
+
+**Trigger condition:** The query is determined to be non-meaningful input. This includes keyboard mash (e.g., `asdfghjkl`), strings of random characters, sequences of numbers with no semantic content, or repeated single characters (e.g., `aaaaaaa`). Detection is applied before embedding and retrieval.
+
+### Detection Approach
+
+Apply a pre-retrieval filter that flags input as nonsense when it meets any of the following:
+- Token length after stripping whitespace is under 3 characters.
+- The ratio of alphabetic characters to total characters is below 0.5.
+- No recognisable dictionary word of 3 or more characters is found in the string (checked against a basic English word list).
+- The string is identical to the previous query submitted in the same session (duplicate spam detection).
+When flagged, skip embedding and retrieval entirely.
+
+### Fallback Response
+
+> It looks like that might have been an accidental message or a test, I wasn't able to understand it as a question. Please type a question about your course material and I'll do my best to help.
+
+---
+
+## 4. Case D: Query Is Off-Topic from Any Course
+
+**Trigger condition:**  The query is a well-formed, meaningful question but its subject matter is unrelated to any course content indexed in the system. Examples include general trivia, personal advice, questions about external services, or political topics. This differs from Case A in that the query is coherent, it simply has no connection to the educational corpus.
+
+### Detection Approach
+
+Off-topic queries will typically surface through Case A (no chunks above threshold) with a very low top-1 similarity score, generally below 0.30. However, certain queries may produce misleadingly moderate scores due to incidental vocabulary overlap with course documents. A secondary classification step is recommended:
+- If top-1 score is below 0.30, treat as off-topic regardless of query content.
+- If top-1 score is between 0.30 and 0.49 (below threshold but above noise floor), apply a lightweight topic classifier trained on course subject areas to confirm off-topic status before selecting the appropriate fallback.
+
+### System Behaviour
+
+1. Skip generation.
+2. Return the off-topic fallback response.
+3. Log a `QUERY_OFFTOPIC` event with the query text and top-1 similarity score.
+
+### Fallback Response
+
+> That question doesn't appear to be related to any of the course materials available in this system. EduRAG is designed to help with questions about your uploaded course documents — lecture slides, notes, and research papers.
+
+> If you have a question about your coursework, try asking about a specific topic, week, or concept from your subject. For general questions outside your course, a general-purpose assistant may be more helpful.
