@@ -1,0 +1,1001 @@
+openapi: 3.0.3
+info:
+  title: EduRAG Module 4 Web Application API
+  version: 1.0.0
+  description: >
+    OpenAPI 3.0 specification for the EduRAG Module 4 Web Application layer.
+    Module 4 exposes the user-facing API for authentication, document upload,
+    course-scoped querying, session history, indexing status polling, and admin
+    monitoring. The route names are aligned with the Sprint 2 Module Interface
+    document while adding Sprint 3 security and async-indexing details.
+servers:
+  - url: http://localhost:8501
+    description: Sprint 3 Streamlit/local prototype gateway
+  - url: http://localhost:8000
+    description: Future FastAPI backend service
+tags:
+  - name: Authentication
+    description: Login, logout, and token refresh.
+  - name: Query
+    description: Student course-question workflow with grounded answers and citations.
+  - name: Documents
+    description: Lecturer document upload, listing, deletion, and indexing status.
+  - name: Sessions
+    description: Student conversation history.
+  - name: Admin
+    description: Admin monitoring and audit views.
+  - name: Health
+    description: Runtime health checks.
+security:
+  - bearerAuth: []
+paths:
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and receive access tokens
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              studentLogin:
+                value:
+                  email: student@example.edu
+                  password: password123
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+              examples:
+                success:
+                  value:
+                    access_token: eyJhbGciOi...
+                    refresh_token: refresh_abc123
+                    token_type: bearer
+                    expires_in: 3600
+                    user:
+                      id: 6e2c0b1f-6fd9-45e6-bcc1-5cc9ea8e4b9c
+                      name: Student User
+                      email: student@example.edu
+                      role: student
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout current user
+      operationId: logoutUser
+      description: Revokes the current refresh token or active server-side session.
+      responses:
+        "200":
+          description: Logout successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              examples:
+                success:
+                  value:
+                    status: success
+                    message: Logged out successfully.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      operationId: refreshAccessToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+            examples:
+              refresh:
+                value:
+                  refresh_token: refresh_abc123
+      responses:
+        "200":
+          description: New access token generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshTokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/query:
+    post:
+      tags: [Query]
+      summary: Ask a course-scoped question
+      operationId: askCourseQuestion
+      description: >
+        Student endpoint. Accepts a natural-language question and returns a
+        grounded answer generated from retrieved course chunks. Retrieval must
+        be filtered by course_id to prevent cross-course leakage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+            examples:
+              courseQuestion:
+                value:
+                  query: What are word embeddings and why are they useful?
+                  course_id: CSIT321
+                  session_id: 3ac6ad6c-dde5-48ae-8b17-0d923ffb8d5a
+                  top_k: 5
+      responses:
+        "200":
+          description: Grounded answer or labelled fallback returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+              examples:
+                grounded:
+                  value:
+                    answer: Word embeddings represent words as vectors so semantic similarity can be compared numerically.
+                    fallback_used: false
+                    confidence_label: High
+                    model_used: qwen3:14b
+                    session_id: 3ac6ad6c-dde5-48ae-8b17-0d923ffb8d5a
+                    sources:
+                      - document_id: 80435d68-e2bc-4e04-bc78-3e9486ac8f4b
+                        document_name: book_embNLP_draft.pdf
+                        page_number: 47
+                        chunk_index: 12
+                        distance: 0.2849
+                fallback:
+                  value:
+                    answer: Based on general knowledge - not verified against course materials.
+                    fallback_used: true
+                    confidence_label: Low
+                    model_used: retrieval_fallback_label
+                    session_id: 3ac6ad6c-dde5-48ae-8b17-0d923ffb8d5a
+                    sources: []
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/upload:
+    post:
+      tags: [Documents]
+      summary: Upload course material
+      operationId: uploadCourseDocument
+      description: >
+        Lecturer endpoint. Uploads a PDF, PPTX, or DOCX file and creates an
+        asynchronous indexing job. The response returns a job_id so the UI can
+        poll indexing status.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/UploadDocumentRequest"
+      responses:
+        "202":
+          description: File accepted and indexing job queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+              examples:
+                accepted:
+                  value:
+                    document:
+                      id: 80435d68-e2bc-4e04-bc78-3e9486ac8f4b
+                      course_id: CSIT321
+                      original_filename: lecture_week_01.pdf
+                      mime_type: application/pdf
+                      file_size_bytes: 5242880
+                      page_count: 42
+                      uploaded_at: "2026-04-27T10:30:00Z"
+                      indexing_status: queued
+                    indexing_job:
+                      id: b62d15d2-72e3-4ba1-a6be-c989a8298a64
+                      document_id: 80435d68-e2bc-4e04-bc78-3e9486ac8f4b
+                      course_id: CSIT321
+                      status: queued
+                      progress_percent: 0
+                      attempt_count: 0
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: Uploaded file is too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported file type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/documents:
+    get:
+      tags: [Documents]
+      summary: List course documents
+      operationId: listDocuments
+      description: Lists documents visible to the authenticated user for a course.
+      parameters:
+        - $ref: "#/components/parameters/CourseIdQuery"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/IndexingStatus"
+      responses:
+        "200":
+          description: Documents returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [documents]
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Document"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/document/{doc_id}:
+    get:
+      tags: [Documents]
+      summary: Get document metadata
+      operationId: getDocument
+      parameters:
+        - $ref: "#/components/parameters/DocumentIdPath"
+      responses:
+        "200":
+          description: Document metadata returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Documents]
+      summary: Delete a course document
+      operationId: deleteDocument
+      description: >
+        Lecturer/Admin endpoint. Removes document metadata and queues vector
+        cleanup for the matching ChromaDB chunks.
+      parameters:
+        - $ref: "#/components/parameters/DocumentIdPath"
+      responses:
+        "200":
+          description: Document deletion accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              examples:
+                deleted:
+                  value:
+                    status: success
+                    message: Document deletion accepted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/indexing-jobs/{job_id}:
+    get:
+      tags: [Documents]
+      summary: Poll indexing job status
+      operationId: getIndexingJobStatus
+      description: Lecturer endpoint used by the UI after upload.
+      parameters:
+        - $ref: "#/components/parameters/IndexingJobIdPath"
+      responses:
+        "200":
+          description: Indexing status returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexingJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sessions:
+    get:
+      tags: [Sessions]
+      summary: List conversation sessions
+      operationId: listSessions
+      parameters:
+        - $ref: "#/components/parameters/CourseIdQuery"
+      responses:
+        "200":
+          description: Sessions returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SessionSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/sessions/{session_id}:
+    get:
+      tags: [Sessions]
+      summary: Get one conversation session with messages
+      operationId: getSession
+      parameters:
+        - $ref: "#/components/parameters/SessionIdPath"
+      responses:
+        "200":
+          description: Session detail returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Sessions]
+      summary: Archive one conversation session
+      operationId: archiveSession
+      parameters:
+        - $ref: "#/components/parameters/SessionIdPath"
+      responses:
+        "200":
+          description: Session archived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/metrics:
+    get:
+      tags: [Admin]
+      summary: Get system metrics using the Assessment 2 route name
+      operationId: getSystemMetrics
+      description: >
+        Compatibility alias kept for Assessment 2 Module 4 naming. This route
+        returns the same admin dashboard statistics as `/api/admin/stats`.
+      responses:
+        "200":
+          description: Admin statistics returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/logs:
+    get:
+      tags: [Admin]
+      summary: Get audit logs using the Assessment 2 route name
+      operationId: getSystemLogs
+      description: >
+        Compatibility alias kept for Assessment 2 Module 4 naming. This route
+        returns the same audit events as `/api/admin/audit-logs`.
+      parameters:
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: event_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [info, warning, error]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Audit events returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLogEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: Get admin dashboard statistics
+      operationId: getAdminStats
+      description: Admin-only endpoint for system overview metrics.
+      responses:
+        "200":
+          description: Admin statistics returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: List audit log events
+      operationId: listAuditLogs
+      description: Admin-only endpoint for reviewing upload, indexing, retrieval, and auth events.
+      parameters:
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: event_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [info, warning, error]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Audit events returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLogEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Runtime health returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CourseIdQuery:
+      name: course_id
+      in: query
+      required: true
+      schema:
+        type: string
+        example: CSIT321
+      description: Course scope used for RBAC and retrieval isolation.
+    DocumentIdPath:
+      name: doc_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IndexingJobIdPath:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionIdPath:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing, expired, or invalid authentication.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated user does not have permission for this course or role.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request body failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServerError:
+      description: Internal pipeline or service failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Role:
+      type: string
+      enum: [student, lecturer, admin]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    UserSummary:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: "#/components/schemas/Role"
+
+    AuthTokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: "#/components/schemas/UserSummary"
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    RefreshTokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 3600
+
+    QueryRequest:
+      type: object
+      required: [query, course_id]
+      properties:
+        query:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        course_id:
+          type: string
+          example: CSIT321
+        session_id:
+          type: string
+          format: uuid
+          nullable: true
+        top_k:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+
+    QueryResponse:
+      type: object
+      required: [answer, sources, fallback_used, confidence_label, model_used, session_id]
+      properties:
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceReference"
+        fallback_used:
+          type: boolean
+        confidence_label:
+          type: string
+          enum: [Low, Medium, High]
+        model_used:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+
+    SourceReference:
+      type: object
+      required: [document_id, document_name, page_number, chunk_index, distance]
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        document_name:
+          type: string
+        page_number:
+          type: integer
+          minimum: 1
+        chunk_index:
+          type: integer
+          minimum: 0
+        distance:
+          type: number
+          format: float
+          description: Lower cosine distance means a closer semantic match.
+
+    UploadDocumentRequest:
+      type: object
+      required: [file, course_id]
+      properties:
+        file:
+          type: string
+          format: binary
+        course_id:
+          type: string
+          example: CSIT321
+
+    UploadResponse:
+      type: object
+      required: [document, indexing_job]
+      properties:
+        document:
+          $ref: "#/components/schemas/Document"
+        indexing_job:
+          $ref: "#/components/schemas/IndexingJob"
+
+    Document:
+      type: object
+      required: [id, course_id, original_filename, mime_type, file_size_bytes, uploaded_at, indexing_status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+        original_filename:
+          type: string
+        mime_type:
+          type: string
+          enum:
+            - application/pdf
+            - application/vnd.openxmlformats-officedocument.presentationml.presentation
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        file_size_bytes:
+          type: integer
+          minimum: 0
+        page_count:
+          type: integer
+          nullable: true
+          minimum: 0
+        uploaded_at:
+          type: string
+          format: date-time
+        indexing_status:
+          $ref: "#/components/schemas/IndexingStatus"
+
+    IndexingStatus:
+      type: string
+      enum: [queued, running, completed, failed, rejected]
+
+    IndexingJob:
+      type: object
+      required: [id, document_id, course_id, status, progress_percent, attempt_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/IndexingStatus"
+        progress_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        attempt_count:
+          type: integer
+          minimum: 0
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SessionSummary:
+      type: object
+      required: [id, course_id, title, status, last_activity_at, message_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+        title:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+        last_activity_at:
+          type: string
+          format: date-time
+        message_count:
+          type: integer
+          minimum: 0
+
+    SessionDetail:
+      type: object
+      required: [id, course_id, status, messages]
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+
+    Message:
+      type: object
+      required: [id, role, text, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [student, assistant, system]
+        text:
+          type: string
+        source_references:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceReference"
+        created_at:
+          type: string
+          format: date-time
+
+    AdminStats:
+      type: object
+      required: [total_users, total_courses, total_documents, total_queries, failed_indexing_jobs]
+      properties:
+        total_users:
+          type: integer
+          minimum: 0
+        total_courses:
+          type: integer
+          minimum: 0
+        total_documents:
+          type: integer
+          minimum: 0
+        total_queries:
+          type: integer
+          minimum: 0
+        failed_indexing_jobs:
+          type: integer
+          minimum: 0
+
+    AuditLogEvent:
+      type: object
+      required: [id, event_type, event_level, occurred_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        course_id:
+          type: string
+          nullable: true
+        session_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_type:
+          type: string
+          example: indexing_retry_event
+        event_level:
+          type: string
+          enum: [info, warning, error]
+        event_payload:
+          type: object
+          additionalProperties: true
+        occurred_at:
+          type: string
+          format: date-time
+
+    StatusResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [success, accepted]
+        message:
+          type: string
+
+    HealthResponse:
+      type: object
+      required: [status, services]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        services:
+          type: object
+          required: [postgres, chromadb, ollama]
+          properties:
+            postgres:
+              type: string
+              enum: [ok, unavailable]
+            chromadb:
+              type: string
+              enum: [ok, unavailable]
+            ollama:
+              type: string
+              enum: [ok, unavailable]
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: forbidden
+        message:
+          type: string
+          example: You do not have access to this course.
+        details:
+          type: object
+          additionalProperties: true
