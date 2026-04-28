@@ -1,0 +1,91 @@
+name: edurag-sprint3
+
+services:
+  app:
+    image: python:3.11-slim
+    container_name: edurag-app
+    working_dir: /workspace
+    command: ["sh", "-lc", "echo 'EduRAG app container ready for Sprint 3 work'; tail -f /dev/null"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: ${APP_PORT:-8501}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-edurag}
+      POSTGRES_USER: ${POSTGRES_USER:-edurag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edurag_dev_password}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./:/workspace
+      - uploads_data:/workspace/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      ollama:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-8501}:8501"
+    networks:
+      - edurag-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: edurag-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-edurag}
+      POSTGRES_USER: ${POSTGRES_USER:-edurag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edurag_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-edurag} -d ${POSTGRES_DB:-edurag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - edurag-net
+
+  chromadb:
+    image: chromadb/chroma@sha256:607103123fbd79794e3cd8029e16137031a464551e3a61df77191627a9d23c72
+    container_name: edurag-chromadb
+    environment:
+      IS_PERSISTENT: "TRUE"
+      CHROMA_SERVER_HTTP_PORT: 8000
+      ALLOW_RESET: "TRUE"
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - edurag-net
+
+  ollama:
+    image: ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b
+    container_name: edurag-ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - edurag-net
+
+networks:
+  edurag-net:
+    driver: bridge
+
+volumes:
+  uploads_data:
+  postgres_data:
+  chromadb_data:
+  ollama_data:

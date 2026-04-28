@@ -1,0 +1,15 @@
+# EduRAG Sprint 3 notebook/runtime dependencies.
+# Tested on Windows 11 with Python 3.10 during Batch 5/cleanup.
+
+PyMuPDF==1.27.2.2
+sentence-transformers==5.4.1
+langchain-text-splitters==1.1.0
+chromadb==1.5.8
+requests==2.33.1
+numpy==2.1.2
+nbformat==5.10.4
+nbclient==0.10.4
+ipykernel==6.30.1
+
+# `sentence-transformers` depends on PyTorch. Keep the exact torch build
+# platform-specific so teammates can use CPU, CUDA, or existing lab images.
