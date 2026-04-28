@@ -8,9 +8,9 @@ Status: Provisional Sprint 3 defaults selected
 
 ## 1. Purpose
 
-This file summarises the first Sprint 3 RAG configuration benchmark for Paedia. It is not a full academic retrieval evaluation yet; the aim is to choose practical, evidence-based defaults for Sprint 3 integration so later work can start from a stable chunking, retrieval, and fallback configuration.
+This document records the first Sprint 3 RAG configuration benchmark for Paedia. The goal is not to complete a full academic retrieval evaluation yet. The goal is to choose practical, evidence-based defaults for Sprint 3 integration so later work can proceed with a stable chunking, retrieval, and fallback configuration.
 
-It also covers Ngoc's Sprint 3 Task 14 requirement from the shared Sprint 3 Google Doc: a `Retrieval Edge Cases` section in `docs/rag_config.md`.
+This file also satisfies Ngoc's Sprint 3 Task 14 expectation from the shared Sprint 3 Google Doc: a section titled `Retrieval Edge Cases` must be added to `docs/rag_config.md`.
 
 Raw benchmark evidence is stored in:
 
@@ -21,6 +21,7 @@ Raw benchmark evidence is stored in:
 | Item | Value |
 |---|---|
 | Source document | `materials/book_embNLP_draft.pdf` |
+| PDF extraction library | PyMuPDF (`fitz`), matching the Assessment 2 Module 1 parser dependency |
 | Pages with extracted text | 163 |
 | Embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
 | Embedding dimension | 384 |
@@ -40,15 +41,16 @@ Tung's Sprint 3 task plan states that a larger 31-question labelled corpus shoul
 |---|---:|---|
 | Chunk size | 1024 characters | Best separation between in-scope and out-of-scope queries while producing fewer chunks. |
 | Chunk overlap | 0 characters | Overlap did not improve coverage on this PDF benchmark and slightly reduced distance separation. |
+| PDF extractor | PyMuPDF (`fitz`) | Matches the Assessment 2 report dependency and keeps page-aware extraction before chunking. |
 | Retrieval top-k | 5 | Top-3 already worked, but top-5 gives the LLM more context without overloading the prompt. |
 | Similarity fallback threshold | 0.65 cosine distance | Separates the hardest in-scope query from the out-of-scope query for the selected config. |
 | Embedding model | `all-MiniLM-L6-v2` | Already validated in Batch 5 and suitable for local Sprint 3 hardware. |
 | Vector database | ChromaDB | Matches Assessment 2 architecture and supports metadata-filtered retrieval by `course_id`. |
 | Generation model | `qwen3:14b` via Ollama | Selected in the hardware/model pass and validated locally with GPU support. |
 
-Important implementation note: these chunk sizes are character-based for Sprint 3 because the available teammate chunker implementation uses `RecursiveCharacterTextSplitter`-style character limits. If the team later switches to token-based splitting, these values must be re-benchmarked.
+Important implementation note: PDF text extraction uses PyMuPDF (`fitz`) to match the Assessment 2 documented parser path. The chunk sizes are still character-based for Sprint 3 because the available teammate chunker implementation uses `RecursiveCharacterTextSplitter`-style character limits. If the team later switches to token-based splitting, these values must be re-benchmarked.
 
-Runnable notebook alignment check: after the implementation review, `notebooks/rag_poc.ipynb` was rerun with these defaults and LangChain `RecursiveCharacterTextSplitter`. The live notebook collection is `edurag_csit321_sprint3_poc`; it created 464 page-scoped chunks, returned a sample in-scope best distance of `0.6043`, and triggered fallback for the out-of-scope weather query with best distance `1.6555`.
+Runnable notebook alignment check: after the PyMuPDF update, `notebooks/rag_poc.ipynb` now uses PyMuPDF for PDF extraction and LangChain `RecursiveCharacterTextSplitter` for chunking. A local extraction/chunking check against `materials/book_embNLP_draft.pdf` found 163 text pages and created 466 page-scoped chunks. The retrieval-distance values in this document remain provisional Sprint 3 benchmark evidence and should be refreshed when the larger labelled query set is available.
 
 ## 4. Benchmark Results
 
@@ -87,7 +89,7 @@ For the selected `1024/0` configuration:
 | 0.80 | 3 | 1 | 0 | 0 |
 | 0.85 | 3 | 0 | 0 | 1 |
 
-Sprint 3 threshold: `0.65`.
+Recommended Sprint 3 threshold: `0.65`.
 
 This threshold is intentionally conservative. It sits above the hardest in-scope match (`0.3232`) and below the out-of-scope match (`0.8341`). It should be treated as a provisional PDF benchmark value, not a universal production value.
 
@@ -103,9 +105,9 @@ Thi Hong Ngoc Nguyen's extracted Sprint 3 contribution includes a chunker and te
 | Overlap validation | Overlap must be lower than chunk size; invalid values should raise a clear error. |
 | Code blocks | Chunking should preserve indentation-sensitive content enough for retrieval. |
 | Non-English and mixed-language text | Unicode text should not crash the chunker, even though Sprint 3 does not prioritise multilingual UI. |
-| Real PDF text | Page-scoped PDF extraction remains the baseline ingestion path for this Sprint 3 PoC. |
+| Real PDF text | PyMuPDF page-scoped PDF extraction remains the baseline ingestion path for this Sprint 3 PoC. |
 
-Ngoc's default chunker uses `512/50`. The benchmark keeps that as a safe fallback, while the first PDF-based PoC uses `1024/0` as the integration default because it achieved full top-5 coverage with the strongest separation margin. If the team wants stricter alignment with Ngoc's module, `512/50` remains a reasonable option because it also achieved full top-5 coverage and a strong separation margin (`0.4631`).
+Ngoc's default chunker uses `512/50`. This benchmark does not reject that work; it narrows the first integration default for Binh's current PDF-based PoC to `1024/0`. If the team wants stricter alignment with Ngoc's default implementation, `512/50` is still a safe fallback because it achieved full top-5 coverage and a strong separation margin (`0.4631`).
 
 ## 7. Retrieval Edge Cases
 
@@ -124,6 +126,7 @@ This section is included because the shared Sprint 3 Google Doc assigns Ngoc a r
 
 ```python
 RAG_CONFIG = {
+    "pdf_extractor": "PyMuPDF (fitz)",
     "chunk_size": 1024,
     "chunk_overlap": 0,
     "top_k": 5,
@@ -150,121 +153,14 @@ Current limitations:
 - Only one PDF was benchmarked.
 - The query set is small and manually chosen.
 - Relevance was approximated using keyword-hit coverage and distance separation.
+- The PyMuPDF extraction update was source-checked and chunk-count checked; full retrieval-distance results should be rerun with the final labelled corpus.
 - PPTX and DOCX parsing were not benchmarked in this batch.
 - Hybrid search and reranking were intentionally left out of Sprint 3 Batch 7 scope.
 
-Next evaluation step:
+Recommended next evaluation step:
 
 Create a labelled set of 20-30 course-specific questions, then measure `Precision@5`, `Recall@10`, fallback accuracy, answer citation quality, and latency.
 
 ## 10. Handoff
 
-This configuration gives Sprint 4 implementation a stable backend default to build from. If future batches add PPTX/DOCX ingestion, hybrid retrieval, reranking, or OpenAI fallback models, those changes should be added as new benchmark rows rather than silently replacing this Sprint 3 baseline.
-
-
-
-
-# Retrieval Edge Cases
-
-This section defines how the retrieval pipeline must behave when queries fall outside normal operating conditions. Four edge cases are specified below, each with trigger conditions, expected system behaviour, and the exact fallback response the user should receive.
-
----
-
-## Threshold and Scoring Context
-
-EduRAG uses cosine similarity scoring between query embeddings and indexed chunk embeddings. The configured similarity threshold gates which chunks are passed to the generation step. The table below summarises the scoring bands referenced throughout this section.
-
-| Band | Similarity Score | Interpretation |
-|---|---|---|
-| Strong match | ≥ 0.75 | Chunk is relevant; pass to generation |
-| Borderline match | 0.50 – 0.74 | Chunk may be tangentially relevant; apply borderline logic (see Case B) |
-| No match | < 0.50 | No usable chunk; apply no-match logic (see Case A) |
-
----
-
-## 1. Case A: No Chunks Match Above Threshold
-
-**Trigger condition:** The vector search returns zero chunks with a similarity score at or above the configured threshold for the submitted query.
-
-### System Behaviour
-
-1. The retrieval step returns an empty result set to the generation layer.
-2. The generation layer must not attempt to synthesise an answer from zero context. It must not hallucinate course content.
-3. The system logs the query text, the top-1 similarity score returned (even though it is below threshold), and a `RETRIEVAL_EMPTY` event code for monitoring.
-4. The fallback response is returned directly to the user without any generation step.
-
-
-### Fallback Response
-
-> I wasn't able to find any course material closely matching your question. This could mean the topic hasn't been covered in the uploaded documents yet, or the question is phrased in a way that doesn't closely match the available content.
-
-> Try rephrasing your question using terms from your course slides or notes, or check whether the relevant document has been uploaded to the system. If you believe this material should be available, please contact your course coordinator.
-
-
----
-
-## 2. Case B: Chunks Match but Similarity Is Borderline
-
-**Trigger condition:** One or more chunks are returned with similarity scores in the borderline band (0.50–0.74 by default). No chunk meets the strong-match threshold.
-
-### System Behaviour
-
-1. The retrieval step returns the borderline chunks to the generation layer, flagged with a `BORDERLINE` metadata tag.
-2. The generation layer produces an answer grounded in those chunks but must include a confidence caveat in the response.
-3. The response must display the source document name and page or slide number for each chunk used, so the user can verify the answer against the original material.
-4. The system logs a `RETRIEVAL_BORDERLINE` event with the top-1 score and the number of borderline chunks used.
-
-
-### Fallback Response Template
-*(Generation result is inserted at `{answer}`)*
-
-> {answer}
-> **Low confidence, please verify.** The above answer is based on content that only partially matches your question. The source material used was: {source_list}. We recommend checking these sections directly before relying on this answer.
-
-### Example Rendered Output
-
-> Malware static analysis involves examining a binary without executing it, focusing on file headers, strings, and disassembly.
-> **Low confidence, please verify.** The above answer is based on content that only partially matches your question. The source material used was: *Week 5 – Malware Attack Technologies.pdf, slide 12*. We recommend checking these sections directly before relying on this answer.
-
----
-
-## 3. Case C: Query Is Nonsense
-
-**Trigger condition:** The query is determined to be non-meaningful input. This includes keyboard mash (e.g., `asdfghjkl`), strings of random characters, sequences of numbers with no semantic content, or repeated single characters (e.g., `aaaaaaa`). Detection is applied before embedding and retrieval.
-
-### Detection Approach
-
-Apply a pre-retrieval filter that flags input as nonsense when it meets any of the following:
-- Token length after stripping whitespace is under 3 characters.
-- The ratio of alphabetic characters to total characters is below 0.5.
-- No recognisable dictionary word of 3 or more characters is found in the string (checked against a basic English word list).
-- The string is identical to the previous query submitted in the same session (duplicate spam detection).
-When flagged, skip embedding and retrieval entirely.
-
-### Fallback Response
-
-> It looks like that might have been an accidental message or a test, I wasn't able to understand it as a question. Please type a question about your course material and I'll do my best to help.
-
----
-
-## 4. Case D: Query Is Off-Topic from Any Course
-
-**Trigger condition:**  The query is a well-formed, meaningful question but its subject matter is unrelated to any course content indexed in the system. Examples include general trivia, personal advice, questions about external services, or political topics. This differs from Case A in that the query is coherent, it simply has no connection to the educational corpus.
-
-### Detection Approach
-
-Off-topic queries will typically surface through Case A (no chunks above threshold) with a very low top-1 similarity score, generally below 0.30. However, certain queries may produce misleadingly moderate scores due to incidental vocabulary overlap with course documents. A secondary classification step is recommended:
-- If top-1 score is below 0.30, treat as off-topic regardless of query content.
-- If top-1 score is between 0.30 and 0.49 (below threshold but above noise floor), apply a lightweight topic classifier trained on course subject areas to confirm off-topic status before selecting the appropriate fallback.
-
-### System Behaviour
-
-1. Skip generation.
-2. Return the off-topic fallback response.
-3. Log a `QUERY_OFFTOPIC` event with the query text and top-1 similarity score.
-
-### Fallback Response
-
-> That question doesn't appear to be related to any of the course materials available in this system. EduRAG is designed to help with questions about your uploaded course documents — lecture slides, notes, and research papers.
-
-> If you have a question about your coursework, try asking about a specific topic, week, or concept from your subject. For general questions outside your course, a general-purpose assistant may be more helpful.
+This document unblocks Sprint 4 implementation by giving Tai and the backend integration work a stable default configuration. If future batches add PPTX/DOCX ingestion, hybrid retrieval, reranking, or OpenAI fallback models, those changes should be added as new benchmark rows rather than silently replacing this Sprint 3 baseline.

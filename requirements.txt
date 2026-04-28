@@ -1,7 +1,7 @@
 # EduRAG Sprint 3 notebook/runtime dependencies.
 # Tested on Windows 11 with Python 3.10 during Batch 5/cleanup.
 
-pypdf==6.10.0
+PyMuPDF==1.27.2.2
 sentence-transformers==5.4.1
 langchain-text-splitters==1.1.0
 chromadb==1.5.8
