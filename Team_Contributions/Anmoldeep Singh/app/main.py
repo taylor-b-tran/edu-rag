@@ -16,6 +16,11 @@ import re
 import time
 from datetime import datetime
 import random
+import requests
+
+# ─── BACKEND CONFIG ─────────────────────────────────────────────────
+BACKEND_URL = os.environ.get("PAEDIA_BACKEND_URL", "").rstrip("/")
+BACKEND_TIMEOUT = 6 
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -199,13 +204,33 @@ init_session_state()
 
 # ─── DUMMY BACKEND ──────────────────────────────────────────────────
 
-def get_ai_response(query: str) -> dict:
-    """Simulate RAG pipeline: VectorRetriever → LLMResponseGeneration from dummy data."""
+def _call_real_backend(query: str) -> dict | None:
+    """
+    POST /api/query to the Flask backend.
+    Returns the response dict on success, or None on any failure
+    (backend offline, timeout, unexpected error).
+    """
+    if not BACKEND_URL:
+        return None
+    try:
+        resp = requests.post(
+            f"{BACKEND_URL}/api/query",
+            json={"query": query, "course_id": "csit321"},
+            timeout=BACKEND_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+ 
+ 
+def _call_fixture_backend(query: str) -> dict:
+    """Original dummy logic — unchanged from Anmoldeep's prototype."""
     if data:
         for q, resp in data["responses"].items():
             if query.lower().strip("?").strip() in q.lower() or q.lower() in query.lower():
-                return resp
-        return data["fallback_response"]
+                return {**resp, "_source": "fixture"}
+        return {**data["fallback_response"], "_source": "fixture"}
     return {
         "answer": "I'm currently running in demo mode without the backend connected. This is a UI prototype.",
         "source_references": [],
@@ -213,7 +238,15 @@ def get_ai_response(query: str) -> dict:
         "model_used": "ollama/llama3",
         "token_count": 0,
         "is_fallback": True,
+        "_source": "fixture",
     }
+
+def get_ai_response(query: str) -> dict:
+    result = _call_real_backend(query)
+    if result is not None:
+        result.setdefault("_source", result.get("backend_mode", "real"))
+        return result
+    return _call_fixture_backend(query)
 
 
 def get_suggested_prompts() -> list:
@@ -288,6 +321,24 @@ def render_sidebar():
     with st.sidebar:
         st.markdown("# 📚 Paedia")
         st.caption("AI Course Assistant")
+        st.divider()
+        
+        if BACKEND_URL:
+            try:
+                hresp = requests.get(f"{BACKEND_URL}/api/health", timeout=2)
+                hdata = hresp.json() if hresp.status_code == 200 else {}
+                if hdata.get("status") == "ok":
+                    _mode = hdata.get("mode", "fixture")
+                    _dot  = "🟢" if _mode == "real" else "🟡"
+                    _label = f"{_dot} Backend: {_mode} mode"
+                else:
+                    _label = "🔴 Backend: unreachable"
+            except Exception:
+                _label = "🔴 Backend: offline"
+        else:
+            _label = "⚪ Backend: demo mode"
+        st.caption(_label)
+ 
         st.divider()
 
         # Build nav based on role
