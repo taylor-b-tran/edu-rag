@@ -7,3 +7,6 @@ venv/
 *.log
 data/samples/
 apps/integration/logs/
+AGENTS.md
+.agents/
+.ai/
