@@ -1,182 +1,250 @@
 # EduRAG
 
-EduRAG is a CSIT321 Project 37 course assistant for Group 19. The project uses
-retrieval-augmented generation to answer student questions from course
-materials, with answers grounded in indexed documents rather than general chat
-alone.
+> A course-aware AI assistant that answers student questions from lecturer-provided materials — grounded in documents, not general web knowledge.
 
-## Project Details
+EduRAG is a six-person team project that applies **Retrieval-Augmented Generation (RAG)** to higher education. Students ask questions in natural language; the system retrieves the most relevant passages from indexed course documents and generates an answer with inline source citations. Off-topic or unsupported questions are explicitly labelled as fallback responses rather than presented as course-authoritative answers.
 
-| Item | Value |
+---
+
+## Why This Exists
+
+University students routinely spend hours searching PDFs, slides, and lecture notes to find an answer that takes a few sentences to state. At the same time, generic AI tools like ChatGPT have no visibility into course-specific content and can produce confident but incorrect answers drawn from their general training data.
+
+EduRAG addresses both problems:
+
+- **Lecturers** upload course materials once. The system indexes them automatically.
+- **Students** ask questions in plain language and receive answers grounded in those materials, with page-level citations they can verify.
+- **Admins** monitor usage, manage access, and inspect an audit log of document events.
+
+The answer generation is always scoped to the enrolled course. Cross-course data leakage is a first-class design constraint, not an afterthought.
+
+---
+
+## Technical Highlights
+
+These are the engineering skills and practices demonstrated by this project:
+
+| Area | What was built |
 |---|---|
-| Subject | CSIT321 Annual Session 2026 |
-| Campus | Liverpool Campus (SWS) |
-| Group | Group 19 |
-| Supervisor / Sponsor | Prof. Jun Yan |
+| **RAG pipeline** | End-to-end: PDF extraction → chunking → embedding → vector retrieval → LLM generation with citation formatting and fallback detection |
+| **Vector search** | ChromaDB with `course_id` metadata filtering to enforce retrieval isolation per course |
+| **Relational data model** | PostgreSQL schema covering users, roles, courses, documents, indexing jobs, session history, and an immutable audit log |
+| **Local LLM inference** | Ollama running `qwen3:14b` — fully self-hosted, no external API calls required in development |
+| **API design** | Full OpenAPI 3.0 specification (JWT auth, role-scoped endpoints, async indexing jobs, session history, admin monitoring) |
+| **Containerised stack** | Docker Compose with CPU and GPU override variants; service-health dependency ordering |
+| **Prompt engineering** | Evidence-cited safety-first prompt with confidence labelling, fallback phrasing, and injection-resistance notes |
+| **Evaluation assets** | Retrieval benchmark (chunk size, overlap, top-k, distance threshold) + 31-question labelled test corpus covering factual, reasoning, off-topic, and ambiguous cases |
+| **Privacy & ethics** | Explicit privacy policy, ethics review document, role-based access control model, data minimisation by category, and audit event trail |
+| **Team workflow** | Git branching strategy (main / develop / task branches), PR-only merges, per-sprint deliverable ownership tracked per member |
 
-## Team
+---
 
-| Name | Role |
-|---|---|
-| Thanh Binh Tran | Team Lead |
-| Tai Huynh | Team Member |
-| Tung Phuong Anh Huynh | Team Member |
-| Kahavidanage Namaratne | Team Member |
-| Thi Hong Ngoc Nguyen | Team Member |
-| Anmoldeep Singh | Team Member |
+## System Architecture
 
-## Current Sprint 3 Baseline
-
-The current `develop` branch includes the Sprint 3 RAG/backend checkpoint:
-
-- Docker Compose local stack with `app`, `postgres`, `chromadb`, and `ollama`
-- PostgreSQL schema and development seed data
-- ChromaDB vector-store setup for chunk embeddings
-- Ollama model selection and prompt strategy notes
-- RAG configuration benchmark and retrieval edge-case notes
-- Executed RAG proof-of-concept notebook using one sample PDF
-- Internal handoff notes for Sprint 4 planning
-
-The `app` service is still a bootstrap workspace container. It is not a finished
-production API or web application yet.
-
-## Repository Structure
-
-```text
-.
-|-- db/
-|   |-- migrations/              # PostgreSQL schema
-|   `-- seed/                    # Development seed data
-|-- docs/
-|   |-- meetings/                # Sprint checkpoint notes
-|   |-- ollama_model_selection.md
-|   |-- prompt_strategy.md
-|   `-- rag_config.md
-|-- materials/                   # Sample course material for the PoC
-|-- notebooks/                   # RAG proof-of-concept notebook
-|-- scripts/                     # Local helper scripts
-|-- docker-compose.yml
-|-- docker-compose.gpu.yml
-|-- README_docker.md
-|-- requirements.txt
-`-- SPRINT_BRANCH_WORKFLOW.md
 ```
+Student / Lecturer / Admin
+          │
+          ▼
+  ┌─────────────────┐
+  │  Streamlit UI   │  (Sprint 3: wireframes + state model; Sprint 4: connected)
+  └────────┬────────┘
+           │  HTTP
+           ▼
+  ┌─────────────────┐      ┌──────────────────────┐
+  │  Web/API Layer  │─────▶│  Document Processor  │
+  │  (FastAPI spec) │      │  chunker · embedder  │
+  └────────┬────────┘      └──────────┬───────────┘
+           │                          │ embeddings
+     ┌─────┴──────┐           ┌───────▼──────────┐
+     │ PostgreSQL │           │    ChromaDB       │
+     │ users      │           │  vector store     │
+     │ documents  │           │  course-scoped    │
+     │ sessions   │           └───────┬───────────┘
+     │ audit log  │                   │ retrieved chunks
+     └────────────┘           ┌───────▼───────────┐
+                              │  Ollama (local)   │
+                              │  qwen3:14b        │
+                              │  grounded answer  │
+                              └───────────────────┘
+```
+
+---
+
+## Current Status
+
+| Sprint | Status | Key Outcomes |
+|---|---|---|
+| Sprint 1–2 | Complete | Architecture decisions, module interface design, Assessment 2 documentation |
+| Sprint 3 | Complete | Working RAG PoC notebook, Docker stack, PostgreSQL schema, API specification, prompt strategy, retrieval benchmark, privacy/ethics review, UI wireframes, test query corpus |
+| Sprint 4 | In progress | Integrating RAG pipeline into prototype, connecting Streamlit UI, validating with full test corpus, confirming role-based access controls at runtime |
+
+### What is working now
+
+- Docker Compose stack: PostgreSQL, ChromaDB, and Ollama run locally with health checks
+- PostgreSQL schema applied with development seed data (users, courses, documents, sessions, audit events)
+- RAG PoC notebook executes the full ingestion-to-answer pipeline against a real PDF
+- `sentence-transformers/all-MiniLM-L6-v2` embeddings stored in ChromaDB with `course_id` metadata
+- Prompt strategy and RAG configuration benchmark frozen for Sprint 3 integration baseline
+- Full OpenAPI 3.0 specification covering auth, query, upload, indexing, sessions, and admin routes
+- Streamlit UI state model, design system, and wireframe set
+
+### What Sprint 4 is completing
+
+- Streamlit UI wired into authentication and the RAG query flow
+- FastAPI backend service (currently documented; implementation in progress)
+- Broader retrieval validation using the 31-question labelled test corpus
+- Parser confirmation for PPTX and DOCX formats alongside PDF
+- Runtime enforcement of role-based access control and audit logging
+
+---
 
 ## Tech Stack
 
-| Layer | Current Sprint 3 Choice |
+| Layer | Choice | Notes |
+|---|---|---|
+| Language | Python | Across all modules |
+| UI prototype | Streamlit | Student-facing Q&A + admin dashboard |
+| API target | FastAPI | OpenAPI 3.0 spec complete; implementation Sprint 4 |
+| Text extraction | PyMuPDF (`fitz`) | PDF-first; PPTX/DOCX in progress |
+| Text splitting | LangChain `RecursiveCharacterTextSplitter` | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 384-dimensional, fully local |
+| Vector database | ChromaDB | Metadata-filtered by `course_id` |
+| Relational database | PostgreSQL | Users, roles, docs, sessions, audit log |
+| Local LLM | Ollama + `qwen3:14b` | GPU-optional; no external API required |
+| Containerisation | Docker Compose | CPU + GPU overlay variants |
+| Testing | Pytest + labelled query corpus | Unit, integration, and retrieval evaluation assets |
+
+---
+
+## Team
+
+| Name | Module ownership |
 |---|---|
-| Language | Python |
-| Notebook / PoC | Jupyter notebook |
-| Text splitting | LangChain `RecursiveCharacterTextSplitter` |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
-| Vector database | ChromaDB |
-| Relational database | PostgreSQL |
-| Local LLM runtime | Ollama |
-| Default local model | `qwen3:14b` |
-| Prototype UI target | Streamlit |
+| Thanh Binh Tran | Team Lead — RAG pipeline, prompt strategy, retrieval benchmark, system integration |
+| Tai Huynh | Module 4 — API specification, privacy policy, ethics review, Sprint 4 kickoff |
+| Tung Phuong Anh Huynh | Testing — test query corpus, corpus manifest, evaluation methodology |
+| Kahavidanage Namaratne | Data — ERD, DFD, risk register, storage sizing, PostgreSQL schema |
+| Thi Hong Ngoc Nguyen | Document processing — retrieval edge cases, RAG configuration contribution |
+| Anmoldeep Singh | UI — Streamlit wireframes, design system, UI state model |
+
+---
+
+## Project Context
+
+| Item | Value |
+|---|---|
+| Subject | CSIT321 Annual Session 2026 — Project 37 |
+| Campus | University of Wollongong, Liverpool Campus (SWS) |
+| Group | Group 19 |
+| Supervisor | Prof. Jun Yan |
+
+This is an assessed final-year project but the engineering work — system design, API specification, retrieval tuning, privacy modelling, and sprint delivery — reflects professional software development practice rather than tutorial exercises.
+
+---
 
 ## Quick Start
 
 Copy the example environment file:
 
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
-Start the base local stack:
+Start the local stack:
 
-```powershell
+```bash
 docker compose up -d
 ```
 
-For an NVIDIA GPU environment, use the GPU override:
+For an NVIDIA GPU environment:
 
-```powershell
+```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
-Pull the default Ollama model:
+Pull the default LLM:
 
-```powershell
+```bash
 docker compose exec ollama ollama pull qwen3:14b
 ```
 
-Install Python dependencies if running the notebook outside Docker:
+Install Python dependencies (if running the notebook outside Docker):
 
-```powershell
-python -m pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
 ```
 
-Open the proof-of-concept notebook:
+Open the RAG proof-of-concept notebook:
 
-```text
+```
 notebooks/rag_poc.ipynb
 ```
 
-See `README_docker.md` for service checks, connection values, and known Docker
-scope limitations.
+See [`README_docker.md`](README_docker.md) for service connection values, health checks, and known Docker scope notes.
+
+---
 
 ## Sprint 3 RAG Defaults
 
-| Setting | Value |
-|---|---|
-| Chunk size | 1024 characters |
-| Chunk overlap | 0 characters |
-| Retrieval top-k | 5 |
-| Fallback threshold | cosine distance `0.65` |
-| Course isolation | `course_id` metadata filter |
+| Setting | Value | Rationale |
+|---|---|---|
+| Chunk size | 1024 characters | Best in-scope / out-of-scope distance separation in the Sprint 3 benchmark |
+| Chunk overlap | 0 characters | Overlap did not improve coverage on the benchmark PDF |
+| Retrieval top-k | 5 | Sufficient context for the LLM without overloading the prompt |
+| Fallback threshold | cosine distance 0.65 | Separates weakly-grounded queries from supported ones |
+| Course isolation | `course_id` metadata filter | Non-negotiable; prevents cross-course retrieval leakage |
 
-These defaults are Sprint 3 checkpoint values. They should be rechecked once the
-larger labelled query set is available.
+These are Sprint 3 integration defaults. They will be revalidated against the full 31-question labelled corpus in Sprint 4.
+
+---
+
+## Repository Layout
+
+```
+.
+├── apps/streamlit/          # Streamlit UI prototype
+├── db/
+│   ├── migrations/          # PostgreSQL schema
+│   └── seed/                # Development seed data
+├── docs/
+│   ├── api/                 # OpenAPI 3.0 spec (api_spec.yaml)
+│   ├── governance/          # Privacy policy, ethics review
+│   ├── meetings/            # Sprint checkpoint notes, Sprint 4 kickoff
+│   ├── system_design/       # System design document v2
+│   ├── ui/                  # Wireframes, design system, UI state
+│   ├── ollama_model_selection.md
+│   ├── prompt_strategy.md
+│   └── rag_config.md
+├── materials/               # Sample course PDF for the PoC
+├── notebooks/               # rag_poc.ipynb — executed RAG pipeline
+├── src/
+│   ├── document_processor/  # chunker.py
+│   └── vector_retriever/    # embedder.py
+├── tests/                   # Pytest assets and test query corpus
+├── docker-compose.yml
+├── docker-compose.gpu.yml
+└── SPRINT_BRANCH_WORKFLOW.md
+```
+
+---
 
 ## Git Workflow
 
-The team uses:
+Branches follow: `task branch → develop → main`
 
-- `main` for release points
-- `develop` for team integration
-- short-lived task branches for normal work
+All changes merge through pull requests into `develop`. Direct pushes to `main` or `develop` are not permitted. See [`SPRINT_BRANCH_WORKFLOW.md`](SPRINT_BRANCH_WORKFLOW.md) for the full team convention.
 
-Normal merge direction:
+---
 
-```text
-task branch -> develop -> main
-```
+## Known Limitations
 
-Do not push directly to `main` or `develop`. Open a pull request into `develop`
-for feature, docs, test, fix, and chore work. See `SPRINT_BRANCH_WORKFLOW.md`
-for the full team workflow.
+- The FastAPI backend is specified but not yet implemented as a callable service.
+- The Streamlit UI is not yet connected to the live RAG pipeline (Sprint 4 work in progress).
+- PPTX and DOCX parser paths need additional validation beyond the PDF-first PoC.
+- The retrieval benchmark used a small provisional query set; Sprint 4 will rerun against the full 31-question corpus.
 
-## Useful Commands
-
-Validate the base Compose file:
-
-```powershell
-docker compose -f docker-compose.yml config
-```
-
-Validate the GPU overlay:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml config
-```
-
-Check running services:
-
-```powershell
-docker compose ps
-```
-
-## Current Limitations
-
-- The backend API wrapper is not implemented yet.
-- The Streamlit UI is not wired into the RAG pipeline yet.
-- The benchmark uses one sample PDF and a small provisional query set.
-- PPTX/DOCX ingestion, hybrid retrieval, reranking, and full evaluation remain
-  future work.
+---
 
 ## License
 
-Course project repository for CSIT321. Licensing and reuse terms are not yet
-finalised.
+University of Wollongong course project repository. Licensing and reuse terms are not yet finalised.
