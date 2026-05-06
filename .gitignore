@@ -5,3 +5,8 @@ __pycache__/
 venv/
 .env
 *.log
+data/samples/
+apps/integration/logs/
+AGENTS.md
+.agents/
+.ai/
