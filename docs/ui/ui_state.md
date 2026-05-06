@@ -17,7 +17,7 @@ Paedia's UI manages four key state domains: **authentication**, **conversation c
 
 The Streamlit prototype UI sits behind the Flask-based WebApplication layer (Module 4), which is the only externally exposed module. The UI communicates with three backend modules through the WebApplication REST API:
 
-- **Module 1: DocumentProcessor** — document upload, parsing (PDF/PPTX/DOCX), chunking (~500 tokens, 50-token overlap), embedding via SentenceTransformers all-MiniLM-L6-v2
+- **Module 1: DocumentProcessor** — document upload, parsing (PDF/PPTX/DOCX), chunking with the accepted Sprint 3 baseline (`chunk_size=1024`, `chunk_overlap=0`), embedding via SentenceTransformers all-MiniLM-L6-v2
 - **Module 2: VectorRetriever** — cosine similarity search in ChromaDB, scoped by course_id, returns top-k=5 chunks
 - **Module 3: LLMResponseGeneration** — context-grounded prompt construction, LLM call (Ollama dev / OpenAI demo), source citation attachment, fallback labelling
 - **Module 4: WebApplication** — Flask service layer, JWT authentication, RBAC, rate limiting, audit logging, session management via PostgreSQL JSONB
@@ -201,11 +201,11 @@ Manages file uploads and indexing status. Maps to the PostgreSQL Document, Chunk
 ```
 File selected via st.file_uploader (PDF, PPTX, or DOCX only)
   → Validate file type and size
-  → POST /api/documents/upload (multipart) with course_id
+  → POST /api/upload (multipart) with course_id
   → Flask creates Document record (status: "pending")
   → Flask creates IndexingJob record (status: "queued")
   → DocumentProcessor parses file with format-specific parser
-  → Text split into chunks (~500 tokens, 50-token overlap)
+  → Text split using chunk_size=1024 and chunk_overlap=0
   → SentenceTransformers all-MiniLM-L6-v2 generates 384-dim embeddings
   → Embeddings written to ChromaDB with course_id metadata
   → Document.status updated: "pending" → "processing" → "indexed"

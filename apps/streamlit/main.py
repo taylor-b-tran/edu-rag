@@ -1,6 +1,6 @@
 """
 Paedia — AI-Powered Course Assistant
-Streamlit UI Prototype with dummy backend
+Streamlit UI Prototype — wired to Flask API via api_client.py
 CSIT321 Project 37 · Group 19 — Aletheia's Zetetes
 Author: Anmoldeep Singh (8443580)
 
@@ -16,6 +16,8 @@ import re
 import time
 from datetime import datetime
 import random
+
+from api_client import PaediaAPIClient, APIConfig
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -146,6 +148,17 @@ def load_responses():
 data = load_responses()
 
 
+# ─── API CLIENT ───────────────────────────────────────────────────
+# Connects to Flask WebApplication (Module 4) when available,
+# otherwise falls back to fixture data for Sprint demos.
+
+@st.cache_resource
+def get_api_client():
+    return PaediaAPIClient(APIConfig())
+
+api = get_api_client()
+
+
 # ─── DEMO CREDENTIALS ──────────────────────────────────────────────
 
 DEMO_USERS = {
@@ -200,20 +213,18 @@ init_session_state()
 # ─── DUMMY BACKEND ──────────────────────────────────────────────────
 
 def get_ai_response(query: str) -> dict:
-    """Simulate RAG pipeline: VectorRetriever → LLMResponseGeneration from dummy data."""
-    if data:
-        for q, resp in data["responses"].items():
-            if query.lower().strip("?").strip() in q.lower() or q.lower() in query.lower():
-                return resp
-        return data["fallback_response"]
-    return {
-        "answer": "I'm currently running in demo mode without the backend connected. This is a UI prototype.",
-        "source_references": [],
-        "confidence": 0.0,
-        "model_used": "ollama/llama3",
-        "token_count": 0,
-        "is_fallback": True,
-    }
+    """
+    Query the RAG pipeline via the API client.
+
+    Flow: Streamlit → api_client.query() → Flask /api/query → VectorRetriever
+    → LLMResponseGeneration → response with source_references.
+
+    Falls back to fixture data (sample_responses.json) when the Flask API
+    is unreachable (e.g. Task 2 not yet deployed).
+    """
+    course_id = st.session_state.get("course_id")
+    session_id = st.session_state.get("session_id")
+    return api.query(query, course_id=course_id or "", session_id=session_id)
 
 
 def get_suggested_prompts() -> list:
@@ -338,7 +349,9 @@ def render_sidebar():
         st.divider()
         docs_count = len(st.session_state.documents)
         indexed = sum(1 for d in st.session_state.documents if d["status"] == "indexed")
+        api_icon = "🟢" if api.is_live else "🟡"
         st.caption(f"{docs_count} docs loaded · {indexed} indexed · Semantic search ON")
+        st.caption(f"{api_icon} {api.mode_label}")
 
         # User info + logout
         st.markdown("---")
@@ -377,6 +390,7 @@ def _send_message(text: str):
         "model_used": response.get("model_used", "ollama/llama3"),
         "token_count": response.get("token_count", 0),
         "is_fallback": response.get("is_fallback", False),
+        "from_api": response.get("from_api", False),
         "timestamp": datetime.now().strftime("%I:%M %p"),
     })
 
@@ -452,7 +466,7 @@ def render_chat_page():
                             <div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>
                         </div>
                         <div style="font-size: 0.72rem; color: #9AA0A6; margin-top: 4px;">
-                            Confidence: {conf_pct}% · {model_used} · {msg.get('timestamp', '')}
+                            Confidence: {conf_pct}% · {model_used} · {msg.get('timestamp', '')}{'  · 🟢 API' if msg.get('from_api') else ''}
                         </div>
                     </div></div>
                     """, unsafe_allow_html=True)
@@ -708,7 +722,7 @@ def render_admin_page():
         st.selectbox("VDB", ["ChromaDB (course_id scoped)"], label_visibility="collapsed", key="vector_db")
     with s4:
         st.markdown("**Chunk Size**")
-        st.selectbox("Chunk", ["~500 tokens / 50 overlap", "~256 tokens / 25 overlap", "~1024 tokens / 100 overlap"], label_visibility="collapsed", key="chunk_size")
+        st.selectbox("Chunk", ["1024 tokens / 0 overlap", "512 tokens / 0 overlap", "256 tokens / 0 overlap"], label_visibility="collapsed", key="chunk_size")
 
     s5, s6, s7, s8 = st.columns(4)
     with s5:

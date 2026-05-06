@@ -96,6 +96,11 @@ Student / Lecturer / Admin
 - Parser confirmation for PPTX and DOCX formats alongside PDF
 - Runtime enforcement of role-based access control and audit logging
 
+### Current report and planning artifacts
+
+- Assessment 2 report: `docs/reports/Assessment_2_Group19.docx`
+- Sprint 4 plan: `docs/meetings/Sprint4_EduRAG_Group19.docx`
+
 ---
 
 ## Tech Stack
