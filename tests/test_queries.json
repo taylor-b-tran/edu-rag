@@ -1,0 +1,250 @@
+[
+  {
+    "id": "Q001",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What does RAG stand for?",
+    "expected_answer": "Retrieval-Augmented Generation — a technique that retrieves relevant documents before generating an answer, grounding the LLM response in verified source content.",
+    "source_topic": "RAG fundamentals"
+  },
+  {
+    "id": "Q002",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What is a vector embedding?",
+    "expected_answer": "A numerical representation of text as a fixed-length array of floating-point numbers (in EduRAG, 384 dimensions) that captures the semantic meaning of the text so that similar meanings produce similar vectors.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q003",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What is the role of ChromaDB in the EduRAG system?",
+    "expected_answer": "ChromaDB is the vector database. It stores all document chunk embeddings and supports similarity search scoped by course_id metadata, ensuring that queries only retrieve chunks from the correct course.",
+    "source_topic": "Vector database"
+  },
+  {
+    "id": "Q004",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What embedding model does EduRAG use and what is its output size?",
+    "expected_answer": "EduRAG uses all-MiniLM-L6-v2 from the SentenceTransformers library. It produces 384-dimensional embeddings and runs locally without an API key.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q005",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What file formats can be uploaded to EduRAG?",
+    "expected_answer": "PDF, PPTX (PowerPoint), and DOCX (Word) files. Each file can be up to 100 MB and up to 500 pages.",
+    "source_topic": "Document upload"
+  },
+  {
+    "id": "Q006",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What is JWT used for in EduRAG and how long does a token last?",
+    "expected_answer": "JWT (JSON Web Token) is used for stateless authentication. After a successful login, the server issues a signed JWT that the client sends with every subsequent request. Tokens expire after 8 hours.",
+    "source_topic": "Authentication"
+  },
+  {
+    "id": "Q007",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What are the three user roles in the system and what does each do?",
+    "expected_answer": "Student — submits queries and reads answers. Lecturer — uploads and manages course documents. Admin — manages users, monitors audit logs, and configures system settings.",
+    "source_topic": "RBAC"
+  },
+  {
+    "id": "Q008",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What chunk size and overlap does EduRAG use by default?",
+    "expected_answer": "512 tokens per chunk with a 50-token overlap between adjacent chunks, implemented using LangChain's RecursiveCharacterTextSplitter.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q009",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "Why does EduRAG use Ollama during development instead of the OpenAI API?",
+    "expected_answer": "Ollama runs a local LLM (Llama 3.1 or Mistral) on the team's own hardware, which means there are zero API costs during the frequent iteration cycles of development. OpenAI GPT-4o-mini is reserved for the final demonstration only, where answer quality is most visible to evaluators and the number of API calls is small enough to keep costs manageable.",
+    "source_topic": "LLM strategy"
+  },
+  {
+    "id": "Q010",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "How does the system ensure that a student querying Course A does not receive results from Course B?",
+    "expected_answer": "All vector operations in ChromaDB are scoped by a course_id metadata field. When a document is ingested, each chunk is stored with the course_id of its parent course. When a query is submitted, the search() method applies a metadata filter that restricts similarity search to only the chunks belonging to the student's enrolled course. Chunks from other courses are never retrieved.",
+    "source_topic": "Course isolation"
+  },
+  {
+    "id": "Q011",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "What happens if the LLM provider is unreachable when a student submits a query?",
+    "expected_answer": "The system implements a graceful degradation fallback per NFR-024. When the LLM is unreachable, the system still returns the retrieved context chunks to the student along with an explanatory notice stating that the AI-generated answer is temporarily unavailable and the raw source excerpts are shown instead. This ensures the student receives some useful information even when generation fails.",
+    "source_topic": "Reliability"
+  },
+  {
+    "id": "Q012",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "Why was ChromaDB chosen over FAISS for vector storage?",
+    "expected_answer": "ChromaDB was chosen because it offers two critical capabilities out of the box that FAISS lacks: (1) native metadata filtering, which is required for course_id scoping so queries only retrieve relevant course content, and (2) built-in on-disk persistence so embeddings survive container restarts without re-indexing. FAISS is marginally faster for raw similarity search, but implementing metadata filtering and persistence in FAISS requires significant manual workarounds that add development risk.",
+    "source_topic": "Technology decisions"
+  },
+  {
+    "id": "Q013",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "Why is the document upload flow asynchronous but the query flow synchronous?",
+    "expected_answer": "Documents can be very large — up to 100 MB and 500 pages — and processing them (parsing, chunking, embedding, indexing) can take many seconds to minutes. Making upload synchronous would block the UI and create a poor user experience. Queries, by contrast, must return a response within 5 seconds at the 95th percentile (NFR-001). A synchronous query flow with an immediate HTTP response is simpler to implement and meets the latency target without the complexity of polling or webhooks.",
+    "source_topic": "System design"
+  },
+  {
+    "id": "Q014",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "What advantage does the modular monolith architecture give EduRAG compared to a microservices approach?",
+    "expected_answer": "The modular monolith provides clear internal module boundaries and explicit interfaces — so each module's responsibilities are well-defined, similar to microservices — without introducing the operational complexity of microservices: no network latency between service calls, no service discovery infrastructure, no distributed tracing requirements, and no risk of partial deployment failures. For a student project with a small team, this gives most of the design benefits of microservices at a fraction of the operational cost.",
+    "source_topic": "Architecture"
+  },
+  {
+    "id": "Q015",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "How does the system handle a query when no retrieved chunks exceed the similarity threshold?",
+    "expected_answer": "When no chunks meet the minimum similarity threshold, the system falls back to the LLM's general training knowledge to attempt an answer. However, the response is clearly labelled with a warning: 'Based on general knowledge — not verified against course materials.' This transparency ensures students understand the answer is not sourced from the uploaded course content and may be less reliable.",
+    "source_topic": "Fallback behaviour"
+  },
+  {
+    "id": "Q016",
+    "category": "hard_reasoning",
+    "difficulty": 2,
+    "question": "What is the query response time target and what are the two main latency contributors?",
+    "expected_answer": "The target is under 5 seconds at the 95th percentile (NFR-001). The two main contributors are: (1) vector similarity search in ChromaDB, which typically takes approximately 100 milliseconds; and (2) LLM text generation by Ollama or the OpenAI API, which typically takes 2 to 4 seconds depending on the model and prompt length. Together these sum to well under 5 seconds under normal load.",
+    "source_topic": "Performance"
+  },
+  {
+    "id": "Q017",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "If a lecturer deletes a document, what must happen to preserve system consistency?",
+    "expected_answer": "Three coordinated operations must occur atomically: (1) the document file must be removed from storage, (2) the PostgreSQL metadata record for the document must be deleted, and (3) all ChromaDB embeddings associated with that document's chunks must be removed using the document's chunk IDs. If any of these three steps fails, the system must roll back or flag the inconsistency. The deletion event must also be recorded in the audit log with the lecturer's user ID, the document ID, and a timestamp.",
+    "source_topic": "Document management"
+  },
+  {
+    "id": "Q018",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "How does conversation history get injected into a query prompt, and what happens if the prompt is too long?",
+    "expected_answer": "Module 3 (Query & Response) retrieves the last 5 conversation turns from the session record stored in PostgreSQL as a JSONB field. These turns are passed to the build_prompt() function, which formats them into the prompt template before the retrieved chunks and the current question are appended. If the total prompt length exceeds the model's context window limit, the system truncates the oldest turns first (FIFO truncation) until the prompt fits, ensuring the most recent and most relevant context is always preserved.",
+    "source_topic": "Multi-turn conversations"
+  },
+  {
+    "id": "Q019",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "Explain how rate limiting interacts with the JWT authentication system.",
+    "expected_answer": "The WebApplication module first validates the incoming JWT to authenticate the user and determine their role (Student, Lecturer, or Admin). Once the role is confirmed, the rate limiter applies per-user, per-role limits — for example, students may have a stricter limit than lecturers. If a user exceeds their rate limit, the server returns HTTP 429 (Too Many Requests). Rate limits are configurable per role so they can be adjusted without code changes. This two-layer design means unauthenticated requests are rejected before they even reach the rate limiter.",
+    "source_topic": "Security"
+  },
+  {
+    "id": "Q020",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "Why is PostgreSQL used alongside ChromaDB rather than using ChromaDB for all data storage?",
+    "expected_answer": "PostgreSQL and ChromaDB serve fundamentally different data types. ChromaDB is a vector database optimised for storing high-dimensional embeddings and performing approximate nearest-neighbour similarity search — it is not designed for relational data. PostgreSQL handles all structured relational data: user accounts, roles, sessions, uploaded document metadata, conversation history, and audit logs. PostgreSQL provides ACID transactions, foreign key constraints, and complex SQL queries that are essential for RBAC enforcement and audit trail integrity. Using only ChromaDB would mean losing transactional guarantees and relational querying capabilities.",
+    "source_topic": "Data architecture"
+  },
+  {
+    "id": "Q021",
+    "category": "off_topic",
+    "difficulty": 1,
+    "question": "What is the capital of France?",
+    "expected_answer": "FALLBACK_EXPECTED — this question has no relation to any uploaded course material. The system should respond with a message indicating that the question is outside the scope of the course knowledge base and suggest the student consult a general resource.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q022",
+    "category": "off_topic",
+    "difficulty": 1,
+    "question": "Write me a poem about software engineering.",
+    "expected_answer": "FALLBACK_EXPECTED — creative writing requests are outside the system scope per FR-038. The system should politely decline and remind the user that EduRAG is designed to answer questions grounded in course materials.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q023",
+    "category": "off_topic",
+    "difficulty": 2,
+    "question": "How do I install Python on Windows?",
+    "expected_answer": "FALLBACK_EXPECTED — this is a general programming how-to question not covered in the uploaded course materials. Expected behaviour: system states it cannot find relevant content in the knowledge base and suggests the student consult official Python documentation.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q024",
+    "category": "off_topic",
+    "difficulty": 2,
+    "question": "What is the current stock price of NVIDIA?",
+    "expected_answer": "FALLBACK_EXPECTED — real-time financial data is completely outside the scope of the course knowledge base. EduRAG does not have internet access and its knowledge is limited to uploaded course documents.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q025",
+    "category": "off_topic",
+    "difficulty": 3,
+    "question": "Compare React and Vue for building enterprise applications.",
+    "expected_answer": "FALLBACK_EXPECTED — this is a general web development comparison question that is not present in the uploaded course materials. If the corpus contained frontend development lecture slides, a partial answer might be retrieved, but for a CSIT321 RAG-focused corpus this should trigger the fallback response.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q026",
+    "category": "off_topic",
+    "difficulty": 3,
+    "question": "Can you generate a student assignment on database normalisation for me?",
+    "expected_answer": "FALLBACK_EXPECTED — assignment generation is explicitly out of scope per FR-038. The system should decline and explain that EduRAG is designed to answer course-related questions, not to produce academic work on behalf of students.",
+    "source_topic": "none"
+  },
+  {
+    "id": "Q027",
+    "category": "ambiguous",
+    "difficulty": 2,
+    "question": "How does the system work?",
+    "expected_answer": "AMBIGUOUS — the question could refer to any module (authentication, document upload, query pipeline, admin dashboard) or to the overall RAG pipeline. Expected behaviour: the system either (a) provides a high-level overview of the full pipeline from document upload to answer generation with source citation, or (b) asks the user to clarify which part of the system they are asking about.",
+    "source_topic": "General"
+  },
+  {
+    "id": "Q028",
+    "category": "ambiguous",
+    "difficulty": 2,
+    "question": "What is the model?",
+    "expected_answer": "AMBIGUOUS — 'the model' could mean the LLM (Ollama/GPT-4o-mini), the embedding model (all-MiniLM-L6-v2), or the data model (PostgreSQL schema). Expected behaviour: the system identifies the most likely interpretation based on recent conversation context, provides an answer for that interpretation, and notes the other possible meanings.",
+    "source_topic": "General"
+  },
+  {
+    "id": "Q029",
+    "category": "ambiguous",
+    "difficulty": 2,
+    "question": "Tell me about the database.",
+    "expected_answer": "AMBIGUOUS — EduRAG uses two databases: PostgreSQL (structured relational data) and ChromaDB (vector embeddings). Expected behaviour: the system describes both databases and their respective roles, or asks the user to clarify which database they are asking about.",
+    "source_topic": "Data layer"
+  },
+  {
+    "id": "Q030",
+    "category": "ambiguous",
+    "difficulty": 3,
+    "question": "Is this secure?",
+    "expected_answer": "AMBIGUOUS — there is no referent in the question. Expected behaviour: the system either asks the user to specify which component or aspect of security they are asking about, or provides a summary of the system's security measures: JWT authentication (8-hour expiry), bcrypt password hashing, role-based access control (Student/Lecturer/Admin), HTTPS-only communication, per-user rate limiting (HTTP 429 on breach), and course-level data isolation via ChromaDB metadata filtering.",
+    "source_topic": "Security"
+  },
+  {
+    "id": "Q031",
+    "category": "ambiguous",
+    "difficulty": 3,
+    "question": "What should I do if it fails?",
+    "expected_answer": "AMBIGUOUS — no referent; 'it' could mean the document upload, the query pipeline, the Docker stack, or any individual service. Expected behaviour: the system asks what specifically has failed, or provides a structured overview of common failure recovery paths: (a) LLM unreachable — fallback to raw chunks is returned; (b) document parse failure — the job is retried up to 3 times and the user is notified; (c) Docker service failure — consult README_docker.md and check container logs.",
+    "source_topic": "Error handling"
+  }
+]
