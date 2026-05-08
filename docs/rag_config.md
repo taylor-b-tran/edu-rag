@@ -107,7 +107,7 @@ Thi Hong Ngoc Nguyen's extracted Sprint 3 contribution includes a chunker and te
 | Non-English and mixed-language text | Unicode text should not crash the chunker, even though Sprint 3 does not prioritise multilingual UI. |
 | Real PDF text | PyMuPDF page-scoped PDF extraction remains the baseline ingestion path for this Sprint 3 PoC. |
 
-Ngoc's default chunker uses `512/50`. This benchmark does not reject that work; it narrows the first integration default for Binh's current PDF-based PoC to `1024/0`. If the team wants stricter alignment with Ngoc's default implementation, `512/50` is still a safe fallback because it achieved full top-5 coverage and a strong separation margin (`0.4631`).
+Ngoc's original chunker used `512/50`. This benchmark does not reject that earlier work; it narrows the first integration default for Binh's current PDF-based PoC to `1024/0`. The runtime chunker has since been aligned to `1024/0` so the code, report, and Sprint 3 benchmark use the same baseline.
 
 ## 7. Retrieval Edge Cases
 
@@ -115,7 +115,7 @@ This section is included because the shared Sprint 3 Google Doc assigns Ngoc a r
 
 | Edge Case | Detection Rule | System Behaviour | Notes For Sprint 4 |
 |---|---|---|---|
-| No chunks match above threshold | No retrieved chunk has cosine distance `<= 0.65` after `course_id` filtering. | Do not generate a course answer. Return the approved fallback label: `Based on general knowledge -- not verified against course materials`, or ask the student to upload/check course material depending on UI context. | This prevents unsupported answers when retrieval fails. |
+| No chunks match above threshold | No retrieved chunk has cosine distance `<= 0.65` after `course_id` filtering. | Do not generate a course answer. Return the approved fallback label: `I could not verify an answer from the available course materials`, or ask the student to upload/check course material depending on UI context. | This prevents unsupported answers when retrieval fails. |
 | Borderline similarity | Best distance is close to threshold, recommended watch zone `0.60 < distance <= 0.65`. | Generate an answer only if the answer can cite at least one retrieved source. Use cautious wording such as `The available material suggests...`. | Log borderline cases for later manual review and threshold tuning. |
 | Nonsense query | Query is empty, mostly symbols, extremely short, or produces no meaningful semantic match. | Ask the student to rephrase the question instead of sending weak context to the LLM. | Add input validation before retrieval in the Streamlit/API layer. |
 | Off-topic from any course | Query is valid language but unrelated to the indexed course corpus, such as weather, news, or unrelated personal advice. | Trigger fallback and clearly state that the answer is not grounded in course materials. | This matches the off-topic category planned for Tung's labelled query corpus. |
