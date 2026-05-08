@@ -46,6 +46,7 @@ class APIState:
             "user_id": user.get("user_id") or user.get("id"),
             "email": user.get("email"),
             "role": user.get("role", "student"),
+            "enrolled_courses": user.get("enrolled_courses", []),
             "issued_at": _utc_now(),
         }
         self.access_tokens[access_token] = payload
@@ -79,6 +80,27 @@ class APIState:
             if user.get("email", "").lower() == email.lower():
                 return user
         return None
+
+    def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
+        user = self.find_demo_user(email)
+        if not user:
+            return None
+        stored = user.get("password")
+        if stored and stored != password:
+            return None
+        return user
+
+    def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
+        if user.get("role") == "admin":
+            return True
+        enrolled = user.get("enrolled_courses", [])
+        if course_id in enrolled:
+            return True
+        for course in self.fixtures.get("courses", []):
+            if course.get("course_code") == course_id or course.get("course_id") == course_id:
+                if course["course_id"] in enrolled or course.get("course_code") in enrolled:
+                    return True
+        return False
 
     def query_fixture(self, question: str) -> dict[str, Any]:
         responses = self.fixtures.get("responses", {})

@@ -12,13 +12,16 @@ def _state():
 
 @auth_bp.post("/login")
 def login():
-    body = request.get_json(force=True, silent=True) or {}
+    try:
+        body = request.get_json(force=False, silent=False) or {}
+    except Exception:
+        return jsonify({"error": "invalid JSON body"}), 400
     email = (body.get("email") or "").strip()
-    password = body.get("password")
+    password = body.get("password") or ""
     if not email or not password:
         return jsonify({"error": "email and password are required"}), 400
 
-    user = _state().find_demo_user(email)
+    user = _state().authenticate_user(email, password)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
     return jsonify(_state().issue_tokens(user))
@@ -26,7 +29,10 @@ def login():
 
 @auth_bp.post("/refresh")
 def refresh():
-    body = request.get_json(force=True, silent=True) or {}
+    try:
+        body = request.get_json(force=False, silent=False) or {}
+    except Exception:
+        return jsonify({"error": "invalid JSON body"}), 400
     refresh_token = body.get("refresh_token")
     token_state = _state().refresh_tokens.get(refresh_token)
     if not token_state:
