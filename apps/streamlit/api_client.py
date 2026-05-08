@@ -229,8 +229,17 @@ class PaediaAPIClient:
                 "error": None,
             }
 
-        # Fixture fallback — return None to let main.py handle demo credentials
-        return {"success": False, "user": {}, "error": None, "use_demo_auth": True}
+        # Fixture fallback — validate against demo_users passwords
+        if self._fixtures:
+            for u in self._fixtures.get("demo_users", []):
+                if u.get("email", "").lower() == email.lower():
+                    if u.get("password") == password:
+                        profile = {k: v for k, v in u.items() if k != "password"}
+                        profile.setdefault("name", u.get("username", email))
+                        profile["role"] = profile.get("role", "student").capitalize()
+                        return {"success": True, "user": profile, "jwt_token": None, "error": None}
+                    return {"success": False, "user": {}, "error": "Invalid email or password.", "use_demo_auth": False}
+        return {"success": False, "user": {}, "error": "Invalid email or password.", "use_demo_auth": False}
 
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
         """

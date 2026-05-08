@@ -304,21 +304,27 @@
     {
       "user_id": "u-stu-001",
       "username": "demo.student",
+      "name": "Anmoldeep Singh",
       "email": "student@uow.edu.au",
+      "password": "student123",
       "role": "student",
       "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d", "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"]
     },
     {
       "user_id": "u-lect-001",
       "username": "demo.lecturer",
+      "name": "Prof. Jun Yan",
       "email": "lecturer@uow.edu.au",
+      "password": "lecturer123",
       "role": "lecturer",
       "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"]
     },
     {
       "user_id": "u-admin-001",
       "username": "demo.admin",
+      "name": "Admin User",
       "email": "admin@uow.edu.au",
+      "password": "admin123",
       "role": "admin",
       "enrolled_courses": []
     }
