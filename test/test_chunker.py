@@ -17,13 +17,13 @@ def short_sentence():
 
 @pytest.fixture
 def long_english_text():
-    """~3,600 chars — forces multiple chunks at default size 512."""
+    """~7,600 chars - forces multiple chunks at default size 1024."""
     sentence = (
         "Retrieval-Augmented Generation combines a retrieval step with "
         "a large language model to ground responses in real documents, "
         "which reduces hallucination and improves accuracy. "
     )
-    return sentence * 50
+    return sentence * 100
 
 
 @pytest.fixture
@@ -116,7 +116,7 @@ class TestShortText:
         assert "RAG" in result[0]
 
     def test_text_exactly_fills_one_chunk(self):
-        text = ("abcdefghijklmnopqrstuvwxyz " * 20)[:512]
+        text = ("abcdefghijklmnopqrstuvwxyz " * 40)[:1024]
         result = chunk_text(text)
         assert len(result) >= 1          
         assert all(c.strip() for c in result) 
@@ -406,9 +406,9 @@ class TestParameterValidation:
         assert isinstance(result, list)
 
     def test_defaults_match_fr005(self):
-        """FR-005 specifies chunk_size=512, chunk_overlap=50."""
-        assert DEFAULT_CHUNK_SIZE == 512
-        assert DEFAULT_CHUNK_OVERLAP == 50
+        """FR-005 follows the accepted Sprint 3 baseline."""
+        assert DEFAULT_CHUNK_SIZE == 1024
+        assert DEFAULT_CHUNK_OVERLAP == 0
 
 from src.document_processor.chunker import chunk_pptx, chunk_docx, extract_and_chunk, SUPPORTED_EXTENSIONS
 
