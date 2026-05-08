@@ -55,6 +55,9 @@ The final Task 26 spec keeps the core route names, adds compatibility aliases fo
 - All operations include `operationId`.
 - All protected endpoints inherit bearer auth.
 - All main success responses include response schemas.
+- Sprint 4 Task 2 now has a runnable Flask wrapper under `src/api/app.py` plus route modules under `src/api/routes/`.
+- The wrapper implements the core integration endpoints needed by the Streamlit client: auth login/refresh/logout, query, upload/indexing, document listing/metadata/delete, session list/detail/archive, health, and admin stats/log aliases.
+- `apps/integration/backend/api.py` remains as a compatibility entrypoint and imports the canonical Flask app from `src/api/app.py`.
 
 ## Swagger Editor Handoff
 
