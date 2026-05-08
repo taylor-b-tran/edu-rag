@@ -9,6 +9,7 @@ LangChain orchestration, SentenceTransformers all-MiniLM-L6-v2 (384-dim),
 ChromaDB (course_id scoped), PostgreSQL, Ollama (dev) + OpenAI (demo).
 """
 
+import html as _html
 import streamlit as st
 import json
 import os
@@ -159,31 +160,6 @@ def get_api_client():
 api = get_api_client()
 
 
-# ─── DEMO CREDENTIALS ──────────────────────────────────────────────
-
-DEMO_USERS = {
-    "student@uow.edu.au": {
-        "password": "student123",
-        "name": "Anmoldeep Singh",
-        "email": "student@uow.edu.au",
-        "role": "Student",
-        "id": "8443580",
-    },
-    "lecturer@uow.edu.au": {
-        "password": "lecturer123",
-        "name": "Prof. Jun Yan",
-        "email": "lecturer@uow.edu.au",
-        "role": "Lecturer",
-        "id": "1001",
-    },
-    "admin@uow.edu.au": {
-        "password": "admin123",
-        "name": "Admin User",
-        "email": "admin@uow.edu.au",
-        "role": "Admin",
-        "id": "0001",
-    },
-}
 
 
 # ─── SESSION STATE INIT ────────────────────────────────────────────
@@ -259,14 +235,16 @@ def render_login_page():
             st.error(st.session_state.login_error)
 
         if st.button("Sign In", type="primary", use_container_width=True):
-            user = DEMO_USERS.get(email)
-            if user and user["password"] == password:
+            result = api.login(email, password)
+            if result.get("success"):
                 st.session_state.authenticated = True
-                st.session_state.user = {k: v for k, v in user.items() if k != "password"}
+                st.session_state.user = result.get("user", {})
+                if result.get("jwt_token"):
+                    st.session_state.jwt_token = result["jwt_token"]
                 st.session_state.login_error = None
                 st.rerun()
             else:
-                st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+                st.session_state.login_error = result.get("error") or "Invalid email or password."
                 st.rerun()
 
         st.markdown("""
@@ -329,7 +307,7 @@ def render_sidebar():
             st.markdown("**Recent Conversations**")
             queries = [m["content"][:35] + "..." for m in st.session_state.messages if m["role"] == "user"][-4:]
             for q in reversed(queries):
-                st.markdown(f"<div style='background:#F1F3F4; padding:6px 12px; border-radius:6px; margin:4px 0; font-size:0.82rem; color:#5F6368;'>{q}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#F1F3F4; padding:6px 12px; border-radius:6px; margin:4px 0; font-size:0.82rem; color:#5F6368;'>{_html.escape(q)}</div>", unsafe_allow_html=True)
             st.divider()
 
         # Loaded documents
@@ -340,7 +318,7 @@ def render_sidebar():
             st.markdown(
                 f"<div class='doc-card'>"
                 f"<span>📄</span>"
-                f"<span style='flex:1; font-size:0.85rem;'>{doc_name}</span>"
+                f"<span style='flex:1; font-size:0.85rem;'>{_html.escape(str(doc_name))}</span>"
                 f"<span style='width:10px; height:10px; border-radius:50%; background:{status_color}; display:inline-block;'></span>"
                 f"</div>",
                 unsafe_allow_html=True,
@@ -434,9 +412,10 @@ def render_chat_page():
         else:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
-                    st.markdown(f'<div class="clearfix"><div class="user-msg">{msg["content"]}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="clearfix"><div class="user-msg">{_html.escape(msg["content"])}</div></div>', unsafe_allow_html=True)
                 else:
-                    answer_html = msg["content"].replace("\n", "<br>")
+                    answer_html = _html.escape(msg["content"])
+                    answer_html = answer_html.replace("\n", "<br>")
                     answer_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', answer_html)
                     answer_html = re.sub(r'`([^`]+)`', r'<code>\1</code>', answer_html)
 
@@ -449,12 +428,12 @@ def render_chat_page():
                     if msg.get("source_references"):
                         sources_html = '<div class="source-label">Retrieved from:</div>'
                         for src in msg["source_references"]:
-                            sources_html += f'<span class="source-chip">📄 {src["filename"]} · p.{src["page_number"]} · {int(src["similarity"] * 100)}%</span>'
+                            sources_html += f'<span class="source-chip">📄 {_html.escape(str(src.get("filename", "")))} · p.{src["page_number"]} · {int(src["similarity"] * 100)}%</span>'
 
                     confidence = msg.get("confidence", 0)
                     conf_color = "#34A853" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EA4335")
                     conf_pct = int(confidence * 100)
-                    model_used = msg.get("model_used", "")
+                    model_used = _html.escape(msg.get("model_used", ""))
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
 
                     st.markdown(f"""
@@ -614,16 +593,30 @@ def render_doc_manager_page():
         help="Drag and drop PDF, PPTX, or DOCX files here. Max 50 MB per file.",
     )
 
-    if uploaded_files:
-        for f in uploaded_files:
-            st.success(f"✅ {f.name} received — indexing will begin once the backend is connected.")
-
-    # Course selector + upload action
     col1, col2, col3 = st.columns([3, 3, 2])
     with col1:
-        st.selectbox("Course", ["CSIT321 - Project Development", "CSIT115 - Intro to Programming", "ISIT312 - Big Data"], label_visibility="collapsed")
+        selected_course = st.selectbox(
+            "Course",
+            ["CSIT321", "CSIT214", "ISIT312"],
+            label_visibility="collapsed",
+            format_func=lambda c: {"CSIT321": "CSIT321 - Project Development", "CSIT214": "CSIT214 - Database Systems", "ISIT312": "ISIT312 - Big Data"}.get(c, c),
+        )
     with col3:
-        st.button("Upload & Index", type="primary", use_container_width=True)
+        do_upload = st.button("Upload & Index", type="primary", use_container_width=True)
+
+    if uploaded_files and do_upload:
+        for f in uploaded_files:
+            file_bytes = f.read()
+            result = api.upload_document(file_bytes, f.name, selected_course)
+            if result.get("success"):
+                doc = result.get("document", {})
+                job_id = doc.get("indexing_job_id", "")
+                st.success(f"✅ {f.name} queued for indexing.{' Job ID: ' + job_id[:8] + '…' if job_id else ''}")
+            else:
+                st.error(f"❌ {f.name} upload failed: {result.get('error', 'unknown error')}")
+    elif uploaded_files:
+        for f in uploaded_files:
+            st.info(f"📄 {f.name} staged — click Upload & Index to submit.")
 
     st.divider()
     st.markdown("**UPLOADED DOCUMENTS**")
