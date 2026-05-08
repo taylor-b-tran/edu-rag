@@ -443,7 +443,7 @@ def render_chat_page():
                     is_fallback = msg.get("is_fallback", False)
                     fallback_html = ""
                     if is_fallback:
-                        fallback_html = '<div class="fallback-label">⚠️ Based on general knowledge — not verified against course materials</div>'
+                        fallback_html = '<div class="fallback-label">Could not verify this answer from available course materials</div>'
 
                     sources_html = ""
                     if msg.get("source_references"):
@@ -722,7 +722,7 @@ def render_admin_page():
         st.selectbox("VDB", ["ChromaDB (course_id scoped)"], label_visibility="collapsed", key="vector_db")
     with s4:
         st.markdown("**Chunk Size**")
-        st.selectbox("Chunk", ["1024 tokens / 0 overlap", "512 tokens / 0 overlap", "256 tokens / 0 overlap"], label_visibility="collapsed", key="chunk_size")
+        st.selectbox("Chunk", ["1024 tokens / 0 overlap"], label_visibility="collapsed", key="chunk_size")
 
     s5, s6, s7, s8 = st.columns(4)
     with s5:
