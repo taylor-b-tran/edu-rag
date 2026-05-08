@@ -30,7 +30,7 @@ These are the engineering skills and practices demonstrated by this project:
 | **Vector search** | ChromaDB with `course_id` metadata filtering to enforce retrieval isolation per course |
 | **Relational data model** | PostgreSQL schema covering users, roles, courses, documents, indexing jobs, session history, and an immutable audit log |
 | **Local LLM inference** | Ollama running `qwen3:14b` — fully self-hosted, no external API calls required in development |
-| **API design** | Full OpenAPI 3.0 specification (JWT auth, role-scoped endpoints, async indexing jobs, session history, admin monitoring) |
+| **API design** | Full OpenAPI 3.0 specification + Flask implementation (JWT auth, role-scoped endpoints, async indexing jobs, session history, admin monitoring) |
 | **Containerised stack** | Docker Compose with CPU and GPU override variants; service-health dependency ordering |
 | **Prompt engineering** | Evidence-cited safety-first prompt with confidence labelling, fallback phrasing, and injection-resistance notes |
 | **Evaluation assets** | Retrieval benchmark (chunk size, overlap, top-k, distance threshold) + 31-question labelled test corpus covering factual, reasoning, off-topic, and ambiguous cases |
@@ -52,7 +52,7 @@ Student / Lecturer / Admin
            ▼
   ┌─────────────────┐      ┌──────────────────────┐
   │  Web/API Layer  │─────▶│  Document Processor  │
-  │  (FastAPI spec) │      │  chunker · embedder  │
+  │  Flask (src/api)│      │  chunker · embedder  │
   └────────┬────────┘      └──────────┬───────────┘
            │                          │ embeddings
      ┌─────┴──────┐           ┌───────▼──────────┐
@@ -76,7 +76,7 @@ Student / Lecturer / Admin
 |---|---|---|
 | Sprint 1–2 | Complete | Architecture decisions, module interface design, Assessment 2 documentation |
 | Sprint 3 | Complete | Working RAG PoC notebook, Docker stack, PostgreSQL schema, API specification, prompt strategy, retrieval benchmark, privacy/ethics review, UI wireframes, test query corpus |
-| Sprint 4 | In progress | Integrating RAG pipeline into prototype, connecting Streamlit UI, validating with full test corpus, confirming role-based access controls at runtime |
+| Sprint 4 | Complete | Flask API with JWT auth, role-based access control, course-scoped query enforcement, Streamlit UI connected to live API, document upload/indexing flow, PPTX/DOCX parser validation |
 
 ### What is working now
 
@@ -86,15 +86,13 @@ Student / Lecturer / Admin
 - `sentence-transformers/all-MiniLM-L6-v2` embeddings stored in ChromaDB with `course_id` metadata
 - Prompt strategy and RAG configuration benchmark frozen for Sprint 3 integration baseline
 - Full OpenAPI 3.0 specification covering auth, query, upload, indexing, sessions, and admin routes
-- Streamlit UI state model, design system, and wireframe set
-
-### What Sprint 4 is completing
-
-- Streamlit UI wired into authentication and the RAG query flow
-- FastAPI backend service (currently documented; implementation in progress)
-- Broader retrieval validation using the 31-question labelled test corpus
-- Parser confirmation for PPTX and DOCX formats alongside PDF
-- Runtime enforcement of role-based access control and audit logging
+- **Flask REST API** (`src/api/`) with Blueprint-based routing: auth, query, documents, sessions, health
+- **JWT authentication** enforced on all protected endpoints; wrong-password login returns 401
+- **Role-based access control**: lecturer/admin only for upload/delete; students blocked with 403
+- **Course-scoped query enforcement**: students cannot query courses they are not enrolled in
+- **Streamlit UI** connected to live Flask API via `apps/integration/start.sh`
+- **Document upload flow** wired end-to-end: UI → `api_client.upload_document()` → Flask → indexing job queue
+- PPTX and DOCX parser paths validated with extended test suite (104 tests passing)
 
 ### Current report and planning artifacts
 
@@ -109,7 +107,7 @@ Student / Lecturer / Admin
 |---|---|---|
 | Language | Python | Across all modules |
 | UI prototype | Streamlit | Student-facing Q&A + admin dashboard |
-| API target | FastAPI | OpenAPI 3.0 spec complete; implementation Sprint 4 |
+| API layer | Flask + Blueprints | `src/api/` — JWT auth, role-scoped routes, fixture-backed Sprint 4 prototype |
 | Text extraction | PyMuPDF (`fitz`) | PDF-first; PPTX/DOCX in progress |
 | Text splitting | LangChain `RecursiveCharacterTextSplitter` | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 384-dimensional, fully local |
@@ -223,8 +221,13 @@ These are Sprint 3 integration defaults. They will be revalidated against the fu
 ├── materials/               # Sample course PDF for the PoC
 ├── notebooks/               # rag_poc.ipynb — executed RAG pipeline
 ├── src/
-│   ├── document_processor/  # chunker.py
+│   ├── api/                 # Flask REST API (Sprint 4)
+│   │   ├── app.py           # App factory
+│   │   ├── state.py         # In-memory state + auth helpers
+│   │   └── routes/          # auth, query, documents, sessions, health
+│   ├── document_processor/  # chunker.py (PDF, PPTX, DOCX)
 │   └── vector_retriever/    # embedder.py
+├── test/                    # Pytest: API auth, chunker, PPTX/DOCX integration
 ├── tests/                   # Pytest assets and test query corpus
 ├── docker-compose.yml
 ├── docker-compose.gpu.yml
@@ -243,10 +246,10 @@ All changes merge through pull requests into `develop`. Direct pushes to `main` 
 
 ## Known Limitations
 
-- The FastAPI backend is specified but not yet implemented as a callable service.
-- The Streamlit UI is not yet connected to the live RAG pipeline (Sprint 4 work in progress).
-- PPTX and DOCX parser paths need additional validation beyond the PDF-first PoC.
-- The retrieval benchmark used a small provisional query set; Sprint 4 will rerun against the full 31-question corpus.
+- The Flask API serves fixture-backed responses in Sprint 4; the live RAG pipeline (`rag_module.py`) is not yet wired into the API layer.
+- The retrieval benchmark used a provisional query set; full 31-question corpus validation is pending live pipeline integration.
+- Docker Compose `app` service runs a placeholder; Flask and Streamlit are launched via `apps/integration/start.sh` for the connected demo.
+- Session data and uploaded document records are in-memory only; they reset on Flask restart.
 
 ---
 

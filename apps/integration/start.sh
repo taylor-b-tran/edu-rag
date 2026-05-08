@@ -36,7 +36,7 @@ done
 
 echo "[start] launching streamlit UI on :8501"
 cd "$UI_DIR"
-PAEDIA_BACKEND_URL="http://localhost:5000" streamlit run main.py \
+PAEDIA_API_URL="http://localhost:5000" PAEDIA_USE_FIXTURES="false" streamlit run main.py \
   --server.port 8501 \
   --server.headless true \
   --server.enableCORS false \
