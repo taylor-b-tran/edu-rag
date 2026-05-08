@@ -8,8 +8,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CHUNK_SIZE = 512
-DEFAULT_CHUNK_OVERLAP = 50
+DEFAULT_CHUNK_SIZE = 1024
+DEFAULT_CHUNK_OVERLAP = 0
 
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 
@@ -27,11 +27,11 @@ def chunk_text(
     text : str
         Raw text extracted from a course document (PDF, PPTX, or DOCX).
     chunk_size : int
-        Maximum number of characters per chunk.  Default: 512.
+        Maximum number of characters per chunk.  Default: 1024.
     chunk_overlap : int
-        Number of characters shared between adjacent chunks.  Default: 50.
-        Overlap preserves sentence context across chunk boundaries so the
-        LLM can answer questions that span two adjacent chunks.
+        Number of characters shared between adjacent chunks.  Default: 0.
+        The Sprint 3 benchmark selected zero overlap because it did not improve
+        retrieval coverage on the provisional PDF benchmark.
 
     Returns
     -------
@@ -52,7 +52,7 @@ def chunk_text(
     >>> chunks = chunk_text("Hello world. " * 100)
     >>> len(chunks) > 1
     True
-    >>> all(len(c) <= 512 for c in chunks)
+    >>> all(len(c) <= 1024 for c in chunks)
     True
     >>> chunk_text("")
     []
@@ -105,9 +105,9 @@ def chunk_pptx(
     path : str | Path
         Path to the .pptx file.
     chunk_size : int
-        Maximum characters per chunk. Default: 512.
+        Maximum characters per chunk. Default: 1024.
     chunk_overlap : int
-        Characters shared between adjacent chunks. Default: 50.
+        Characters shared between adjacent chunks. Default: 0.
 
     Returns
     -------
@@ -125,6 +125,12 @@ def chunk_pptx(
     ValueError
         If the file is not a .pptx.
     """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"PPTX file not found: {path}")
+    if path.suffix.lower() != ".pptx":
+        raise ValueError(f"Expected a .pptx file, got: {path.suffix}")
+
     try:
         from pptx import Presentation
     except ImportError as exc:
@@ -132,12 +138,6 @@ def chunk_pptx(
             "python-pptx is required for PPTX chunking. "
             "Install with: pip install python-pptx"
         ) from exc
-
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"PPTX file not found: {path}")
-    if path.suffix.lower() != ".pptx":
-        raise ValueError(f"Expected a .pptx file, got: {path.suffix}")
 
     prs = Presentation(str(path))
     result: List[Dict[str, Any]] = []
@@ -196,9 +196,9 @@ def chunk_docx(
     path : str | Path
         Path to the .docx file.
     chunk_size : int
-        Maximum characters per chunk. Default: 512.
+        Maximum characters per chunk. Default: 1024.
     chunk_overlap : int
-        Characters shared between adjacent chunks. Default: 50.
+        Characters shared between adjacent chunks. Default: 0.
 
     Returns
     -------
@@ -216,19 +216,19 @@ def chunk_docx(
     ValueError
         If the file is not a .docx.
     """
-    try:
-        import docx  
-    except ImportError as exc:
-        raise ImportError(
-            "python-docx is required for DOCX chunking. "
-            "Install with: pip install python-docx"
-        ) from exc
-
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"DOCX file not found: {path}")
     if path.suffix.lower() != ".docx":
         raise ValueError(f"Expected a .docx file, got: {path.suffix}")
+
+    try:
+        import docx
+    except ImportError as exc:
+        raise ImportError(
+            "python-docx is required for DOCX chunking. "
+            "Install with: pip install python-docx"
+        ) from exc
 
     doc = docx.Document(str(path))
     text_parts: List[str] = []

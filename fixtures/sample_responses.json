@@ -293,7 +293,7 @@
     }
   },
   "fallback_response": {
-    "answer": "Based on general knowledge — not verified against course materials.\n\nI found some relevant information, but none of the retrieved chunks exceeded the similarity threshold for your active course. Here's what I can offer from general knowledge:\n\nThis topic appears to be related to concepts covered in your course. For a verified answer grounded in your actual course materials, you might want to rephrase your question or check specific lecture slides and textbook chapters.\n\nWould you like me to try a more specific question?",
+    "answer": "I could not verify an answer from the available course materials.\n\nNone of the retrieved chunks exceeded the similarity threshold for your active course, so I should not present a course-grounded answer or attach fabricated citations. Please rephrase the question, select the relevant course, or check whether the lecturer has uploaded the required material.",
     "source_references": [],
     "confidence": 0.0,
     "model_used": "ollama/llama3",
