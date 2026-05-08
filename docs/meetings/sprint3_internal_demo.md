@@ -9,9 +9,11 @@ Purpose: Confirm that the Sprint 3 backend/RAG work is ready for team handoff an
 
 The Sprint 3 backend infrastructure and RAG proof-of-concept track are ready for internal handoff. The Docker stack, PostgreSQL schema, one-PDF RAG notebook, prompt strategy, and RAG configuration benchmark are all present in the project workspace.
 
-Scope note: this checkpoint does not claim that a production API or finished application server exists yet. The Compose `app` service is still a bootstrap workspace container; the validated runtime pieces are PostgreSQL, ChromaDB, Ollama, and the executed notebook workflow.
+Scope note: this checkpoint originally did not claim that a production API or finished application server existed. Sprint 4 Task 2 has since added a fixture-backed Flask API wrapper at `src/api/app.py` with route modules under `src/api/routes/`; it preserves the same contract expected by the Streamlit client while the real RAG pipeline is connected behind the route layer.
 
-No demo recording link was available at the time of this checkpoint. Until the team adds a recording link or meeting-minute reference, this file can stand in as written checkpoint evidence.
+Recording evidence: no actual uploaded PoC recording URL was present in the local workspace as of 9 May 2026. Until the team supplies the video URL, this file records the demo walkthrough and the meeting-minute evidence fallback. Insert the final recording URL here when available:
+
+`PoC recording link: TODO - actual uploaded video URL required`
 
 ## 2. Evidence Checklist
 
@@ -28,6 +30,7 @@ No demo recording link was available at the time of this checkpoint. Until the t
 | LLM runtime | Ready | Ollama has `qwen3:14b` installed. |
 | Prompt strategy | Ready | `docs/prompt_strategy.md` selects the safety-first evidence-cited RAG prompt. |
 | RAG configuration | Ready | `docs/rag_config.md` selects `chunk_size=1024`, `overlap=0`, `top_k=5`, threshold `0.65`; the notebook has been rerun with the same defaults. |
+| Flask API wrapper | Ready | `src/api/app.py` and `src/api/routes/` expose auth, query, upload/indexing, document, session, health, and admin compatibility routes in fixture-backed Sprint 4 mode. |
 | Contribution bundle | Ready | The Sprint 3 RAG/backend files are synced into the project workspace for review. |
 
 ## 3. Demo Walkthrough
@@ -64,7 +67,7 @@ Internal demo order:
 
 | Teammate | Status | What They Can Use Now | Remaining Caveat |
 |---|---|---|---|
-| Anmoldeep Singh | Unblocked for UI-to-backend planning | Notebook query flow, prompt output format, citation structure, fallback behaviour, and Docker service contract. | A formal API wrapper is not implemented yet; initial integration should wait for a thin API/function wrapper or explicitly call notebook-derived code during prototyping. |
+| Anmoldeep Singh | Unblocked for UI-to-backend planning | Notebook query flow, prompt output format, citation structure, fallback behaviour, Docker service contract, and the Sprint 4 Flask wrapper at `src/api/app.py`. | The wrapper is fixture-backed until the real RAG pipeline is connected behind the same route contract. |
 | Tai Huynh | Unblocked for API, ethics, and System Design v2 consolidation | PostgreSQL schema, RAG config, prompt strategy, retrieval edge cases, Docker contract, and benchmark results. | Larger labelled query corpus is still needed before final evaluation claims are strong. |
 | Kahavidanage Namaratne | Unblocked for ERD v2, DFD v2, error paths, and storage sizing | Actual SQL schema, ChromaDB metadata design, Docker topology, retrieval edge cases, and data-store assumptions. | ChromaDB stores vectors outside the relational schema, so ERD should not model embeddings as PostgreSQL rows. |
 
@@ -72,9 +75,9 @@ Internal demo order:
 
 | Follow-Up | Owner | Reason |
 |---|---|---|
-| Add actual demo recording link or meeting-minute reference | Binh / Tung | Not available in the local workspace during this checkpoint. |
+| Add actual uploaded demo recording URL | Binh / Tung | Placeholder added above; the real recording URL was not present in the local workspace on 9 May 2026. |
 | Rerun benchmark with `tests/test_queries.json` once available | Binh / Tung | Batch 7 used a small provisional query set because the larger 31-question corpus was not present locally. |
-| Decide UI integration boundary | Binh / Anmoldeep / Tung | The backend infrastructure and notebook evidence are ready, but a formal API wrapper is still a Sprint 4 integration decision. |
+| Connect real RAG pipeline behind Flask routes | Binh / Anmoldeep / Tung | The fixture-backed wrapper route contract is ready; real retrieval/generation integration remains the next implementation step. |
 | Update ERD and DFD from actual schema and error paths | Namaratne | Sprint 3 backend outputs now provide concrete implementation evidence. |
 | Consolidate outputs into System Design Document v2 | Tai | Backend artefacts are now ready for documentation handoff. |
 
