@@ -18,6 +18,8 @@ backend code without forcing a premature Dockerfile design.
 - `docker-compose.yml`: four-service local stack
 - `docker-compose.gpu.yml`: optional NVIDIA GPU override for Ollama
 - `.env.example`: example environment variables for local development
+- `.github/workflows/docker-demo.yml`: Sprint 5 demo-readiness smoke test for
+  the Compose infrastructure
 
 ## Prerequisites
 
@@ -139,3 +141,16 @@ docker compose exec ollama ollama pull qwen3:8b
 
 Those are expected to be handled in later Sprint 3 batches, not in this Docker
 bundle.
+
+## Sprint 5 CI/CD Note
+
+Sprint 5 starts using GitHub Actions as a demo-readiness gate:
+
+- `.github/workflows/ci.yml` runs Python tests, compile checks, JSON validation,
+  and Docker Compose config validation on PRs and pushes to `develop` or `main`.
+- `.github/workflows/docker-demo.yml` can be run manually before demo rehearsal
+  and smoke-tests PostgreSQL, ChromaDB, and the bootstrap app container.
+
+This is not a public deployment pipeline yet. It is a controlled local-demo
+pipeline so the team can prove the infrastructure layer is reproducible before
+recording Assessment 3 evidence.

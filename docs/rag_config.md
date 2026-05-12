@@ -164,3 +164,83 @@ Create a labelled set of 20-30 course-specific questions, then measure `Precisio
 ## 10. Handoff
 
 This document unblocks Sprint 4 implementation by giving Tai and the backend integration work a stable default configuration. If future batches add PPTX/DOCX ingestion, hybrid retrieval, reranking, or OpenAI fallback models, those changes should be added as new benchmark rows rather than silently replacing this Sprint 3 baseline.
+
+## 11. Sprint 4 31-Query API Benchmark Rerun
+
+Sprint 4 Task 3 reran the labelled 31-query benchmark after Tung's Task 15
+test evidence was recovered and merged through the current `develop` branch.
+The rerun uses the Flask test client against the current fixture-backed API
+state, with `student@uow.edu.au` authenticated against course `CSIT321`.
+
+Raw Task 3 evidence is stored in:
+
+`docs/rag_config_benchmark_31q.json`
+
+Supporting Task 15 evidence is stored in:
+
+`docs/test_results_sprint4.md`
+
+| Item | Value |
+|---|---|
+| Run date | 11 May 2026 |
+| Base commit | `1b8606e` |
+| Query corpus | `tests/test_queries.json` |
+| API mode | Flask test client, fixture backend, in-memory state |
+| Rate limit handling | Benchmark harness raised `_RATE_MAX` to 1000 for this batch only |
+| Total queries | 31 |
+| HTTP result | All 31 calls returned HTTP 200 |
+
+### 11.1 Result Summary
+
+| Category | Total | PASS | PARTIAL | FAIL | Strict pass rate | Lenient rate |
+|---|---:|---:|---:|---:|---:|---:|
+| `easy_factual` | 8 | 0 | 2 | 6 | 0.0% | 25.0% |
+| `hard_reasoning` | 12 | 0 | 0 | 12 | 0.0% | 0.0% |
+| `off_topic` | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| `ambiguous` | 5 | 0 | 4 | 1 | 0.0% | 80.0% |
+| **Total** | 31 | 6 | 6 | 19 | 19.4% | 38.7% |
+
+Strict pass rate counts only complete expected behaviour. Lenient rate counts
+`PASS` plus `PARTIAL`, which is useful for separating safe fallback behaviour
+from fully correct grounded answers.
+
+### 11.2 Interpretation
+
+The result confirms that the Sprint 4 API wrapper is stable enough to process
+the whole labelled corpus in one authenticated batch. It does not prove that
+the live RAG pipeline is ready for final demonstration, because the benchmark
+still runs against the small fixture response bank rather than a ChromaDB-backed
+course corpus.
+
+Important findings:
+
+- Off-topic fallback handling is strong: all six out-of-scope queries returned
+  a fallback response.
+- In-scope coverage is weak in fixture mode: factual and reasoning questions
+  mostly fall back or map to unrelated SQL/normalisation fixtures.
+- Ambiguous prompts are handled safely in four of five cases, but a proper
+  clarification response is still needed for a full pass.
+- The benchmark should not be used to lower the retrieval threshold or change
+  the selected chunking defaults.
+
+### 11.3 Configuration Decision
+
+Keep the current Sprint 3 retrieval defaults until Sprint 5 runs the same
+31-query corpus against live ChromaDB retrieval and the real generation path:
+
+```python
+RAG_CONFIG = {
+    "pdf_extractor": "PyMuPDF (fitz)",
+    "chunk_size": 1024,
+    "chunk_overlap": 0,
+    "top_k": 5,
+    "similarity_distance_threshold": 0.65,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "vector_store": "ChromaDB",
+    "metadata_filters": ["course_id"],
+}
+```
+
+Sprint 5 should focus on replacing fixture routing with a seeded live demo
+corpus, adding clarification behaviour for ambiguous prompts, and rerunning the
+31-query benchmark as a demo-readiness gate.

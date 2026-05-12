@@ -136,6 +136,19 @@ Each acceptance criterion maps to A3 demo evidence:
 | Screenshot: Role comparison (3 screens) | FR-NAV-01, FR-NAV-02, FR-NAV-03 | Side-by-side student/lecturer/admin sidebar views |
 | Screenshot: Course switching | FR-CSE-01, FR-CSE-02, FR-CSE-03 | Two queries against different courses showing different citations |
 
+### 4.3.1 Sprint 4 Demo UI Readability Re-check
+
+Re-check date: 12 May 2026
+
+The Streamlit demo recording exposed two UI regressions affecting A3 evidence capture:
+
+- AI response cards rendered indented HTML as visible code blocks, hiding citation chips and confidence bars.
+- Light panels inherited low-contrast text from Streamlit theme defaults, making some text difficult to read unless selected.
+
+Corrective action: the Streamlit prototype now enforces the design-system text colours for the main content area, inputs, and select controls; AI response cards are rendered through a whitespace-normalising HTML helper so citation chips, fallback labels, and confidence bars display as visual UI elements rather than raw markup. The Streamlit client also attempts the live Flask API by default and falls back to fixtures only when needed.
+
+Second-pass correction: Streamlit button labels are internally rendered as Markdown text, so the global page text rule could override button text and create dark-on-dark labels. Button, form-submit, sidebar navigation, and prompt buttons now have explicit foreground/background rules after the global text rules. Secondary buttons render as white with navy text; primary buttons render as teal with white text; sidebar buttons render as light text on dark navigation backgrounds.
+
 ### 4.4 Pass/Fail Summary Template
 
 This template will be used during Sprint 4 integration testing to record results:

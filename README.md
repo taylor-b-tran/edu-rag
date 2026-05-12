@@ -98,6 +98,8 @@ Student / Lecturer / Admin
 
 - Assessment 2 report: `docs/reports/Assessment_2_Group19.docx`
 - Sprint 4 plan: `docs/meetings/Sprint4_EduRAG_Group19.docx`
+- Sprint 5 kickoff and demo-readiness plan: `docs/sprint_5_kickoff.md`
+- Sprint 4 31-query benchmark artifact: `docs/rag_config_benchmark_31q.json`
 
 ---
 
@@ -197,7 +199,10 @@ See [`README_docker.md`](README_docker.md) for service connection values, health
 | Fallback threshold | cosine distance 0.65 | Separates weakly-grounded queries from supported ones |
 | Course isolation | `course_id` metadata filter | Non-negotiable; prevents cross-course retrieval leakage |
 
-These are Sprint 3 integration defaults. They will be revalidated against the full 31-question labelled corpus in Sprint 4.
+These are Sprint 3 integration defaults. Sprint 4 reran the full 31-question
+labelled corpus against the fixture-backed Flask API; that result is stored in
+`docs/rag_config_benchmark_31q.json`. The defaults remain unchanged until
+Sprint 5 reruns the same corpus against live ChromaDB retrieval.
 
 ---
 

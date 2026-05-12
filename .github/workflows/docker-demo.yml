@@ -1,0 +1,81 @@
+name: Docker Demo Readiness
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - "docker-compose.yml"
+      - "docker-compose.gpu.yml"
+      - ".env.example"
+      - "README_docker.md"
+      - ".github/workflows/docker-demo.yml"
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "docker-compose.yml"
+      - "docker-compose.gpu.yml"
+      - ".env.example"
+      - "README_docker.md"
+      - ".github/workflows/docker-demo.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  demo-infra-smoke:
+    name: Demo infrastructure smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Validate Compose bundle
+        run: docker compose -f docker-compose.yml config
+
+      - name: Start core demo services
+        run: docker compose up -d postgres chromadb
+
+      - name: Wait for PostgreSQL readiness
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U edurag -d edurag; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+
+      - name: Smoke-test ChromaDB heartbeat
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/api/v2/heartbeat; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs chromadb
+          exit 1
+
+      - name: Smoke-test app bootstrap container
+        run: docker compose run --rm --no-deps app python --version
+
+      - name: Show service status
+        if: always()
+        run: docker compose ps
+
+      - name: Tear down demo services
+        if: always()
+        run: docker compose down -v
