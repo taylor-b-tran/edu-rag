@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  python-test:
+    name: Python tests and fixture validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Compile runtime modules
+        run: |
+          python -m py_compile \
+            src/api/app.py \
+            apps/integration/backend/api.py \
+            apps/streamlit/main.py \
+            src/document_processor/chunker.py
+
+      - name: Validate JSON artifacts
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          paths = [
+              Path("fixtures/sample_responses.json"),
+              Path("tests/test_queries.json"),
+              Path("docs/rag_config_benchmark_2026-04-22.json"),
+              Path("docs/rag_config_benchmark_31q.json"),
+          ]
+          for path in paths:
+              with path.open(encoding="utf-8") as handle:
+                  json.load(handle)
+              print(f"valid json: {path}")
+          PY
+
+      - name: Run pytest
+        run: python -m pytest -q
+
+  docker-compose-validate:
+    name: Docker Compose validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Validate base Compose file
+        run: docker compose -f docker-compose.yml config
+
+      - name: Validate GPU Compose overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml config
