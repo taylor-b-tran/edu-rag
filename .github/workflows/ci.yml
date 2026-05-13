@@ -83,3 +83,28 @@ jobs:
 
       - name: Validate GPU Compose overlay
         run: docker compose -f docker-compose.yml -f docker-compose.gpu.yml config
+
+      - name: Validate Sprint 5 demo service contract
+        run: |
+          docker compose -f docker-compose.yml config --format json > compose.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          compose = json.loads(Path("compose.json").read_text(encoding="utf-8"))
+          services = compose.get("services", {})
+          required = {"postgres", "chromadb", "ollama", "api", "streamlit"}
+          missing = sorted(required - set(services))
+          if missing:
+              raise SystemExit(f"missing demo services: {', '.join(missing)}")
+
+          api_depends = services["api"].get("depends_on", {})
+          streamlit_depends = services["streamlit"].get("depends_on", {})
+          for name in ("postgres", "chromadb", "ollama"):
+              if name not in api_depends:
+                  raise SystemExit(f"api service must depend on {name}")
+          if "api" not in streamlit_depends:
+              raise SystemExit("streamlit service must depend on api")
+
+          print("Sprint 5 demo service contract is present")
+          PY
