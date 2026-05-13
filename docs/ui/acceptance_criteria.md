@@ -207,3 +207,12 @@ This template will be used during Sprint 4 integration testing to record results
 | Fallback Label | FR-FBK-01 to 04 | Base (Must have) | M3, M4 | Task 6, 8 |
 | Accessibility | NFR-ACC-01 to 05 | Base (Must have) | M4 | Task 7 (done), 8 |
 | Colour Consistency | NFR-CLR-01 to 06 | Base (Must have) | M4 | Task 7 (done) |
+
+---
+
+## Sprint 5 UI Evidence Reference
+
+Anmoldeep Singh provided the A3 interface evidence set under `docs/a3_interface_demo/`.
+Treat these screenshots and the accompanying narrative as fixture-backed UI
+traceability evidence. They support visual and interaction review, but live
+ChromaDB/Ollama retrieval still needs separate Sprint 5 demo validation.
