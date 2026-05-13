@@ -9,7 +9,9 @@ on:
     paths:
       - "docker-compose.yml"
       - "docker-compose.gpu.yml"
+      - "docker/**"
       - ".env.example"
+      - "requirements.txt"
       - "README_docker.md"
       - ".github/workflows/docker-demo.yml"
   push:
@@ -19,7 +21,9 @@ on:
     paths:
       - "docker-compose.yml"
       - "docker-compose.gpu.yml"
+      - "docker/**"
       - ".env.example"
+      - "requirements.txt"
       - "README_docker.md"
       - ".github/workflows/docker-demo.yml"
 
@@ -28,9 +32,9 @@ permissions:
 
 jobs:
   demo-infra-smoke:
-    name: Demo infrastructure smoke test
+    name: Demo stack smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -44,8 +48,28 @@ jobs:
       - name: Validate Compose bundle
         run: docker compose -f docker-compose.yml config
 
-      - name: Start core demo services
-        run: docker compose up -d postgres chromadb
+      - name: Validate Sprint 5 demo service contract
+        run: |
+          docker compose -f docker-compose.yml config --format json > compose.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          compose = json.loads(Path("compose.json").read_text(encoding="utf-8"))
+          services = compose.get("services", {})
+          required = {"postgres", "chromadb", "ollama", "api", "streamlit"}
+          missing = sorted(required - set(services))
+          if missing:
+              raise SystemExit(f"missing demo services: {', '.join(missing)}")
+
+          if "api" not in services["streamlit"].get("depends_on", {}):
+              raise SystemExit("streamlit service must depend on api")
+
+          print("Sprint 5 demo service contract is present")
+          PY
+
+      - name: Build and start demo services
+        run: docker compose up -d --build postgres chromadb ollama api streamlit
 
       - name: Wait for PostgreSQL readiness
         run: |
@@ -69,8 +93,41 @@ jobs:
           docker compose logs chromadb
           exit 1
 
-      - name: Smoke-test app bootstrap container
-        run: docker compose run --rm --no-deps app python --version
+      - name: Smoke-test Ollama service API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:11434/api/tags; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs ollama
+          exit 1
+
+      - name: Smoke-test Flask API health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:5000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs api
+          exit 1
+
+      - name: Smoke-test Streamlit health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8501/_stcore/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs streamlit
+          exit 1
+
+      - name: Smoke-test tools container
+        run: docker compose --profile tools run --rm --no-deps app python --version
 
       - name: Show service status
         if: always()
@@ -78,4 +135,4 @@ jobs:
 
       - name: Tear down demo services
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile tools down -v --remove-orphans

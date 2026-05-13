@@ -80,7 +80,7 @@ Student / Lecturer / Admin
 
 ### What is working now
 
-- Docker Compose stack: PostgreSQL, ChromaDB, and Ollama run locally with health checks
+- Docker Compose stack: Streamlit UI, Flask API, PostgreSQL, ChromaDB, and Ollama run through the Sprint 5 demo service contract
 - PostgreSQL schema applied with development seed data (users, courses, documents, sessions, audit events)
 - RAG PoC notebook executes the full ingestion-to-answer pipeline against a real PDF
 - `sentence-transformers/all-MiniLM-L6-v2` embeddings stored in ChromaDB with `course_id` metadata
@@ -155,22 +155,28 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Start the local stack:
+Build and start the local demo stack:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 For an NVIDIA GPU environment:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
 Pull the default LLM:
 
 ```bash
 docker compose exec ollama ollama pull qwen3:14b
+```
+
+Open the local demo UI:
+
+```
+http://localhost:8501
 ```
 
 Install Python dependencies (if running the notebook outside Docker):
@@ -253,7 +259,7 @@ All changes merge through pull requests into `develop`. Direct pushes to `main` 
 
 - The Flask API serves fixture-backed responses in Sprint 4; the live RAG pipeline (`rag_module.py`) is not yet wired into the API layer.
 - The retrieval benchmark used a provisional query set; full 31-question corpus validation is pending live pipeline integration.
-- Docker Compose `app` service runs a placeholder; Flask and Streamlit are launched via `apps/integration/start.sh` for the connected demo.
+- Docker Compose now provides explicit `api` and `streamlit` demo services, but the live ChromaDB plus Ollama query path still needs Sprint 5 wiring.
 - Session data and uploaded document records are in-memory only; they reset on Flask restart.
 
 ---

@@ -1,22 +1,24 @@
-# EduRAG Sprint 3 Docker Bundle
+# EduRAG Docker Demo Bundle
 
-This Docker bundle is the Sprint 3 infrastructure baseline for the RAG backend
-track. It keeps the four-service contract from the Sprint 3 plan in one place:
+This Docker bundle is the Sprint 5 local demo baseline. It keeps the core
+infrastructure services and the runnable demo application services in one
+Compose contract:
 
-- `app`
+- `api`
+- `streamlit`
 - `postgres`
 - `chromadb`
 - `ollama`
 
-The current `app` container is a bootstrap Python workspace container rather
-than a finished web application image. That is intentional for Batch 2: it
-gives the team a stable runtime target for the notebook, schema work, and later
-backend code without forcing a premature Dockerfile design.
+The older `app` container is retained only as a lightweight tools/debug profile.
+The demo path now uses the explicit `api` and `streamlit` services.
 
 ## Files
 
-- `docker-compose.yml`: four-service local stack
+- `docker-compose.yml`: Sprint 5 demo stack with `api`, `streamlit`, `postgres`,
+  `chromadb`, `ollama`, and the optional `tools` profile
 - `docker-compose.gpu.yml`: optional NVIDIA GPU override for Ollama
+- `docker/Dockerfile.demo`: shared Python image for the API and Streamlit demo
 - `.env.example`: example environment variables for local development
 - `.github/workflows/docker-demo.yml`: Sprint 5 demo-readiness smoke test for
   the Compose infrastructure
@@ -25,8 +27,8 @@ backend code without forcing a premature Dockerfile design.
 
 - Docker Desktop or Docker Engine
 - Docker Compose v2+
-- Python dependencies from `requirements.txt` if running the notebook outside
-  the `app` container
+- Python dependencies from `requirements.txt` if running notebooks or services
+  outside Docker
 
 ## Quick Start
 
@@ -36,10 +38,10 @@ backend code without forcing a premature Dockerfile design.
 Copy-Item .env.example .env
 ```
 
-2. Start the stack:
+2. Build and start the demo stack:
 
 ```powershell
-docker compose up -d
+docker compose up -d --build
 ```
 
 This default command is CPU-safe for teammates who do not have an NVIDIA Docker
@@ -47,7 +49,7 @@ runtime. On a machine with NVIDIA GPU support, start the stack with the GPU
 override instead:
 
 ```powershell
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
 3. Check service status:
@@ -56,10 +58,14 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 docker compose ps
 ```
 
+Compose uses project-scoped container names instead of fixed global container
+names. This keeps the Sprint 5 stack from colliding with older stopped local
+containers from previous sprint experiments.
+
 4. Validate PostgreSQL health:
 
 ```powershell
-docker compose exec postgres pg_isready -U $env:POSTGRES_USER -d $env:POSTGRES_DB
+docker compose exec postgres pg_isready -U edurag -d edurag
 ```
 
 5. Check ChromaDB:
@@ -74,20 +80,39 @@ Invoke-WebRequest http://localhost:8000/api/v2/heartbeat
 Invoke-WebRequest http://localhost:11434/api/tags
 ```
 
-7. Enter the bootstrap app container:
+7. Check the Flask API:
 
 ```powershell
-docker compose exec app sh
+Invoke-WebRequest http://localhost:5000/api/health
+```
+
+8. Check the Streamlit UI:
+
+```powershell
+Invoke-WebRequest http://localhost:8501/_stcore/health
+```
+
+9. Enter the lightweight tools container if needed:
+
+```powershell
+docker compose --profile tools run --rm app sh
 ```
 
 ## Service Contract
 
-### `app`
+### `api`
 
-- Base image: `python:3.11-slim`
-- Purpose in Batch 2: workspace container for notebook and backend work
-- Host port reserved for future app-facing work: `8501`
-- Workspace mount: the full project root is mounted at `/workspace`
+- Image: built from `docker/Dockerfile.demo`
+- Purpose: Flask API service from `apps/integration/backend/api.py`
+- Host port: `5000` by default, configurable through `API_PORT`
+- Health check: `/api/health`
+
+### `streamlit`
+
+- Image: built from `docker/Dockerfile.demo`
+- Purpose: student/lecturer/admin UI from `apps/streamlit/main.py`
+- Host port: `8501` by default, configurable through `APP_PORT`
+- API target inside Docker: `http://api:5000`
 
 ### `postgres`
 
@@ -103,9 +128,15 @@ docker compose exec app sh
 ### `ollama`
 
 - Image: `ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b`
-- Purpose: local LLM inference for the Sprint 3 PoC
+- Purpose: local LLM inference for the Sprint 5 demo path
 - GPU access: the base Compose file is CPU-safe. Use
   `docker-compose.gpu.yml` when Docker Desktop exposes the NVIDIA runtime.
+
+### `app`
+
+- Profile: `tools`
+- Purpose: lightweight Python shell for quick container checks
+- Not part of the main demo path
 
 ## Pull a Local Model
 
@@ -128,28 +159,29 @@ docker compose exec ollama ollama pull qwen3:8b
 - PostgreSQL host inside Docker: `postgres`
 - ChromaDB host inside Docker: `chromadb`
 - Ollama base URL inside Docker: `http://ollama:11434`
+- Flask API inside Docker: `http://api:5000`
+- Streamlit host URL: `http://localhost:8501`
 
-## Known Scope Limitations for Batch 2
+## Known Scope Limitations
 
-- No dedicated `Dockerfile` yet
-- No notebook or backend application code wired in yet
 - No automatic model pull on startup
+- The current Flask query route can still fall back to fixture mode until the
+  live ChromaDB plus Ollama path is fully wired behind `/api/query`
 - GPU access depends on Docker Desktop exposing the NVIDIA runtime correctly.
   Confirm with `docker compose exec ollama ollama ps` after generation; it
   should not show `100% CPU` for the selected model when the GPU override is
   active.
-
-Those are expected to be handled in later Sprint 3 batches, not in this Docker
-bundle.
 
 ## Sprint 5 CI/CD Note
 
 Sprint 5 starts using GitHub Actions as a demo-readiness gate:
 
 - `.github/workflows/ci.yml` runs Python tests, compile checks, JSON validation,
-  and Docker Compose config validation on PRs and pushes to `develop` or `main`.
+  Docker Compose config validation, and a Sprint 5 demo service contract check
+  on PRs and pushes to `develop` or `main`.
 - `.github/workflows/docker-demo.yml` can be run manually before demo rehearsal
-  and smoke-tests PostgreSQL, ChromaDB, and the bootstrap app container.
+  and smoke-tests PostgreSQL, ChromaDB, Ollama service readiness, Flask API
+  health, Streamlit health, and the tools container.
 
 This is not a public deployment pipeline yet. It is a controlled local-demo
 pipeline so the team can prove the infrastructure layer is reproducible before
