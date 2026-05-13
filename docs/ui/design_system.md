@@ -305,3 +305,13 @@ When migrating to React, the design system translates as follows:
 | `st.button` variants | Custom Button component with variant prop |
 
 The colour tokens (Navy, Teal, Gold), spacing scale, and typography should be extracted into a shared `theme.ts` file that both Streamlit CSS and React components reference.
+
+---
+
+## 12. Sprint 5 UI Evidence Reference
+
+Anmoldeep Singh's A3 interface evidence set is stored under
+`docs/a3_interface_demo/`. Use it as a visual reference for the Paedia UI
+palette, role-specific navigation, upload panel, course switching, citation
+chips, fallback label, and confidence indicator. It is fixture-backed evidence,
+so live backend proof must come from separate Sprint 5 demo testing.
