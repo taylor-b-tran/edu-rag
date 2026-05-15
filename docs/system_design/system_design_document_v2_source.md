@@ -1,0 +1,206 @@
+# EduRAG System Design Document v2
+
+## 1. Document Control
+
+| Item | Value |
+|---|---|
+| Document title | EduRAG System Design Document v2 |
+| Project | EduRAG / Paedia, CSIT321 Project 37 |
+| Sprint context | Sprint 3 consolidation with Sprint 4 handoff |
+| Document owner | Tai Huynh |
+| Version | v2 |
+| Status | Supervisor-facing draft based on Sprint 3 artifacts |
+
+## 2. Executive Summary
+
+EduRAG is a student-facing course assistant that uses Retrieval-Augmented Generation to answer questions from lecturer-provided course materials. Sprint 3 focused on proving the core RAG path, consolidating architecture decisions, refining the module interface, and documenting privacy, ethics, and evaluation assets needed before full prototype integration.
+
+The most important Sprint 3 result is that the project moved from high-level design into evidence-backed prototype work. A working notebook PoC demonstrated local PDF ingestion, chunking, vector retrieval, and grounded answer generation. At the same time, the team clarified supporting architecture around authentication, upload flows, audit logging, UI state, and data separation between PostgreSQL and ChromaDB.
+
+## 3. Sprint 3 Consolidation Overview
+
+Sprint 3 deliverables are distributed across the team but now form a coherent design package:
+
+- Binh provided the RAG PoC, prompt strategy, model selection notes, and retrieval configuration benchmark.
+- Anmoldeep documented the Streamlit UI state model, design system, and wireframe set.
+- Tung prepared a labelled test query corpus and sample corpus manifest.
+- Namaratne updated ERD v2, DFD v2, risk, and storage planning artifacts.
+- Tai consolidated the API specification, privacy policy, ethics review, and Sprint 4 kickoff material.
+
+This document combines those Sprint 3 outputs into a single design view for supervisor review.
+
+## 4. Updated Architecture
+
+EduRAG remains organised as a modular monolith with four clear responsibility areas:
+
+1. Document processing for ingestion, parsing, chunking, and embedding.
+2. Vector retrieval over course-scoped content.
+3. LLM response generation using retrieved context.
+4. Web application services for authentication, upload, query, sessions, monitoring, and access control.
+
+The current prototype path uses a Streamlit user interface backed by a web/API layer, PostgreSQL for relational state, ChromaDB for vector storage, and Ollama for local LLM inference during development. This structure keeps the project operationally manageable while still supporting explicit module boundaries.
+
+## 5. RAG Proof-Of-Concept Evidence
+
+The strongest execution artifact is `notebooks/rag_poc.ipynb`. Based on the reviewed Sprint 3 evidence, the notebook demonstrates:
+
+- PyMuPDF-based extraction from `materials/book_embNLP_draft.pdf`
+- page-aware chunk preparation using `RecursiveCharacterTextSplitter`
+- local embeddings via `all-MiniLM-L6-v2`
+- ChromaDB collection storage with `course_id` metadata
+- top-k retrieval for course-scoped questions
+- local answer generation through `qwen3:14b`
+- fallback behaviour for off-topic or weakly grounded queries
+
+This is important because it proves the project is no longer only conceptual. However, the PoC is still bounded: it is PDF-first, benchmark evidence is provisional, and not every production-facing control has been fully implemented in an integrated backend.
+
+## 6. Document Processing And Retrieval Updates
+
+Sprint 3 evidence supports the following ingestion and retrieval direction:
+
+| Area | Current Sprint 3 direction |
+|---|---|
+| Source formats | PDF is the strongest validated path; PPTX and DOCX remain important but require more parser validation. |
+| Extraction baseline | PyMuPDF is the preferred PDF extraction path. |
+| Chunking | Character-based recursive splitting remains the current practical implementation path for the PoC. |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` with 384-dimensional vectors. |
+| Vector store | ChromaDB with metadata filtering. |
+| Retrieval isolation | `course_id` metadata filtering is a core control against cross-course leakage. |
+
+The reviewed benchmark material selected provisional defaults of `chunk_size=1024`, `chunk_overlap=0`, `top_k=5`, and a distance threshold of `0.65`. These values should be treated as Sprint 3 integration defaults rather than final production tuning.
+
+## 7. Prompt Strategy And RAG Configuration
+
+Sprint 3 prompt and retrieval work was designed to reduce unsupported or misleading answers.
+
+The selected prompt strategy requires:
+
+- answering from retrieved course context
+- inline source citations such as `[S1]`
+- a visible confidence label
+- a standard fallback phrase when the answer is not grounded
+- resistance to prompt injection and hidden prompt leakage
+
+The approved fallback wording is:
+
+`Based on general knowledge - not verified against course materials`
+
+This is ethically important because it distinguishes grounded answers from general model output instead of presenting both with the same authority.
+
+## 8. Module 4 API Specification Summary
+
+Tai's Sprint 3 API specification is captured in `docs/api_spec.yaml` and documents the user-facing interface for authentication, querying, uploads, indexing jobs, sessions, monitoring, and health checks.
+
+Key API points include:
+
+- `POST /api/auth/login` for authentication
+- `POST /api/query` for course-scoped question answering
+- `POST /api/upload` for lecturer/admin document upload
+- `DELETE /api/document/{doc_id}` for document removal
+- `GET /api/indexing-jobs/{job_id}` for asynchronous upload status polling
+- session-history endpoints for conversation continuity
+- compatibility monitoring aliases `GET /api/metrics` and `GET /api/logs`
+- explicit admin routes `GET /api/admin/stats` and `GET /api/admin/audit-logs`
+
+The API spec also documents JWT bearer authentication, role expectations, reusable schemas, and RAG-specific response fields such as sources, fallback state, confidence label, and model identity.
+
+## 9. Privacy And Ethics Updates
+
+Sprint 3 raised privacy and ethics from side notes to explicit design concerns.
+
+Privacy work now clarifies that:
+
+- students query the system
+- lecturers and admins upload course materials
+- data should be minimised by category
+- role-based access control must govern visibility
+- audit events are part of the accountability model
+- user data should not be used for advertising or external model training
+
+Ethics work now emphasises:
+
+- hallucination risk when retrieval is weak
+- misleading certainty from fluent model output
+- the need for course-scoped retrieval isolation
+- the need to label fallback answers clearly
+- the need to test off-topic and ambiguous cases, not only successful in-scope answers
+
+## 10. UI And Wireframe Updates
+
+Anmoldeep's Sprint 3 artifacts show a coherent student-facing interface direction. The reviewed wireframes include:
+
+- login screen
+- main Q&A interface
+- document upload screen
+- admin dashboard
+- session history view
+
+The UI state design also maps Streamlit session state to backend responsibilities such as authentication, uploads, navigation, and conversation history. This is valuable because it links the user experience directly to the relational schema, audit trail, and role model.
+
+## 11. Data Model And Data Flow Updates
+
+Sprint 3 architectural updates clarify the separation between relational and vector data:
+
+- PostgreSQL stores users, roles, courses, memberships, documents, indexing jobs, sessions, messages, refresh tokens, and audit logs.
+- ChromaDB stores vector embeddings and retrieval metadata rather than acting as the source of truth for relational state.
+
+The DFD v2 update also makes failure paths explicit. These include invalid uploads, extraction failures, indexing failures, no-hit fallback cases, provider outages, and cross-course leakage concerns. This improves supervisor-facing credibility because the design now addresses what happens when the system fails, not only when it succeeds.
+
+## 12. Testing And Evaluation Assets
+
+The main Sprint 3 evaluation assets are:
+
+- the notebook PoC
+- the retrieval benchmark document
+- the prompt strategy test results
+- Tung's labelled `test_queries.json`
+- the sample corpus manifest
+
+The labelled query set is especially important because it covers:
+
+- easy factual in-scope questions
+- harder reasoning questions
+- off-topic questions that should trigger fallback
+- ambiguous questions that require clarification or cautious handling
+
+This broadens evaluation beyond a small manually selected demo set.
+
+## 13. Risks, Limitations, And Sprint 4 Handoff
+
+The main remaining Sprint 3 limitations are:
+
+- retrieval benchmarking is still provisional
+- PDF is the strongest validated parser path, while PPTX and DOCX need more confirmation
+- some documented controls are intended design behaviours rather than fully integrated runtime features
+- backend implementation maturity may lag behind documentation completeness in some areas
+
+The highest-priority Sprint 4 handoff items are:
+
+- integrate the RAG path into the main prototype flow
+- validate the broader labelled query set against actual outputs
+- confirm backend enforcement of confidence, fallback, and role controls
+- finalise retention and audit-access expectations for the prototype
+- keep the demo evidence honest about what is implemented versus planned
+
+## 14. Appendix - Source Artifact Inventory
+
+| Area | Artifact |
+|---|---|
+| RAG PoC | `notebooks/rag_poc.ipynb` |
+| RAG configuration | `docs/rag_config.md` |
+| Prompt strategy | `docs/prompt_strategy.md` |
+| Model selection | `docs/ollama_model_selection.md` |
+| Demo checkpoint | `docs/meetings/sprint3_internal_demo.md` |
+| UI state | `Team_Contributions/Anmoldeep Singh/docs/ui_state.md` |
+| Design system | `Team_Contributions/Anmoldeep Singh/docs/design_system.md` |
+| Wireframes | `Team_Contributions/Anmoldeep Singh/docs/wireframes/*.png` |
+| Test queries | `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/test_queries.json` |
+| Corpus manifest | `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/sample_manifest.md` |
+| ERD changes | `Team_Contributions/Namaratne/docs/erd_v2_changes.md` |
+| DFD changes | `Team_Contributions/Namaratne/docs/dfd_v2_changes.md` |
+| Risk register | `Team_Contributions/Namaratne/docs/risk_register_sprint3.md` |
+| Storage sizing | `Team_Contributions/Namaratne/docs/storage_sizing.md` |
+| Tai API spec | `Team_Contributions/Tai Huynh/docs/api_spec.yaml` |
+| Tai privacy policy | `Team_Contributions/Tai Huynh/docs/privacy_policy.md` |
+| Tai ethics review | `Team_Contributions/Tai Huynh/docs/ethics_review_sprint3.md` |
+| Tai Sprint 4 kickoff | `Team_Contributions/Tai Huynh/docs/sprint_4_kickoff.md` |

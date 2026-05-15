@@ -1,8 +1,14 @@
 # EduRAG Sample Course Material Manifest
 
+<<<<<<< HEAD
 **Group 19 · CSIT321 Project 37 · University of Wollongong**  
 **Prepared by:** Tung Phuong Anh Huynh  
 **Last updated:** 11 May 2026 (Sprint 4 — Task 16)
+=======
+**Sprint 3 · Group 19 · CSIT321 Project 37 · University of Wollongong**  
+**Prepared by:** Tung Phuong Anh Huynh  
+**Last updated:** 20 April 2026
+>>>>>>> 946e665074b3fc66d2471900f32a82202f3994bf
 
 > **Storage location:** `data/samples/` (gitignored — do not commit raw files to the repository)  
 
@@ -91,6 +97,7 @@ All links below open a PDF directly in your browser. Right-click → Save As to 
 ---
 
 *Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
+<<<<<<< HEAD
 
 ---
 
@@ -151,3 +158,5 @@ No empty chunks. No parsing errors. Slide-number metadata correctly attached for
 ---
 
 *Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
+=======
+>>>>>>> 946e665074b3fc66d2471900f32a82202f3994bf

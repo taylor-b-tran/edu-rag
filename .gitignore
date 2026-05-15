@@ -5,3 +5,11 @@ __pycache__/
 venv/
 .env
 *.log
+*.tmp
+.DS_Store
+._*
+__MACOSX/
+~$*.docx
+data/samples/
+apps/integration/logs/
+assessment2_artifacts/

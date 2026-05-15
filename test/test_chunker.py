@@ -17,13 +17,13 @@ def short_sentence():
 
 @pytest.fixture
 def long_english_text():
-    """~3,600 chars — forces multiple chunks at default size 512."""
+    """~7,600 chars - forces multiple chunks at default size 1024."""
     sentence = (
         "Retrieval-Augmented Generation combines a retrieval step with "
         "a large language model to ground responses in real documents, "
         "which reduces hallucination and improves accuracy. "
     )
-    return sentence * 50
+    return sentence * 100
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def code_block_text():
         "            right = mid - 1\n"
         "    return -1\n\n"
     )
-    return block * 15  # ~1,800 chars — forces multiple chunks
+    return block * 15  
 
 
 @pytest.fixture
@@ -75,8 +75,6 @@ def mixed_language_text():
     ) * 40
 
 class TestEmptyAndWhitespace:
-    """chunk_text must return [] for all empty / whitespace inputs."""
-
     def test_empty_string_returns_empty_list(self):
         assert chunk_text("") == []
 
@@ -97,8 +95,6 @@ class TestEmptyAndWhitespace:
         assert isinstance(result, list)
 
 class TestShortText:
-    """Very short documents must come back as a single chunk, unchanged."""
-
     def test_single_word_returns_one_chunk(self):
         result = chunk_text("Hello")
         assert len(result) == 1
@@ -120,15 +116,12 @@ class TestShortText:
         assert "RAG" in result[0]
 
     def test_text_exactly_fills_one_chunk(self):
-        # 512 chars of a-z repeated — exactly at the default limit
-        text = ("abcdefghijklmnopqrstuvwxyz " * 20)[:512]
+        text = ("abcdefghijklmnopqrstuvwxyz " * 40)[:1024]
         result = chunk_text(text)
-        assert len(result) >= 1           # at least one chunk
-        assert all(c.strip() for c in result)  # no empty chunks
+        assert len(result) >= 1          
+        assert all(c.strip() for c in result) 
                                                                                                                 
 class TestLongText:
-    """Long documents must be split into multiple chunks within size limits."""
-
     def test_multiple_chunks_produced(self, long_english_text):
         result = chunk_text(long_english_text)
         assert len(result) > 1, "Long text must produce more than one chunk"
@@ -158,7 +151,6 @@ class TestLongText:
         """All words from the original must appear somewhere in the chunks."""
         result = chunk_text(long_english_text)
         joined = " ".join(result)
-        # Check a few key words from our fixture sentence
         for word in ["Retrieval-Augmented", "language", "model", "hallucination"]:
             assert word in joined, f"Word '{word}' lost during chunking"
 
@@ -174,7 +166,6 @@ class TestLongText:
 
 
 class TestOverlap:
-    """Verify that chunk_overlap creates shared content between adjacent chunks."""
 
     def test_overlap_creates_shared_content(self):
         """
@@ -186,7 +177,6 @@ class TestOverlap:
         result = chunk_text(text, chunk_size=100, chunk_overlap=20)
         assert len(result) >= 2, "Need at least 2 chunks to test overlap"
 
-        # Find any shared suffix of chunk[0] in chunk[1]
         overlap_found = False
         for length in range(20, 5, -1):
             tail = result[0][-length:]
@@ -211,7 +201,6 @@ class TestOverlap:
         assert all(len(c) <= 512 for c in result)
 
 class TestCodeBlocks:
-    """Code block input must not crash and must preserve key content."""
 
     def test_code_block_does_not_raise(self, code_block_text):
         try:
@@ -244,7 +233,6 @@ class TestCodeBlocks:
         assert "print" in result[0]
 
 class TestNonEnglishText:
-    """Splitter must handle Unicode text from any language without errors."""
 
     def test_chinese_text_does_not_raise(self, chinese_text):
         try:
@@ -296,12 +284,6 @@ class TestNonEnglishText:
 
 
 class TestRealPDFContent:
-    """
-    Tests using realistic text extracted from a real PDF
-    (ACS Code of Professional Conduct — uploaded in Sprint 3).
-    No file I/O: the text is embedded directly so tests run anywhere.
-    """
-
     REAL_TEXT = """
 1.1. PREAMBLE
 
@@ -386,7 +368,6 @@ f) endeavour to preserve the confidentiality and privacy of the information of
         assert all(c.strip() for c in result)
 
 class TestParameterValidation:
-    """chunk_text must reject invalid parameters with clear errors."""
 
     def test_non_string_input_raises_type_error(self):
         with pytest.raises(TypeError):
@@ -425,6 +406,225 @@ class TestParameterValidation:
         assert isinstance(result, list)
 
     def test_defaults_match_fr005(self):
-        """FR-005 specifies chunk_size=512, chunk_overlap=50."""
-        assert DEFAULT_CHUNK_SIZE == 512
-        assert DEFAULT_CHUNK_OVERLAP == 50
+        """FR-005 follows the accepted Sprint 3 baseline."""
+        assert DEFAULT_CHUNK_SIZE == 1024
+        assert DEFAULT_CHUNK_OVERLAP == 0
+
+from src.document_processor.chunker import chunk_pptx, chunk_docx, extract_and_chunk, SUPPORTED_EXTENSIONS
+
+@pytest.fixture
+def sample_pptx(tmp_path):
+    from pptx import Presentation
+    from pptx.util import Inches
+    prs = Presentation()
+    layout = prs.slide_layouts[5]
+    slide1 = prs.slides.add_slide(layout)
+    tf = slide1.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(2)).text_frame
+    tf.text = "Introduction to Machine Learning"
+    tf.add_paragraph().text = "Machine learning enables systems to learn from data automatically."
+    slide2 = prs.slides.add_slide(layout)
+    tf2 = slide2.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(2)).text_frame
+    tf2.text = "Supervised Learning"
+    tf2.add_paragraph().text = "Supervised learning uses labelled training examples to build models."
+    path = tmp_path / "sample.pptx"
+    prs.save(path)
+    return path
+
+@pytest.fixture
+def empty_pptx(tmp_path):
+    from pptx import Presentation
+    prs = Presentation()
+    prs.slides.add_slide(prs.slide_layouts[5])
+    path = tmp_path / "empty.pptx"
+    prs.save(path)
+    return path
+
+@pytest.fixture
+def sample_docx(tmp_path):
+    import docx as dx
+    doc = dx.Document()
+    doc.add_heading("Introduction to RAG", 0)
+    doc.add_paragraph("Retrieval-Augmented Generation combines retrieval with language models.")
+    doc.add_paragraph("It reduces hallucination by grounding answers in real documents.")
+    t = doc.add_table(rows=2, cols=2)
+    t.cell(0, 0).text = "Method"; t.cell(0, 1).text = "Accuracy"
+    t.cell(1, 0).text = "RAG";    t.cell(1, 1).text = "High"
+    path = tmp_path / "sample.docx"
+    doc.save(path)
+    return path
+
+@pytest.fixture
+def empty_docx(tmp_path):
+    import docx as dx
+    path = tmp_path / "empty.docx"
+    dx.Document().save(path)
+    return path
+
+class TestChunkPptx:
+
+    def test_returns_list(self, sample_pptx):
+        assert isinstance(chunk_pptx(sample_pptx), list)
+
+    def test_produces_chunks(self, sample_pptx):
+        assert len(chunk_pptx(sample_pptx)) >= 1
+
+    def test_each_item_has_text_and_metadata(self, sample_pptx):
+        for item in chunk_pptx(sample_pptx):
+            assert "text" in item
+            assert "metadata" in item
+
+    def test_text_is_non_empty_string(self, sample_pptx):
+        for item in chunk_pptx(sample_pptx):
+            assert isinstance(item["text"], str)
+            assert item["text"].strip()
+
+    def test_metadata_contains_slide_number(self, sample_pptx):
+        for item in chunk_pptx(sample_pptx):
+            assert "slide_number" in item["metadata"]
+            assert isinstance(item["metadata"]["slide_number"], int)
+            assert item["metadata"]["slide_number"] >= 1
+
+    def test_metadata_format_is_pptx(self, sample_pptx):
+        for item in chunk_pptx(sample_pptx):
+            assert item["metadata"]["format"] == "pptx"
+
+    def test_metadata_source_is_filename(self, sample_pptx):
+        for item in chunk_pptx(sample_pptx):
+            assert item["metadata"]["source"] == "sample.pptx"
+
+    def test_chunks_within_size_limit(self, sample_pptx):
+        oversized = [len(item["text"]) for item in chunk_pptx(sample_pptx, chunk_size=512) if len(item["text"]) > 512]
+        assert oversized == [], f"Chunks exceed 512 chars: {oversized}"
+
+    def test_slide_numbers_are_positive_integers(self, sample_pptx):
+        assert all(item["metadata"]["slide_number"] >= 1 for item in chunk_pptx(sample_pptx))
+
+    def test_multiple_slides_produce_distinct_slide_numbers(self, sample_pptx):
+        slide_nums = {item["metadata"]["slide_number"] for item in chunk_pptx(sample_pptx)}
+        assert len(slide_nums) >= 2, "Expected chunks from at least 2 slides"
+
+    def test_known_content_preserved(self, sample_pptx):
+        joined = " ".join(item["text"] for item in chunk_pptx(sample_pptx))
+        assert "Machine Learning" in joined or "Supervised" in joined
+
+    def test_empty_pptx_returns_empty_list(self, empty_pptx):
+        assert chunk_pptx(empty_pptx) == []
+
+    def test_custom_chunk_size_respected(self, sample_pptx):
+        oversized = [len(item["text"]) for item in chunk_pptx(sample_pptx, chunk_size=100, chunk_overlap=10) if len(item["text"]) > 100]
+        assert oversized == [], f"Chunks exceed custom size 100: {oversized}"
+
+    def test_file_not_found_raises(self):
+        with pytest.raises(FileNotFoundError):
+            chunk_pptx("nonexistent/path/file.pptx")
+
+    def test_wrong_extension_raises_value_error(self, sample_docx):
+        with pytest.raises(ValueError, match=".pptx"):
+            chunk_pptx(sample_docx)
+
+
+class TestChunkDocx:
+
+    def test_returns_list(self, sample_docx):
+        assert isinstance(chunk_docx(sample_docx), list)
+
+    def test_produces_chunks(self, sample_docx):
+        assert len(chunk_docx(sample_docx)) >= 1
+
+    def test_each_item_has_text_and_metadata(self, sample_docx):
+        for item in chunk_docx(sample_docx):
+            assert "text" in item
+            assert "metadata" in item
+
+    def test_text_is_non_empty_string(self, sample_docx):
+        for item in chunk_docx(sample_docx):
+            assert isinstance(item["text"], str)
+            assert item["text"].strip()
+
+    def test_metadata_format_is_docx(self, sample_docx):
+        for item in chunk_docx(sample_docx):
+            assert item["metadata"]["format"] == "docx"
+
+    def test_metadata_source_is_filename(self, sample_docx):
+        for item in chunk_docx(sample_docx):
+            assert item["metadata"]["source"] == "sample.docx"
+
+    def test_metadata_contains_chunk_index(self, sample_docx):
+        for item in chunk_docx(sample_docx):
+            assert "chunk_index" in item["metadata"]
+            assert isinstance(item["metadata"]["chunk_index"], int)
+
+    def test_chunk_index_is_sequential(self, sample_docx):
+        result = chunk_docx(sample_docx)
+        assert [item["metadata"]["chunk_index"] for item in result] == list(range(len(result)))
+
+    def test_chunks_within_size_limit(self, sample_docx):
+        oversized = [len(item["text"]) for item in chunk_docx(sample_docx, chunk_size=512) if len(item["text"]) > 512]
+        assert oversized == [], f"Chunks exceed 512 chars: {oversized}"
+
+    def test_known_content_preserved(self, sample_docx):
+        joined = " ".join(item["text"] for item in chunk_docx(sample_docx))
+        assert "RAG" in joined or "Retrieval" in joined
+
+    def test_table_content_included(self, sample_docx):
+        joined = " ".join(item["text"] for item in chunk_docx(sample_docx))
+        assert "Method" in joined or "RAG" in joined
+
+    def test_empty_docx_returns_empty_list(self, empty_docx):
+        assert chunk_docx(empty_docx) == []
+
+    def test_custom_chunk_size_respected(self, sample_docx):
+        oversized = [len(item["text"]) for item in chunk_docx(sample_docx, chunk_size=100, chunk_overlap=10) if len(item["text"]) > 100]
+        assert oversized == [], f"Chunks exceed custom size 100: {oversized}"
+
+    def test_file_not_found_raises(self):
+        with pytest.raises(FileNotFoundError):
+            chunk_docx("nonexistent/path/file.docx")
+
+    def test_wrong_extension_raises_value_error(self, sample_pptx):
+        with pytest.raises(ValueError, match=".docx"):
+            chunk_docx(sample_pptx)
+
+
+class TestExtractAndChunk:
+
+    def test_pptx_dispatches_correctly(self, sample_pptx):
+        result = extract_and_chunk(sample_pptx)
+        assert isinstance(result, list) and len(result) >= 1
+        assert all(item["metadata"]["format"] == "pptx" for item in result)
+
+    def test_docx_dispatches_correctly(self, sample_docx):
+        result = extract_and_chunk(sample_docx)
+        assert isinstance(result, list) and len(result) >= 1
+        assert all(item["metadata"]["format"] == "docx" for item in result)
+
+    def test_unsupported_extension_raises_value_error(self, tmp_path):
+        fake = tmp_path / "file.txt"
+        fake.write_text("hello")
+        with pytest.raises(ValueError, match="Unsupported file type"):
+            extract_and_chunk(fake)
+
+    def test_missing_file_raises_file_not_found(self):
+        with pytest.raises(FileNotFoundError):
+            extract_and_chunk("no_such_file.pptx")
+
+    def test_supported_extensions_constant(self):
+        assert ".pptx" in SUPPORTED_EXTENSIONS
+        assert ".docx" in SUPPORTED_EXTENSIONS
+        assert ".pdf" in SUPPORTED_EXTENSIONS
+
+    def test_pptx_result_has_slide_number_metadata(self, sample_pptx):
+        for item in extract_and_chunk(sample_pptx):
+            assert "slide_number" in item["metadata"]
+
+    def test_docx_result_has_chunk_index_metadata(self, sample_docx):
+        for item in extract_and_chunk(sample_docx):
+            assert "chunk_index" in item["metadata"]
+
+    def test_custom_params_passed_through_pptx(self, sample_pptx):
+        oversized = [len(item["text"]) for item in extract_and_chunk(sample_pptx, chunk_size=100, chunk_overlap=10) if len(item["text"]) > 100]
+        assert oversized == [], f"Custom chunk_size not respected: {oversized}"
+
+    def test_custom_params_passed_through_docx(self, sample_docx):
+        oversized = [len(item["text"]) for item in extract_and_chunk(sample_docx, chunk_size=100, chunk_overlap=10) if len(item["text"]) > 100]
+        assert oversized == [], f"Custom chunk_size not respected: {oversized}"
