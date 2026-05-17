@@ -27,7 +27,7 @@
 
 ---
 
-## 2. Quality Comparison Matrix
+## 2. Multi-Format Comparison Matrix
 
 | Criterion | PyMuPDF | pdfplumber | python-pptx | python-docx |
 |-----------|---------|------------|-------------|-------------|

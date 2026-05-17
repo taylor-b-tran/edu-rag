@@ -184,7 +184,7 @@
       "is_fallback": false
     },
     "Can you summarize the key steps in the RAG pipeline?": {
-      "answer": "The RAG pipeline consists of two sequential phases that work together to provide accurate, context-aware answers:\n\n**Phase 1 — Document Ingest**\n1. A Lecturer uploads a course document (PDF, PPTX, or DOCX) through the WebApplication.\n2. DocumentProcessor extracts raw text using format-specific parsers.\n3. The text is split into overlapping chunks (approximately 500 tokens, 50-token overlap).\n4. SentenceTransformers all-MiniLM-L6-v2 encodes each chunk as a 384-dimensional dense vector embedding.\n5. Each embedding is written to ChromaDB with metadata including the course_id, document name, and chunk index.\n6. The system confirms the upload and indexing status to the Lecturer.\n\n**Phase 2 — Query Flow**\n1. A Student submits a natural language question and selects the relevant course context.\n2. WebApplication validates the JWT, checks the rate limit, and forwards the request.\n3. VectorRetriever embeds the question using the same encoding model and searches ChromaDB with a cosine similarity query scoped to the active course_id.\n4. The top-k most relevant chunks (default k=5) are returned with their similarity scores.\n5. LLMResponseGeneration builds a context-grounded prompt from the retrieved chunks and the original question.\n6. The prompt is sent to the configured language model (Ollama in development, OpenAI API in the sprint demo).\n7. The generated answer is returned to the Student with source citations. If no chunks exceeded the similarity threshold, the response carries the general-knowledge fallback label.\n8. The interaction is stored in the session record and the audit log.",
+      "answer": "The RAG pipeline consists of two sequential phases that work together to provide accurate, context-aware answers:\n\n**Phase 1 — Document Ingest**\n1. A Lecturer uploads a course document (PDF, PPTX, or DOCX) through the WebApplication.\n2. DocumentProcessor extracts raw text using format-specific parsers.\n3. The text is split using the accepted Sprint 3 baseline: chunk_size=1024 and chunk_overlap=0.\n4. SentenceTransformers all-MiniLM-L6-v2 encodes each chunk as a 384-dimensional dense vector embedding.\n5. Each embedding is written to ChromaDB with metadata including the course_id, document name, and chunk index.\n6. The system confirms the upload and indexing status to the Lecturer.\n\n**Phase 2 — Query Flow**\n1. A Student submits a natural language question and selects the relevant course context.\n2. WebApplication validates the JWT, checks the rate limit, and forwards the request.\n3. VectorRetriever embeds the question using the same encoding model and searches ChromaDB with a cosine similarity query scoped to the active course_id.\n4. The top-k most relevant chunks (default k=5) are returned with their similarity scores.\n5. LLMResponseGeneration builds a context-grounded prompt from the retrieved chunks and the original question.\n6. The prompt is sent to the configured language model (Ollama in development, OpenAI API in the sprint demo).\n7. The generated answer is returned to the Student with source citations. If no chunks exceeded the similarity threshold, the response carries the general-knowledge fallback label.\n8. The interaction is stored in the session record and the audit log.",
       "source_references": [
         {
           "chunk_id": "ch-005",
@@ -293,7 +293,7 @@
     }
   },
   "fallback_response": {
-    "answer": "Based on general knowledge — not verified against course materials.\n\nI found some relevant information, but none of the retrieved chunks exceeded the similarity threshold for your active course. Here's what I can offer from general knowledge:\n\nThis topic appears to be related to concepts covered in your course. For a verified answer grounded in your actual course materials, you might want to rephrase your question or check specific lecture slides and textbook chapters.\n\nWould you like me to try a more specific question?",
+    "answer": "I could not verify an answer from the available course materials.\n\nNone of the retrieved chunks exceeded the similarity threshold for your active course, so I should not present a course-grounded answer or attach fabricated citations. Please rephrase the question, select the relevant course, or check whether the lecturer has uploaded the required material.",
     "source_references": [],
     "confidence": 0.0,
     "model_used": "ollama/llama3",
@@ -304,21 +304,27 @@
     {
       "user_id": "u-stu-001",
       "username": "demo.student",
+      "name": "Anmoldeep Singh",
       "email": "student@uow.edu.au",
+      "password": "student123",
       "role": "student",
       "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d", "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"]
     },
     {
       "user_id": "u-lect-001",
       "username": "demo.lecturer",
+      "name": "Prof. Jun Yan",
       "email": "lecturer@uow.edu.au",
+      "password": "lecturer123",
       "role": "lecturer",
       "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"]
     },
     {
       "user_id": "u-admin-001",
       "username": "demo.admin",
+      "name": "Admin User",
       "email": "admin@uow.edu.au",
+      "password": "admin123",
       "role": "admin",
       "enrolled_courses": []
     }

@@ -60,7 +60,7 @@
     "category": "easy_factual",
     "difficulty": 1,
     "question": "What chunk size and overlap does EduRAG use by default?",
-    "expected_answer": "512 tokens per chunk with a 50-token overlap between adjacent chunks, implemented using LangChain's RecursiveCharacterTextSplitter.",
+    "expected_answer": "The accepted Sprint 3 baseline is chunk_size=1024 and chunk_overlap=0, implemented with LangChain's RecursiveCharacterTextSplitter as a character-based splitter.",
     "source_topic": "Chunking"
   },
   {
@@ -116,7 +116,7 @@
     "category": "hard_reasoning",
     "difficulty": 2,
     "question": "How does the system handle a query when no retrieved chunks exceed the similarity threshold?",
-    "expected_answer": "When no chunks meet the minimum similarity threshold, the system falls back to the LLM's general training knowledge to attempt an answer. However, the response is clearly labelled with a warning: 'Based on general knowledge — not verified against course materials.' This transparency ensures students understand the answer is not sourced from the uploaded course content and may be less reliable.",
+    "expected_answer": "When no chunks meet the minimum similarity threshold, the system should not present an unsupported course-grounded answer. It should state that it cannot verify the answer from the available course materials, avoid fabricated citations, and invite the student to upload/check relevant material or rephrase the question.",
     "source_topic": "Fallback behaviour"
   },
   {

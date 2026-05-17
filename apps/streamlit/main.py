@@ -1,6 +1,6 @@
 """
 Paedia — AI-Powered Course Assistant
-Streamlit UI Prototype with dummy backend
+Streamlit UI Prototype — wired to Flask API via api_client.py
 CSIT321 Project 37 · Group 19 — Aletheia's Zetetes
 Author: Anmoldeep Singh (8443580)
 
@@ -9,6 +9,7 @@ LangChain orchestration, SentenceTransformers all-MiniLM-L6-v2 (384-dim),
 ChromaDB (course_id scoped), PostgreSQL, Ollama (dev) + OpenAI (demo).
 """
 
+import html as _html
 import streamlit as st
 import json
 import os
@@ -16,6 +17,9 @@ import re
 import time
 from datetime import datetime
 import random
+from textwrap import dedent
+
+from api_client import PaediaAPIClient, APIConfig
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -33,7 +37,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
-.stApp { background-color: #F8F9FA; }
+.stApp {
+    background-color: #F8F9FA;
+    color: #1A1A2E;
+}
+
+div[data-testid="stAppViewContainer"],
+div[data-testid="stAppViewContainer"] p,
+div[data-testid="stAppViewContainer"] label,
+div[data-testid="stAppViewContainer"] [data-testid="stMarkdownContainer"] {
+    color: #1A1A2E;
+}
+
+div[data-testid="stAppViewContainer"] h1,
+div[data-testid="stAppViewContainer"] h2,
+div[data-testid="stAppViewContainer"] h3,
+div[data-testid="stAppViewContainer"] h4 {
+    color: #1B2A4A;
+}
 
 section[data-testid="stSidebar"] {
     background-color: #0F1B33;
@@ -46,6 +67,7 @@ section[data-testid="stSidebar"] .stMarkdown p,
 section[data-testid="stSidebar"] .stMarkdown span,
 section[data-testid="stSidebar"] .stCaption { color: #9AA0A6 !important; }
 section[data-testid="stSidebar"] .stMarkdown strong { color: #D4A843 !important; }
+section[data-testid="stSidebar"] button p { color: inherit !important; }
 
 .user-msg {
     background: linear-gradient(135deg, #0D9488 0%, #0A7A6F 100%);
@@ -110,12 +132,92 @@ section[data-testid="stSidebar"] .stMarkdown strong { color: #D4A843 !important;
 header {visibility: hidden;}
 footer {visibility: hidden;}
 
-.stButton > button { border-radius: 8px; font-weight: 500; transition: all 0.2s; }
+div[data-testid="stButton"] > button,
+div[data-testid="stFormSubmitButton"] > button,
+button[data-testid^="baseButton"] {
+    min-height: 44px !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+    opacity: 1 !important;
+}
+
+div[data-testid="stButton"] > button,
+button[data-testid="baseButton-secondary"] {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+    border: 1px solid #DADCE0 !important;
+    box-shadow: 0 1px 2px rgba(15, 27, 51, 0.08) !important;
+}
+
+div[data-testid="stButton"] > button:hover,
+button[data-testid="baseButton-secondary"]:hover {
+    background: #E6F7F5 !important;
+    color: #0A7A6F !important;
+    border-color: #0D9488 !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button[kind="primary"],
+button[data-testid="baseButton-primary"] {
+    background: #0D9488 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #0D9488 !important;
+    box-shadow: 0 2px 6px rgba(13, 148, 136, 0.22) !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover,
+button[data-testid="baseButton-primary"]:hover {
+    background: #0A7A6F !important;
+    border-color: #0A7A6F !important;
+}
+
+div[data-testid="stButton"] > button *,
+div[data-testid="stFormSubmitButton"] > button *,
+button[data-testid^="baseButton"] * {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #E8ECF4 !important;
+    border: 1px solid rgba(232, 236, 244, 0.14) !important;
+    box-shadow: none !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
+    background: rgba(13, 148, 136, 0.18) !important;
+    color: #FFFFFF !important;
+    border-color: rgba(13, 148, 136, 0.55) !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"] {
+    background: #0D9488 !important;
+    color: #FFFFFF !important;
+    border-color: #0D9488 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button * {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
 .stTextInput > div > div > input {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
     border-radius: 24px; padding: 12px 20px; border: 1px solid #E8EAED; font-size: 0.95rem;
 }
+.stTextInput > div > div > input::placeholder { color: #5F6368 !important; opacity: 1; }
 .stTextInput > div > div > input:focus {
     border-color: #0D9488; box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
+}
+
+.stSelectbox div[data-baseweb="select"] > div {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+    border-color: #E8EAED !important;
 }
 
 div[data-testid="stMetric"] {
@@ -129,6 +231,12 @@ div[data-testid="stMetric"] [data-testid="stMetricValue"] { color: #1B2A4A !impo
 
 
 # ─── LOAD DUMMY DATA ───────────────────────────────────────────────
+
+def render_html(markup: str) -> None:
+    """Render HTML without Markdown treating indented tags as code blocks."""
+    cleaned = "\n".join(line.lstrip() for line in dedent(markup).strip().splitlines())
+    st.markdown(cleaned, unsafe_allow_html=True)
+
 
 @st.cache_data
 def load_responses():
@@ -146,31 +254,17 @@ def load_responses():
 data = load_responses()
 
 
-# ─── DEMO CREDENTIALS ──────────────────────────────────────────────
+# ─── API CLIENT ───────────────────────────────────────────────────
+# Connects to Flask WebApplication (Module 4) when available,
+# otherwise falls back to fixture data for Sprint demos.
 
-DEMO_USERS = {
-    "student@uow.edu.au": {
-        "password": "student123",
-        "name": "Anmoldeep Singh",
-        "email": "student@uow.edu.au",
-        "role": "Student",
-        "id": "8443580",
-    },
-    "lecturer@uow.edu.au": {
-        "password": "lecturer123",
-        "name": "Prof. Jun Yan",
-        "email": "lecturer@uow.edu.au",
-        "role": "Lecturer",
-        "id": "1001",
-    },
-    "admin@uow.edu.au": {
-        "password": "admin123",
-        "name": "Admin User",
-        "email": "admin@uow.edu.au",
-        "role": "Admin",
-        "id": "0001",
-    },
-}
+@st.cache_resource
+def get_api_client():
+    return PaediaAPIClient(APIConfig())
+
+api = get_api_client()
+
+
 
 
 # ─── SESSION STATE INIT ────────────────────────────────────────────
@@ -200,26 +294,33 @@ init_session_state()
 # ─── DUMMY BACKEND ──────────────────────────────────────────────────
 
 def get_ai_response(query: str) -> dict:
-    """Simulate RAG pipeline: VectorRetriever → LLMResponseGeneration from dummy data."""
-    if data:
-        for q, resp in data["responses"].items():
-            if query.lower().strip("?").strip() in q.lower() or q.lower() in query.lower():
-                return resp
-        return data["fallback_response"]
-    return {
-        "answer": "I'm currently running in demo mode without the backend connected. This is a UI prototype.",
-        "source_references": [],
-        "confidence": 0.0,
-        "model_used": "ollama/llama3",
-        "token_count": 0,
-        "is_fallback": True,
-    }
+    """
+    Query the RAG pipeline via the API client.
+
+    Flow: Streamlit → api_client.query() → Flask /api/query → VectorRetriever
+    → LLMResponseGeneration → response with source_references.
+
+    Falls back to fixture data (sample_responses.json) when the Flask API
+    is unreachable (e.g. Task 2 not yet deployed).
+    """
+    course_id = st.session_state.get("course_id")
+    session_id = st.session_state.get("session_id")
+    return api.query(query, course_id=course_id or "", session_id=session_id)
 
 
 def get_suggested_prompts() -> list:
     if data:
         return random.sample(data["suggested_prompts"], min(4, len(data["suggested_prompts"])))
     return ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
+
+
+def get_default_course_id(user: dict) -> str:
+    enrolled = user.get("enrolled_courses") or []
+    if enrolled:
+        return enrolled[0]
+    if data and data.get("courses"):
+        return data["courses"][0].get("course_id", "CSIT321")
+    return "CSIT321"
 
 
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
@@ -248,14 +349,17 @@ def render_login_page():
             st.error(st.session_state.login_error)
 
         if st.button("Sign In", type="primary", use_container_width=True):
-            user = DEMO_USERS.get(email)
-            if user and user["password"] == password:
+            result = api.login(email, password)
+            if result.get("success"):
                 st.session_state.authenticated = True
-                st.session_state.user = {k: v for k, v in user.items() if k != "password"}
+                st.session_state.user = result.get("user", {})
+                st.session_state.course_id = get_default_course_id(st.session_state.user)
+                if result.get("jwt_token"):
+                    st.session_state.jwt_token = result["jwt_token"]
                 st.session_state.login_error = None
                 st.rerun()
             else:
-                st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+                st.session_state.login_error = result.get("error") or "Invalid email or password."
                 st.rerun()
 
         st.markdown("""
@@ -318,7 +422,7 @@ def render_sidebar():
             st.markdown("**Recent Conversations**")
             queries = [m["content"][:35] + "..." for m in st.session_state.messages if m["role"] == "user"][-4:]
             for q in reversed(queries):
-                st.markdown(f"<div style='background:#F1F3F4; padding:6px 12px; border-radius:6px; margin:4px 0; font-size:0.82rem; color:#5F6368;'>{q}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#F1F3F4; padding:6px 12px; border-radius:6px; margin:4px 0; font-size:0.82rem; color:#5F6368;'>{_html.escape(q)}</div>", unsafe_allow_html=True)
             st.divider()
 
         # Loaded documents
@@ -329,7 +433,7 @@ def render_sidebar():
             st.markdown(
                 f"<div class='doc-card'>"
                 f"<span>📄</span>"
-                f"<span style='flex:1; font-size:0.85rem;'>{doc_name}</span>"
+                f"<span style='flex:1; font-size:0.85rem;'>{_html.escape(str(doc_name))}</span>"
                 f"<span style='width:10px; height:10px; border-radius:50%; background:{status_color}; display:inline-block;'></span>"
                 f"</div>",
                 unsafe_allow_html=True,
@@ -338,7 +442,9 @@ def render_sidebar():
         st.divider()
         docs_count = len(st.session_state.documents)
         indexed = sum(1 for d in st.session_state.documents if d["status"] == "indexed")
+        api_icon = "🟢" if api.is_live else "🟡"
         st.caption(f"{docs_count} docs loaded · {indexed} indexed · Semantic search ON")
+        st.caption(f"{api_icon} {api.mode_label}")
 
         # User info + logout
         st.markdown("---")
@@ -377,6 +483,7 @@ def _send_message(text: str):
         "model_used": response.get("model_used", "ollama/llama3"),
         "token_count": response.get("token_count", 0),
         "is_fallback": response.get("is_fallback", False),
+        "from_api": response.get("from_api", False),
         "timestamp": datetime.now().strftime("%I:%M %p"),
     })
 
@@ -420,9 +527,10 @@ def render_chat_page():
         else:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
-                    st.markdown(f'<div class="clearfix"><div class="user-msg">{msg["content"]}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="clearfix"><div class="user-msg">{_html.escape(msg["content"])}</div></div>', unsafe_allow_html=True)
                 else:
-                    answer_html = msg["content"].replace("\n", "<br>")
+                    answer_html = _html.escape(msg["content"])
+                    answer_html = answer_html.replace("\n", "<br>")
                     answer_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', answer_html)
                     answer_html = re.sub(r'`([^`]+)`', r'<code>\1</code>', answer_html)
 
@@ -435,15 +543,15 @@ def render_chat_page():
                     if msg.get("source_references"):
                         sources_html = '<div class="source-label">Retrieved from:</div>'
                         for src in msg["source_references"]:
-                            sources_html += f'<span class="source-chip">📄 {src["filename"]} · p.{src["page_number"]} · {int(src["similarity"] * 100)}%</span>'
+                            sources_html += f'<span class="source-chip">📄 {_html.escape(str(src.get("filename", "")))} · p.{src["page_number"]} · {int(src["similarity"] * 100)}%</span>'
 
                     confidence = msg.get("confidence", 0)
                     conf_color = "#34A853" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EA4335")
                     conf_pct = int(confidence * 100)
-                    model_used = msg.get("model_used", "")
+                    model_used = _html.escape(msg.get("model_used", ""))
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
 
-                    st.markdown(f"""
+                    render_html(f"""
                     <div class="clearfix"><div class="{msg_class}">
                         {fallback_html}
                         {answer_html}
@@ -452,10 +560,10 @@ def render_chat_page():
                             <div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>
                         </div>
                         <div style="font-size: 0.72rem; color: #9AA0A6; margin-top: 4px;">
-                            Confidence: {conf_pct}% · {model_used} · {msg.get('timestamp', '')}
+                            Confidence: {conf_pct}% · {model_used} · {msg.get('timestamp', '')}{'  · 🟢 API' if msg.get('from_api') else ''}
                         </div>
                     </div></div>
-                    """, unsafe_allow_html=True)
+                    """)
 
             st.markdown("<br>", unsafe_allow_html=True)
             prompts = get_suggested_prompts()
@@ -600,16 +708,30 @@ def render_doc_manager_page():
         help="Drag and drop PDF, PPTX, or DOCX files here. Max 50 MB per file.",
     )
 
-    if uploaded_files:
-        for f in uploaded_files:
-            st.success(f"✅ {f.name} received — indexing will begin once the backend is connected.")
-
-    # Course selector + upload action
     col1, col2, col3 = st.columns([3, 3, 2])
     with col1:
-        st.selectbox("Course", ["CSIT321 - Project Development", "CSIT115 - Intro to Programming", "ISIT312 - Big Data"], label_visibility="collapsed")
+        selected_course = st.selectbox(
+            "Course",
+            ["CSIT321", "CSIT214", "ISIT312"],
+            label_visibility="collapsed",
+            format_func=lambda c: {"CSIT321": "CSIT321 - Project Development", "CSIT214": "CSIT214 - Database Systems", "ISIT312": "ISIT312 - Big Data"}.get(c, c),
+        )
     with col3:
-        st.button("Upload & Index", type="primary", use_container_width=True)
+        do_upload = st.button("Upload & Index", type="primary", use_container_width=True)
+
+    if uploaded_files and do_upload:
+        for f in uploaded_files:
+            file_bytes = f.read()
+            result = api.upload_document(file_bytes, f.name, selected_course)
+            if result.get("success"):
+                doc = result.get("document", {})
+                job_id = doc.get("indexing_job_id", "")
+                st.success(f"✅ {f.name} queued for indexing.{' Job ID: ' + job_id[:8] + '…' if job_id else ''}")
+            else:
+                st.error(f"❌ {f.name} upload failed: {result.get('error', 'unknown error')}")
+    elif uploaded_files:
+        for f in uploaded_files:
+            st.info(f"📄 {f.name} staged — click Upload & Index to submit.")
 
     st.divider()
     st.markdown("**UPLOADED DOCUMENTS**")
@@ -708,7 +830,7 @@ def render_admin_page():
         st.selectbox("VDB", ["ChromaDB (course_id scoped)"], label_visibility="collapsed", key="vector_db")
     with s4:
         st.markdown("**Chunk Size**")
-        st.selectbox("Chunk", ["~500 tokens / 50 overlap", "~256 tokens / 25 overlap", "~1024 tokens / 100 overlap"], label_visibility="collapsed", key="chunk_size")
+        st.selectbox("Chunk", ["1024 tokens / 0 overlap", "512 tokens / 0 overlap", "256 tokens / 0 overlap"], label_visibility="collapsed", key="chunk_size")
 
     s5, s6, s7, s8 = st.columns(4)
     with s5:
