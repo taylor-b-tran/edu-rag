@@ -1,16 +1,10 @@
 # EduRAG Sample Course Material Manifest
 
-<<<<<<< HEAD
-**Group 19 · CSIT321 Project 37 · University of Wollongong**  
-**Prepared by:** Tung Phuong Anh Huynh  
-**Last updated:** 11 May 2026 (Sprint 4 — Task 16)
-=======
 **Sprint 3 · Group 19 · CSIT321 Project 37 · University of Wollongong**  
 **Prepared by:** Tung Phuong Anh Huynh  
-**Last updated:** 20 April 2026
->>>>>>> 946e665074b3fc66d2471900f32a82202f3994bf
+**Last updated:** 15 May 2026
 
-> **Storage location:** `data/samples/` (gitignored — do not commit raw files to the repository)  
+> **Storage location:** `data/samples/` (gitignored — do not commit raw files to the repository)
 
 ---
 
@@ -22,10 +16,10 @@ Log in to Moodle with your UOW student account, go to the CSIT321 subject page, 
 
 | # | Save the file as | Where to find it on Moodle | Format |
 |---|-----------------|---------------------------|--------|
-| 1 | `csit321_week1_lecture.pdf` | Week 1 → "Week 1 Lecture Slides – Autumn" | PDF |
+| 1 | `csit321_week1_lecture.pdf` | Week 1 → "Week 1 Lecture Slides — Autumn" | PDF |
 | 2 | `csit321_week1_ip_bethany.pdf` | Week 1 → "Intellectual Property by Bethany Pons" | PDF |
-| 3 | `csit321_week2_lecture.pdf` | Week 2 → "Week 2 Lecture – Autumn" | PDF |
-| 4 | `csit321_week3_lecture.pdf` | Week 3 → "Week 3 Lecture – Autumn" | PDF |
+| 3 | `csit321_week2_lecture.pdf` | Week 2 → "Week 2 Lecture — Autumn" | PDF |
+| 4 | `csit321_week3_lecture.pdf` | Week 3 → "Week 3 Lecture — Autumn" | PDF |
 | 5 | `csit321_week3_uxui_genai.pdf` | Week 3 → "UX/UI Design in the Age of GenAI" | PDF |
 | 6 | `csit321_code_of_conduct.pdf` | Course Resources → "Code-of-Professional-Conduct v2.1" | PDF |
 
@@ -97,66 +91,35 @@ All links below open a PDF directly in your browser. Right-click → Save As to 
 ---
 
 *Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
-<<<<<<< HEAD
 
 ---
 
-## Sprint 4 — Corpus Expansion (Task 16)
+## Sprint 4 Corpus Expansion Candidates (Task 16)
 
-**Added by:** Tung Phuong Anh Huynh · **Date:** 12 May 2026  
-**Purpose:** Extend the sample corpus with PPTX and DOCX formats to validate Ngoc's multi-format chunker extension (Task 11) and expand the fixture corpus for the 31-query benchmark (Task 15).
+**Added by:** Tung Phuong Anh Huynh  
+**Reviewed in sandbox:** 11 May 2026  
+**Purpose:** Extend the sample corpus with DOCX and PPTX formats so Ngoc's multi-format chunker extension and Tung's API test evidence can be checked against non-PDF inputs.
 
-### New Files Added — Sprint 4
+> These files are listed as local sample inputs. Because `data/samples/` is ignored, the team should confirm whether to keep binary sample files outside Git or explicitly approve tracking them before merging.
 
-| # | Filename | Format | Location | Chunks (512/50 overlap) | Key Topics |
-|---|----------|--------|----------|------------------------|------------|
-| 14 | `csit321_rag_fundamentals.docx` | DOCX | `data/samples/` | 9 chunks | RAG pipeline, chunking strategy, embeddings, evaluation metrics |
-| 15 | `csit321_system_design.pptx` | PPTX | `data/samples/` | 9 chunks (6 slides) | System architecture, RBAC, upload pipeline, query flow, NFRs, design patterns |
-| 16 | `csit321_database_concepts.docx` | DOCX | `data/samples/` | 13 chunks | SQL, normalisation, ER modelling, PostgreSQL features, ChromaDB vs relational |
+### Candidate Files
 
-**Total new chunks:** 31 across 3 documents  
-**Formats confirmed working:** DOCX (`chunk_docx`), PPTX (`chunk_pptx`) — both via Ngoc's updated `src/document_processor/chunker.py` (Task 11)
+| # | Filename | Format | Local location | Key topics |
+|---|----------|--------|----------------|------------|
+| 14 | `csit321_rag_fundamentals.docx` | DOCX | `data/samples/` | RAG pipeline, chunking strategy, embeddings, evaluation metrics |
+| 15 | `csit321_system_design.pptx` | PPTX | `data/samples/` | System architecture, RBAC, upload pipeline, query flow, NFRs, design patterns |
+| 16 | `csit321_database_concepts.docx` | DOCX | `data/samples/` | SQL, normalisation, ER modelling, PostgreSQL features, ChromaDB versus relational storage |
 
-### Chunker Verification Results
+### Review Notes
 
-All three files were loaded through the updated chunker on 12 May 2026:
+The committed branch text claimed chunk counts using a `512/50 overlap` setup and a 12 May 2026 verification date. The sandbox rerun on 11 May 2026 used the current accepted project baseline, `chunk_size=1024` and `chunk_overlap=0`.
 
-| File | Chunks | Avg Chunk Len | Metadata Keys | Status |
-|------|--------|---------------|---------------|--------|
-| `csit321_rag_fundamentals.docx` | 9 | 363 chars | source, format, chunk_index | ✅ Pass |
-| `csit321_system_design.pptx` | 9 | 337 chars | source, format, slide_number | ✅ Pass |
-| `csit321_database_concepts.docx` | 13 | 291 chars | source, format, chunk_index | ✅ Pass |
+| File | Rerun chunks | Max chars | Avg chars | Metadata keys |
+|------|-------------:|----------:|----------:|---------------|
+| `csit321_rag_fundamentals.docx` | 4 | 1006 | 797 | source, format, chunk_index |
+| `csit321_system_design.pptx` | 6 | 786 | 626 | source, format, slide_number |
+| `csit321_database_concepts.docx` | 4 | 1018 | 927 | source, format, chunk_index |
 
-No empty chunks. No parsing errors. Slide-number metadata correctly attached for PPTX. `chunk_index` correctly attached for DOCX. All chunks within 512-char limit.
-
-### Updated Parser Stress-Test Coverage
-
-| Parser Challenge | Now Covered By |
-|----------------|----------------|
-| Standard text paragraphs | Files 2, 6, 8, 11, **14, 16** |
-| Heading + paragraph DOCX structure | **14, 16** (new Sprint 4) |
-| DOCX table extraction | **16** (new — joins and NF comparison tables) |
-| PPTX multi-level bullet slides | **15** (new Sprint 4) |
-| Technical vocabulary (RAG/embeddings) | Files 7, 8, 9, **14** |
-| System architecture narrative | **15** |
-
-### Updated Corpus Totals
-
-| Sprint | Files Added | Formats | Total Files |
-|--------|------------|---------|-------------|
-| Sprint 3 | 13 (PDF only) | PDF | 13 |
-| Sprint 4 (Task 16) | 3 | DOCX x2, PPTX x1 | **16** |
-
-### Content Notes
-
-**csit321_rag_fundamentals.docx** — Covers the EduRAG RAG pipeline in depth. Designed to enable answers to easy_factual benchmark questions that currently return fallback (e.g. Q002 "What is a vector embedding?", Q004 "What embedding model does EduRAG use?"). Once ingested into ChromaDB, these chunks are expected to raise the easy_factual pass rate from 0% to ≥ 50%.
-
-**csit321_system_design.pptx** — Six-slide deck covering architecture, RBAC, upload pipeline, query sequence, NFRs, and design patterns. Validates slide-scoped PPTX chunking and provides content for hard_reasoning architecture queries.
-
-**csit321_database_concepts.docx** — Covers SQL, normalisation, ER modelling, and the dual-database design (PostgreSQL + ChromaDB). Provides content for database hard_reasoning queries (Q019, Q020) that currently match wrong fixture entries.
-
----
+The binary sample files were kept as local ignored inputs, not tracked Git content. Merge only this manifest evidence unless the team explicitly approves committing raw files under `data/samples/`.
 
 *Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
-=======
->>>>>>> 946e665074b3fc66d2471900f32a82202f3994bf
