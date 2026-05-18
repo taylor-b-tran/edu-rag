@@ -11,7 +11,22 @@ The Sprint 3 backend infrastructure and RAG proof-of-concept track are ready for
 
 Scope note: this checkpoint does not claim that a production API or finished application server exists yet. The Compose `app` service is still a bootstrap workspace container; the validated runtime pieces are PostgreSQL, ChromaDB, Ollama, and the executed notebook workflow.
 
-No demo recording link was available at the time of this checkpoint. Until the team adds a recording link or meeting-minute reference, this file can stand in as written checkpoint evidence.
+Sprint 4 update on 12 May 2026: the team added a real Google Drive recording
+link for the connected prototype walkthrough. This closes the Sprint 4 Task 4
+evidence gap, with the scope note that the recording demonstrates a
+Streamlit-to-Flask prototype and not a fully live ChromaDB/Ollama RAG path.
+
+## 1.1 Sprint 4 Demo Recording Evidence
+
+| Item | Value |
+|---|---|
+| Recording title | Sprint 4 connected prototype demo |
+| Recording link | https://drive.google.com/file/d/1pZLpK6btLJEVn3XzLPOjm6v_ViHEmJTb/view?usp=sharing |
+| Date added | 12 May 2026 |
+| Owner | Thanh Binh Tran |
+| Coverage | Flask health route, Streamlit login, chat/query flow, fallback behaviour, document/session/admin screens |
+| Scope boundary | Demonstrates the Sprint 4 connected prototype; backend query mode remains fixture-backed and live ChromaDB/Ollama RAG is Sprint 5 work |
+| Access check | Link was provided as a Google Drive share link; verify viewer access from a non-owner account before final A3 submission |
 
 ## 2. Evidence Checklist
 
@@ -29,6 +44,7 @@ No demo recording link was available at the time of this checkpoint. Until the t
 | Prompt strategy | Ready | `docs/prompt_strategy.md` selects the safety-first evidence-cited RAG prompt. |
 | RAG configuration | Ready | `docs/rag_config.md` selects `chunk_size=1024`, `overlap=0`, `top_k=5`, threshold `0.65`; the notebook has been rerun with the same defaults. |
 | Contribution bundle | Ready | The Sprint 3 RAG/backend files are synced into the project workspace for review. |
+| Sprint 4 connected prototype recording | Ready | Google Drive recording link filed in Section 1.1. |
 
 ## 3. Demo Walkthrough
 
@@ -72,7 +88,7 @@ Internal demo order:
 
 | Follow-Up | Owner | Reason |
 |---|---|---|
-| Add actual demo recording link or meeting-minute reference | Binh / Tung | Not available in the local workspace during this checkpoint. |
+| Verify demo recording share access | Binh / Tung | Recording link is now filed; confirm it opens for the intended team/supervisor audience before A3 evidence freeze. |
 | Rerun benchmark with `tests/test_queries.json` once available | Binh / Tung | Batch 7 used a small provisional query set because the larger 31-question corpus was not present locally. |
 | Decide UI integration boundary | Binh / Anmoldeep / Tung | The backend infrastructure and notebook evidence are ready, but a formal API wrapper is still a Sprint 4 integration decision. |
 | Update ERD and DFD from actual schema and error paths | Namaratne | Sprint 3 backend outputs now provide concrete implementation evidence. |

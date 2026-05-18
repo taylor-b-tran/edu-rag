@@ -1,14 +1,91 @@
-name: edurag-sprint3
+name: edurag
 
 services:
-  app:
-    image: python:3.11-slim
-    container_name: edurag-app
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.demo
     working_dir: /workspace
-    command: ["sh", "-lc", "echo 'EduRAG app container ready for Sprint 3 work'; tail -f /dev/null"]
+    command: ["python", "apps/integration/backend/api.py"]
     environment:
       APP_ENV: ${APP_ENV:-development}
-      APP_PORT: ${APP_PORT:-8501}
+      PORT: 5000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-edurag}
+      POSTGRES_USER: ${POSTGRES_USER:-edurag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edurag_dev_password}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PYTHONPATH: /workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      ollama:
+        condition: service_started
+    ports:
+      - "${API_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - edurag-net
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.demo
+    working_dir: /workspace
+    command:
+      - streamlit
+      - run
+      - apps/streamlit/main.py
+      - --server.port
+      - "8501"
+      - --server.address
+      - "0.0.0.0"
+      - --server.headless
+      - "true"
+      - --server.enableCORS
+      - "false"
+      - --browser.gatherUsageStats
+      - "false"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PAEDIA_API_URL: http://api:5000
+      PAEDIA_USE_FIXTURES: ${PAEDIA_USE_FIXTURES:-false}
+      PAEDIA_API_TIMEOUT: ${PAEDIA_API_TIMEOUT:-10}
+      PAEDIA_API_RETRIES: ${PAEDIA_API_RETRIES:-2}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8501}:8501"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - edurag-net
+
+  app:
+    image: python:3.11-slim
+    working_dir: /workspace
+    profiles:
+      - tools
+    command: ["sh", "-lc", "echo 'EduRAG tools container ready'; tail -f /dev/null"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-edurag}
@@ -29,14 +106,11 @@ services:
         condition: service_started
       ollama:
         condition: service_started
-    ports:
-      - "${APP_PORT:-8501}:8501"
     networks:
       - edurag-net
 
   postgres:
     image: postgres:16-alpine
-    container_name: edurag-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-edurag}
       POSTGRES_USER: ${POSTGRES_USER:-edurag}
@@ -56,7 +130,6 @@ services:
 
   chromadb:
     image: chromadb/chroma@sha256:607103123fbd79794e3cd8029e16137031a464551e3a61df77191627a9d23c72
-    container_name: edurag-chromadb
     environment:
       IS_PERSISTENT: "TRUE"
       CHROMA_SERVER_HTTP_PORT: 8000
@@ -70,7 +143,6 @@ services:
 
   ollama:
     image: ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b
-    container_name: edurag-ollama
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
     ports:

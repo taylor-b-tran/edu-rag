@@ -53,3 +53,23 @@ It also shows ChromaDB as an external vector store, not a PostgreSQL table.
 For the Sprint 3 consolidated report, use the PNG diagram first, then summarise the correction as:
 
 > The ERD v2 was updated to reflect the implemented Sprint 3 PostgreSQL schema and the hybrid storage model. PostgreSQL stores users, courses, memberships, documents, indexing jobs, conversations, refresh tokens, and audit logs, while ChromaDB stores chunk embeddings externally with metadata links back to course and document records.
+
+## Sprint 4 Reconciliation Check
+
+Sprint 4 Task 18 rechecked the ERD against `db/migrations/001_initial_schema.sql`
+after the Flask API wrapper landed. The existing reconciled diagram remains the
+correct baseline because it includes the implemented PostgreSQL tables,
+UUID-style `id` keys, refresh-token storage, audit-log links, and ChromaDB as an
+external vector store rather than a relational table.
+
+The late local draft under `C:\studyAssets\CSIT321 - Project\andre` was reviewed
+but should not replace the repository diagram. That draft simplifies keys to
+generic `int`, omits `refresh_tokens`, uses older message/document field names,
+and shows a target RAG sequence rather than the current fixture-backed Flask
+route behaviour.
+
+Current canonical artifacts:
+
+- `docs/architecture/diagrams/erd_v2.png`
+- `docs/architecture/erd_v2_changes.md`
+- `docs/architecture/erd_v2.png` as a Sprint 4 plan-path compatibility copy

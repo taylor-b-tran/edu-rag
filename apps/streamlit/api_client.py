@@ -44,7 +44,7 @@ class APIConfig:
     base_url: str = os.getenv("PAEDIA_API_URL", "http://localhost:5000")
     timeout: int = int(os.getenv("PAEDIA_API_TIMEOUT", "10"))
     max_retries: int = int(os.getenv("PAEDIA_API_RETRIES", "2"))
-    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "true").lower() == "true"
+    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "false").lower() == "true"
 
 
 # ─── FIXTURE LOADER ──────────────────────────────────────────────────
@@ -222,9 +222,12 @@ class PaediaAPIClient:
         if result and result.get("access_token"):
             self._jwt_token = result["access_token"]
             self._refresh_token = result.get("refresh_token")
+            user = result.get("user", {})
+            if user.get("role"):
+                user["role"] = str(user["role"]).capitalize()
             return {
                 "success": True,
-                "user": result.get("user", {}),
+                "user": user,
                 "jwt_token": self._jwt_token,
                 "error": None,
             }

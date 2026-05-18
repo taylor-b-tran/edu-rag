@@ -17,11 +17,7 @@ import re
 import time
 from datetime import datetime
 import random
-import requests
-
-# ─── BACKEND CONFIG ─────────────────────────────────────────────────
-BACKEND_URL = os.environ.get("PAEDIA_BACKEND_URL", "").rstrip("/")
-BACKEND_TIMEOUT = 6 
+from textwrap import dedent
 
 from api_client import PaediaAPIClient, APIConfig
 
@@ -41,7 +37,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
-.stApp { background-color: #F8F9FA; }
+.stApp {
+    background-color: #F8F9FA;
+    color: #1A1A2E;
+}
+
+div[data-testid="stAppViewContainer"],
+div[data-testid="stAppViewContainer"] p,
+div[data-testid="stAppViewContainer"] label,
+div[data-testid="stAppViewContainer"] [data-testid="stMarkdownContainer"] {
+    color: #1A1A2E;
+}
+
+div[data-testid="stAppViewContainer"] h1,
+div[data-testid="stAppViewContainer"] h2,
+div[data-testid="stAppViewContainer"] h3,
+div[data-testid="stAppViewContainer"] h4 {
+    color: #1B2A4A;
+}
 
 section[data-testid="stSidebar"] {
     background-color: #0F1B33;
@@ -54,6 +67,7 @@ section[data-testid="stSidebar"] .stMarkdown p,
 section[data-testid="stSidebar"] .stMarkdown span,
 section[data-testid="stSidebar"] .stCaption { color: #9AA0A6 !important; }
 section[data-testid="stSidebar"] .stMarkdown strong { color: #D4A843 !important; }
+section[data-testid="stSidebar"] button p { color: inherit !important; }
 
 .user-msg {
     background: linear-gradient(135deg, #0D9488 0%, #0A7A6F 100%);
@@ -118,12 +132,92 @@ section[data-testid="stSidebar"] .stMarkdown strong { color: #D4A843 !important;
 header {visibility: hidden;}
 footer {visibility: hidden;}
 
-.stButton > button { border-radius: 8px; font-weight: 500; transition: all 0.2s; }
+div[data-testid="stButton"] > button,
+div[data-testid="stFormSubmitButton"] > button,
+button[data-testid^="baseButton"] {
+    min-height: 44px !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+    opacity: 1 !important;
+}
+
+div[data-testid="stButton"] > button,
+button[data-testid="baseButton-secondary"] {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+    border: 1px solid #DADCE0 !important;
+    box-shadow: 0 1px 2px rgba(15, 27, 51, 0.08) !important;
+}
+
+div[data-testid="stButton"] > button:hover,
+button[data-testid="baseButton-secondary"]:hover {
+    background: #E6F7F5 !important;
+    color: #0A7A6F !important;
+    border-color: #0D9488 !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button[kind="primary"],
+button[data-testid="baseButton-primary"] {
+    background: #0D9488 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #0D9488 !important;
+    box-shadow: 0 2px 6px rgba(13, 148, 136, 0.22) !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover,
+button[data-testid="baseButton-primary"]:hover {
+    background: #0A7A6F !important;
+    border-color: #0A7A6F !important;
+}
+
+div[data-testid="stButton"] > button *,
+div[data-testid="stFormSubmitButton"] > button *,
+button[data-testid^="baseButton"] * {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #E8ECF4 !important;
+    border: 1px solid rgba(232, 236, 244, 0.14) !important;
+    box-shadow: none !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
+    background: rgba(13, 148, 136, 0.18) !important;
+    color: #FFFFFF !important;
+    border-color: rgba(13, 148, 136, 0.55) !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"] {
+    background: #0D9488 !important;
+    color: #FFFFFF !important;
+    border-color: #0D9488 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button * {
+    color: inherit !important;
+    opacity: 1 !important;
+}
+
 .stTextInput > div > div > input {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
     border-radius: 24px; padding: 12px 20px; border: 1px solid #E8EAED; font-size: 0.95rem;
 }
+.stTextInput > div > div > input::placeholder { color: #5F6368 !important; opacity: 1; }
 .stTextInput > div > div > input:focus {
     border-color: #0D9488; box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
+}
+
+.stSelectbox div[data-baseweb="select"] > div {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+    border-color: #E8EAED !important;
 }
 
 div[data-testid="stMetric"] {
@@ -137,6 +231,12 @@ div[data-testid="stMetric"] [data-testid="stMetricValue"] { color: #1B2A4A !impo
 
 
 # ─── LOAD DUMMY DATA ───────────────────────────────────────────────
+
+def render_html(markup: str) -> None:
+    """Render HTML without Markdown treating indented tags as code blocks."""
+    cleaned = "\n".join(line.lstrip() for line in dedent(markup).strip().splitlines())
+    st.markdown(cleaned, unsafe_allow_html=True)
+
 
 @st.cache_data
 def load_responses():
@@ -193,44 +293,6 @@ init_session_state()
 
 # ─── DUMMY BACKEND ──────────────────────────────────────────────────
 
-<<<<<<< HEAD:Team_Contributions/Anmoldeep Singh/app/main.py
-def _call_real_backend(query: str) -> dict | None:
-    """
-    POST /api/query to the Flask backend.
-    Returns the response dict on success, or None on any failure
-    (backend offline, timeout, unexpected error).
-    """
-    if not BACKEND_URL:
-        return None
-    try:
-        resp = requests.post(
-            f"{BACKEND_URL}/api/query",
-            json={"query": query, "course_id": "csit321"},
-            timeout=BACKEND_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        return None
- 
- 
-def _call_fixture_backend(query: str) -> dict:
-    """Original dummy logic — unchanged from Anmoldeep's prototype."""
-    if data:
-        for q, resp in data["responses"].items():
-            if query.lower().strip("?").strip() in q.lower() or q.lower() in query.lower():
-                return {**resp, "_source": "fixture"}
-        return {**data["fallback_response"], "_source": "fixture"}
-    return {
-        "answer": "I'm currently running in demo mode without the backend connected. This is a UI prototype.",
-        "source_references": [],
-        "confidence": 0.0,
-        "model_used": "ollama/llama3",
-        "token_count": 0,
-        "is_fallback": True,
-        "_source": "fixture",
-    }
-=======
 def get_ai_response(query: str) -> dict:
     """
     Query the RAG pipeline via the API client.
@@ -244,20 +306,21 @@ def get_ai_response(query: str) -> dict:
     course_id = st.session_state.get("course_id")
     session_id = st.session_state.get("session_id")
     return api.query(query, course_id=course_id or "", session_id=session_id)
->>>>>>> 946e665074b3fc66d2471900f32a82202f3994bf:apps/streamlit/main.py
-
-def get_ai_response(query: str) -> dict:
-    result = _call_real_backend(query)
-    if result is not None:
-        result.setdefault("_source", result.get("backend_mode", "real"))
-        return result
-    return _call_fixture_backend(query)
 
 
 def get_suggested_prompts() -> list:
     if data:
         return random.sample(data["suggested_prompts"], min(4, len(data["suggested_prompts"])))
     return ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
+
+
+def get_default_course_id(user: dict) -> str:
+    enrolled = user.get("enrolled_courses") or []
+    if enrolled:
+        return enrolled[0]
+    if data and data.get("courses"):
+        return data["courses"][0].get("course_id", "CSIT321")
+    return "CSIT321"
 
 
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
@@ -290,6 +353,7 @@ def render_login_page():
             if result.get("success"):
                 st.session_state.authenticated = True
                 st.session_state.user = result.get("user", {})
+                st.session_state.course_id = get_default_course_id(st.session_state.user)
                 if result.get("jwt_token"):
                     st.session_state.jwt_token = result["jwt_token"]
                 st.session_state.login_error = None
@@ -328,24 +392,6 @@ def render_sidebar():
     with st.sidebar:
         st.markdown("# 📚 Paedia")
         st.caption("AI Course Assistant")
-        st.divider()
-        
-        if BACKEND_URL:
-            try:
-                hresp = requests.get(f"{BACKEND_URL}/api/health", timeout=2)
-                hdata = hresp.json() if hresp.status_code == 200 else {}
-                if hdata.get("status") == "ok":
-                    _mode = hdata.get("mode", "fixture")
-                    _dot  = "🟢" if _mode == "real" else "🟡"
-                    _label = f"{_dot} Backend: {_mode} mode"
-                else:
-                    _label = "🔴 Backend: unreachable"
-            except Exception:
-                _label = "🔴 Backend: offline"
-        else:
-            _label = "⚪ Backend: demo mode"
-        st.caption(_label)
- 
         st.divider()
 
         # Build nav based on role
@@ -505,7 +551,7 @@ def render_chat_page():
                     model_used = _html.escape(msg.get("model_used", ""))
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
 
-                    st.markdown(f"""
+                    render_html(f"""
                     <div class="clearfix"><div class="{msg_class}">
                         {fallback_html}
                         {answer_html}
@@ -517,7 +563,7 @@ def render_chat_page():
                             Confidence: {conf_pct}% · {model_used} · {msg.get('timestamp', '')}{'  · 🟢 API' if msg.get('from_api') else ''}
                         </div>
                     </div></div>
-                    """, unsafe_allow_html=True)
+                    """)
 
             st.markdown("<br>", unsafe_allow_html=True)
             prompts = get_suggested_prompts()

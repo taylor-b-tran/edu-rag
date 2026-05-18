@@ -375,3 +375,13 @@ The state schema (messages, documents, auth) remains identical — only the rend
 - **Input sanitisation**: User queries are sanitised before sending to the backend. Prompt templates enforce course-scoping and citation rules in highest-priority system instructions (per OWASP LLM01:2025 guidance).
 - **Session expiry**: Sessions auto-expire after 30 minutes of inactivity (configurable in Streamlit config).
 - **Audit logging**: All significant events (login, query, upload, admin actions) are written to the AuditLog table with user_id, event_type, event_data (JSONB), and ip_address.
+
+---
+
+## 10. Sprint 5 UI Evidence Reference
+
+The A3 interface evidence set under `docs/a3_interface_demo/` shows the expected
+fixture-backed UI states for login, chat with citations, fallback response,
+document upload, role-specific navigation, and course switching. Use it as a
+state-behaviour reference only; real-time session history, upload progress, and
+live ChromaDB/Ollama responses still require Sprint 5 integration validation.
