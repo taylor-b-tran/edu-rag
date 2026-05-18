@@ -12,4 +12,6 @@ __MACOSX/
 ~$*.docx
 data/samples/
 apps/integration/logs/
-assessment2_artifacts/
+AGENTS.md
+.agents/
+.ai/
