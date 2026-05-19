@@ -51,22 +51,7 @@ jobs:
       - name: Validate Sprint 5 demo service contract
         run: |
           docker compose -f docker-compose.yml config --format json > compose.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          compose = json.loads(Path("compose.json").read_text(encoding="utf-8"))
-          services = compose.get("services", {})
-          required = {"postgres", "chromadb", "ollama", "api", "streamlit"}
-          missing = sorted(required - set(services))
-          if missing:
-              raise SystemExit(f"missing demo services: {', '.join(missing)}")
-
-          if "api" not in services["streamlit"].get("depends_on", {}):
-              raise SystemExit("streamlit service must depend on api")
-
-          print("Sprint 5 demo service contract is present")
-          PY
+          python3 scripts/sprint5_integration_gate.py --compose-json compose.json
 
       - name: Build and start demo services
         run: docker compose up -d --build postgres chromadb ollama api streamlit
