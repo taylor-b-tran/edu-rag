@@ -1,6 +1,6 @@
 import re
 import math
-import struct
+import warnings
 from typing import List
 
 DIM = 384
@@ -17,6 +17,14 @@ _STOPWORDS = frozenset({
     "he","she","him","her","his","its","been","only","other","about",
 })
 
+_OFFLINE_WARNING = """\
+OfflineEmbedder ACTIVE – DEGRADED RETRIEVAL QUALITY
+sentence-transformers is not installed or failed to load.
+The FNV-1a hash embedder is a keyword-overlap approximation only.
+Semantic similarity scores will be unreliable.
+To restore full quality: 
+pip install sentence-transformers 
+"""
 
 def _fnv1a_hash(text: str) -> int:
     """FNV-1a 32-bit hash – fast, low collision, deterministic."""
@@ -28,7 +36,6 @@ def _fnv1a_hash(text: str) -> int:
 
 
 def _tokenise(text: str) -> List[str]:
-    """Lowercase, remove punctuation, filter stopwords."""
     tokens = re.findall(r"[a-z0-9_\-]{2,}", text.lower())
     return [t for t in tokens if t not in _STOPWORDS]
 
@@ -70,9 +77,25 @@ def embed_batch(texts: List[str], dim: int = DIM) -> List[List[float]]:
 
 
 class OfflineEmbedder:
-    """Drop-in replacement for SentenceTransformer in offline environments."""
+    """
+    Drop-in replacement for SentenceTransformer in offline / no-dependency
+    environments.  Prints a prominent warning on first instantiation so the
+    operator knows retrieval quality is degraded.
+    """
 
     MODEL_NAME = "all-MiniLM-L6-v2-offline"
+    _warned    = False   # class-level flag – warn once per process
+
+    def __init__(self):
+        if not OfflineEmbedder._warned:
+            print(_OFFLINE_WARNING, flush=True)
+            warnings.warn(
+                "OfflineEmbedder active: retrieval quality is degraded. "
+                "Install sentence-transformers for production use.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            OfflineEmbedder._warned = True
 
     def encode(self, text_or_texts, normalize_embeddings: bool = True) -> List:
         if isinstance(text_or_texts, str):
@@ -80,6 +103,10 @@ class OfflineEmbedder:
         return embed_batch(text_or_texts)
 
     def get_sentence_embedding_dimension(self) -> int:
+        return DIM
+    
+    # Alias for newer sentence-transformers API compatibility
+    def get_embedding_dimension(self) -> int:
         return DIM
 
 
@@ -90,8 +117,8 @@ if __name__ == "__main__":
     v3 = e.encode("The best chocolate cake recipe uses butter and sugar")
 
     def cosine(a, b):
-        dot = sum(x*y for x,y in zip(a,b))
-        return dot   # already unit vectors
+        return sum(x * y for x, y in zip(a, b))
+    
     print(f"RAG vs RAG-like  : {cosine(v1,v2):.4f}  (should be high)")
     print(f"RAG vs cake      : {cosine(v1,v3):.4f}  (should be low)")
     print(f"Vector length    : {len(v1)}")
