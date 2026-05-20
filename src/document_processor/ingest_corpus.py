@@ -17,6 +17,10 @@ SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   # 1 âˆ
 DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65"))   # rag_config.md value
 
 def _load_embedder():
+    if os.getenv("EDURAG_OFFLINE_EMBEDDER"):
+        from src.document_processor.offline_embedder import OfflineEmbedder
+        model = OfflineEmbedder()
+        return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -28,10 +32,10 @@ def _load_embedder():
         return model, "all-MiniLM-L6-v2", dim
     except Exception as exc:
         print(
-            f"WARNING: SentenceTransformer unavailable ({type(exc).__name__})          â•‘\n"
-            f" Falling back to OfflineEmbedder (FNV-1a hash, dim=384). \n"
-            f" Retrieval quality will be significantly lower. \n"
-            f" Install sentence-transformers to restore full quality. \n"
+            f"WARNING: SentenceTransformer unavailable ({type(exc).__name__})\n"
+            f" Falling back to OfflineEmbedder (FNV-1a hash, dim=384).\n"
+            f" Retrieval quality will be significantly lower.\n"
+            f" Install sentence-transformers to restore full quality.\n"
         )
         from src.document_processor.offline_embedder import OfflineEmbedder
         model = OfflineEmbedder()
