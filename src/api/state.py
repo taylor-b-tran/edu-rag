@@ -34,10 +34,20 @@ class APIState:
     sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
     indexing_jobs: dict[str, dict[str, Any]] = field(default_factory=dict)
     uploaded_documents: list[dict[str, Any]] = field(default_factory=list)
+    _retriever: Any = field(default=None, init=False, repr=False)
+    _generator: Any = field(default=None, init=False, repr=False)
 
     @property
     def fixture_loaded(self) -> bool:
         return bool(self.fixtures)
+
+    def get_generator(self):
+        if self._generator is None:
+            from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
+            self._retriever = VectorRetriever()
+            self._generator = LLMResponseGeneration(retriever=self._retriever)
+            print("  [APIState] RAG pipeline initialised.")
+        return self._generator
 
     def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
         access_token = f"dev_access_{secrets.token_urlsafe(24)}"

@@ -1,0 +1,81 @@
+{
+  "results": [
+    {
+      "id": "Q01",
+      "category": "Easy Factual",
+      "question": "What is Retrieval-Augmented Generation (RAG)?",
+      "chunks_found": 5,
+      "source_hit": true,
+      "keyword_pass": true,
+      "fallback_pass": true,
+      "is_fallback": false,
+      "confidence": "High",
+      "conf_score": 0.521,
+      "latency_ms": 27,
+      "overall_pass": true
+    },
+    {
+      "id": "Q02",
+      "category": "Easy Factual",
+      "question": "What embedding model does EduRAG use and what is its dimension?",
+      "chunks_found": 5,
+      "source_hit": true,
+      "keyword_pass": false,
+      "fallback_pass": true,
+      "is_fallback": false,
+      "confidence": "Medium",
+      "conf_score": 0.397,
+      "latency_ms": 15,
+      "overall_pass": false
+    },
+    {
+      "id": "Q03",
+      "category": "Hard Reasoning",
+      "question": "Why was ChromaDB chosen over FAISS for EduRAG, and how does course_id metadata filtering prevent cross-course retrieval leakage?",
+      "chunks_found": 5,
+      "source_hit": true,
+      "keyword_pass": true,
+      "fallback_pass": true,
+      "is_fallback": false,
+      "confidence": "High",
+      "conf_score": 0.554,
+      "latency_ms": 10,
+      "overall_pass": true
+    },
+    {
+      "id": "Q04",
+      "category": "Applied / Procedural",
+      "question": "How does EduRAG handle a student question when no retrieved chunk exceeds the similarity threshold?",
+      "chunks_found": 5,
+      "source_hit": true,
+      "keyword_pass": true,
+      "fallback_pass": true,
+      "is_fallback": false,
+      "confidence": "High",
+      "conf_score": 0.614,
+      "latency_ms": 9,
+      "overall_pass": true
+    },
+    {
+      "id": "Q05",
+      "category": "Off-topic / Fallback",
+      "question": "What is the best recipe for chocolate cake and how long should I bake it?",
+      "chunks_found": 0,
+      "source_hit": true,
+      "keyword_pass": true,
+      "fallback_pass": true,
+      "is_fallback": true,
+      "confidence": "Low",
+      "conf_score": 0.0,
+      "latency_ms": 9,
+      "overall_pass": true
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 4,
+    "pass_rate": 0.8,
+    "avg_latency_ms": 14.0,
+    "mode": "retrieval-only"
+  }
+}
