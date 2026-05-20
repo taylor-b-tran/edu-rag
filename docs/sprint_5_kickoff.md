@@ -292,3 +292,32 @@ Follow-up local Docker validation:
 - Local smoke checks passed for PostgreSQL `pg_isready`, ChromaDB heartbeat,
   Ollama `/api/tags`, Flask `/api/health`, Streamlit `/_stcore/health`, and the
   `tools` profile Python container.
+
+## 14. Sprint 5 Integration Gate - 19 May 2026
+
+Thanh's final integration gate is now backed by `scripts/sprint5_integration_gate.py`.
+The gate is intentionally lightweight so it can run in both the normal Python CI
+job and the Docker demo workflow.
+
+The gate checks:
+
+- no committed text files contain unresolved merge-conflict markers;
+- no old misspelled `itegration/` paths are tracked;
+- no raw `data/samples/` binaries are tracked without an explicit policy change;
+- no local agent metadata paths are tracked;
+- the Docker Compose demo contract still contains `postgres`, `chromadb`,
+  `ollama`, `api`, and `streamlit`;
+- the `api` service depends on PostgreSQL, ChromaDB, and Ollama;
+- the `streamlit` service depends on the API service;
+- the API and Streamlit services expose health checks.
+
+The normal CI workflow runs the hygiene side of the gate before pytest. The
+Docker Compose validation job and Docker demo workflow pass rendered Compose
+JSON into the same gate to validate the service contract from the actual
+Compose output.
+
+The seeded corpus ingestion module was also corrected so it imports the current
+`fixtures.seed_documents` dataset and the local offline embedder from
+`src.document_processor.offline_embedder`. Tests now cover the gate helpers and
+the offline seeded-ingestion import path, which gives S5-T04 a repeatable local
+check before the final demo rehearsal.

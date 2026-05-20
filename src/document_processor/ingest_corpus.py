@@ -13,8 +13,8 @@ COLLECTION  = "csit321_course"
 COURSE_ID   = "CSIT321"
  
 # ── Threshold ──
-SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   # 1 − 0.65
-DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65"))   # rag_config.md value
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   
+DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65")) 
 
 def _load_embedder():
     if os.getenv("EDURAG_OFFLINE_EMBEDDER"):

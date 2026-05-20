@@ -1,52 +1,52 @@
 # EduRAG Sample Course Material Manifest
 
-**Sprint 3 Â· Group 19 Â· CSIT321 Project 37 Â· University of Wollongong**
-**Prepared by:** Tung Phuong Anh Huynh
-**Last updated:** 20 April 2026
+**Sprint 3 · Group 19 · CSIT321 Project 37 · University of Wollongong**  
+**Prepared by:** Tung Phuong Anh Huynh  
+**Last updated:** 15 May 2026
 
-> **Storage location:** `data/samples/` (gitignored â€” do not commit raw files to the repository)
+> **Storage location:** `data/samples/` (gitignored — do not commit raw files to the repository)
 
 ---
 
 ## Where to Get These Files
 
-### Group A â€” From inside CSIT321 (Moodle)
+### Group A — From inside CSIT321 (Moodle)
 
-Log in to Moodle with your UOW student account, go to the CSIT321 subject page, and download directly from the weekly lecture sections. No external link needed â€” you are enrolled so you have access.
+Log in to Moodle with your UOW student account, go to the CSIT321 subject page, and download directly from the weekly lecture sections. No external link needed — you are enrolled so you have access.
 
 | # | Save the file as | Where to find it on Moodle | Format |
 |---|-----------------|---------------------------|--------|
-| 1 | `csit321_week1_lecture.pdf` | Week 1 â†’ "Week 1 Lecture Slides â€“ Autumn" | PDF |
-| 2 | `csit321_week1_ip_bethany.pdf` | Week 1 â†’ "Intellectual Property by Bethany Pons" | PDF |
-| 3 | `csit321_week2_lecture.pdf` | Week 2 â†’ "Week 2 Lecture â€“ Autumn" | PDF |
-| 4 | `csit321_week3_lecture.pdf` | Week 3 â†’ "Week 3 Lecture â€“ Autumn" | PDF |
-| 5 | `csit321_week3_uxui_genai.pdf` | Week 3 â†’ "UX/UI Design in the Age of GenAI" | PDF |
-| 6 | `csit321_code_of_conduct.pdf` | Course Resources â†’ "Code-of-Professional-Conduct v2.1" | PDF |
+| 1 | `csit321_week1_lecture.pdf` | Week 1 → "Week 1 Lecture Slides — Autumn" | PDF |
+| 2 | `csit321_week1_ip_bethany.pdf` | Week 1 → "Intellectual Property by Bethany Pons" | PDF |
+| 3 | `csit321_week2_lecture.pdf` | Week 2 → "Week 2 Lecture — Autumn" | PDF |
+| 4 | `csit321_week3_lecture.pdf` | Week 3 → "Week 3 Lecture — Autumn" | PDF |
+| 5 | `csit321_week3_uxui_genai.pdf` | Week 3 → "UX/UI Design in the Age of GenAI" | PDF |
+| 6 | `csit321_code_of_conduct.pdf` | Course Resources → "Code-of-Professional-Conduct v2.1" | PDF |
 
-> These files are downloaded by enrolled students for their own study â€” this is standard educational fair use. Do **not** share them outside the team or commit them to a public repository.
+> These files are downloaded by enrolled students for their own study — this is standard educational fair use. Do **not** share them outside the team or commit them to a public repository.
 
 ---
 
-### Group B â€” Freely available online (direct PDF links â€” no login required)
+### Group B — Freely available online (direct PDF links — no login required)
 
-All links below open a PDF directly in your browser. Right-click â†’ Save As to download. No login, no paywall.
+All links below open a PDF directly in your browser. Right-click → Save As to download. No login, no paywall.
 
 #### EduRAG-related: RAG, LLMs, Embeddings
 
 | # | Save the file as | Direct PDF link | Source | License | ~Pages |
 |---|-----------------|----------------|--------|---------|--------|
-| 7 | `rag_survey_gao_2024.pdf` | https://arxiv.org/pdf/2312.10997 | arXiv â€” *RAG for Large Language Models: A Survey*, Gao et al. 2023 | Open access | ~21 |
-| 8 | `rag_from_pdfs_guide.pdf` | https://arxiv.org/pdf/2410.15944 | arXiv â€” *Developing RAG Systems from PDFs: An Experience Report* | Open access | ~36 |
-| 9 | `rag_original_paper.pdf` | https://arxiv.org/pdf/2005.11401 | arXiv â€” *RAG for Knowledge-Intensive NLP Tasks*, Lewis et al. (the original RAG paper) | Open access | ~20 |
-| 10 | `embeddings_nlp_book.pdf` | https://josecamachocollados.com/book_embNLP_draft.pdf | Open draft textbook â€” *Embeddings in NLP*, Camacho-Collados | Free draft | ~164 (use ch.1â€“3 only) |
+| 7 | `rag_survey_gao_2024.pdf` | https://arxiv.org/pdf/2312.10997 | arXiv — *RAG for Large Language Models: A Survey*, Gao et al. 2023 | Open access | ~21 |
+| 8 | `rag_from_pdfs_guide.pdf` | https://arxiv.org/pdf/2410.15944 | arXiv — *Developing RAG Systems from PDFs: An Experience Report* | Open access | ~36 |
+| 9 | `rag_original_paper.pdf` | https://arxiv.org/pdf/2005.11401 | arXiv — *RAG for Knowledge-Intensive NLP Tasks*, Lewis et al. (the original RAG paper) | Open access | ~20 |
+| 10 | `embeddings_nlp_book.pdf` | https://josecamachocollados.com/book_embNLP_draft.pdf | Open draft textbook — *Embeddings in NLP*, Camacho-Collados | Free draft | ~164 (use ch.1–3 only) |
 
 #### Related to CSIT321 topics: Software Engineering, Databases
 
 | # | Save the file as | Direct PDF link | Source | License | ~Pages |
 |---|-----------------|----------------|--------|---------|--------|
-| 11 | `software_eng_lecture_mrcet.pdf` | https://mrcet.com/downloads/digital_notes/CSE/III%20Year/Software%20Engineering.pdf | MRCET open lecture notes â€” Software Engineering (covers agile, requirements, architecture) | Open university notes | ~166 |
-| 12 | `databases_cambridge_lectures.pdf` | https://www.cl.cam.ac.uk/teaching/2324/Databases/djg-materials/databases_2324_1to8-D.pdf | Cambridge University â€” *Introduction to Databases* lectures 1â€“8, Greaves 2023 | Open academic material | ~171 |
-| 13 | `stanford_nlp_embeddings.pdf` | https://web.stanford.edu/~jurafsky/slp3/6.pdf | Stanford â€” *Speech and Language Processing* Ch.6 (neural nets & embeddings), Jurafsky & Martin | Open draft textbook | ~28 |
+| 11 | `software_eng_lecture_mrcet.pdf` | https://mrcet.com/downloads/digital_notes/CSE/III%20Year/Software%20Engineering.pdf | MRCET open lecture notes — Software Engineering (covers agile, requirements, architecture) | Open university notes | ~166 |
+| 12 | `databases_cambridge_lectures.pdf` | https://www.cl.cam.ac.uk/teaching/2324/Databases/djg-materials/databases_2324_1to8-D.pdf | Cambridge University — *Introduction to Databases* lectures 1–8, Greaves 2023 | Open academic material | ~171 |
+| 13 | `stanford_nlp_embeddings.pdf` | https://web.stanford.edu/~jurafsky/slp3/6.pdf | Stanford — *Speech and Language Processing* Ch.6 (neural nets & embeddings), Jurafsky & Martin | Open draft textbook | ~28 |
 
 ---
 
@@ -63,13 +63,13 @@ All links below open a PDF directly in your browser. Right-click â†’ Save A
 | 7 | `rag_survey_gao_2024.pdf` | arXiv | Open access | ~21 | RAG pipeline architecture, retrieval strategies, LLM grounding | Academic two-column, footnotes, references |
 | 8 | `rag_from_pdfs_guide.pdf` | arXiv | Open access | ~36 | RAG from PDFs end-to-end, chunking, embedding, generation | Academic paper, code snippets |
 | 9 | `rag_original_paper.pdf` | arXiv | Open access | ~20 | Original RAG paper: retriever, generator, training | Dense academic, equations |
-| 10 | `embeddings_nlp_book.pdf` | Open textbook draft | Free draft | ~164 (ch.1â€“3) | Word embeddings, sentence embeddings, vector spaces | Textbook layout, figures, tables |
+| 10 | `embeddings_nlp_book.pdf` | Open textbook draft | Free draft | ~164 (ch.1–3) | Word embeddings, sentence embeddings, vector spaces | Textbook layout, figures, tables |
 | 11 | `software_eng_lecture_mrcet.pdf` | MRCET open notes | Open university notes | ~166 (first half) | Agile, waterfall, requirements, design patterns, testing | Long prose, numbered sections |
 | 12 | `databases_cambridge_lectures.pdf` | Cambridge University | Open academic | ~171 | Relational model, SQL, ER diagrams, NoSQL | Slides + prose, tables, code blocks |
 | 13 | `stanford_nlp_embeddings.pdf` | Stanford (open draft) | Open draft textbook | ~28 | Neural nets, word embeddings, feedforward networks | Textbook, figures, equations |
 
 **Total corpus: ~810 pages across 13 files**
-*(For the PoC notebook you only need 1 file to start â€” recommend `csit321_week3_lecture.pdf` or `rag_survey_gao_2024.pdf`)*
+*(For the PoC notebook you only need 1 file to start — recommend `csit321_week3_lecture.pdf` or `rag_survey_gao_2024.pdf`)*
 
 ---
 
@@ -90,14 +90,14 @@ All links below open a PDF directly in your browser. Right-click â†’ Save A
 
 ---
 
-*Document maintained by: Tung Phuong Anh Huynh â€” CSIT321 Project 37, Group 19*
+*Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
 
 ---
 
 ## Sprint 4 Corpus Expansion Candidates (Task 16)
 
-**Added by:** Tung Phuong Anh Huynh
-**Reviewed in sandbox:** 11 May 2026
+**Added by:** Tung Phuong Anh Huynh  
+**Reviewed in sandbox:** 11 May 2026  
 **Purpose:** Extend the sample corpus with DOCX and PPTX formats so Ngoc's multi-format chunker extension and Tung's API test evidence can be checked against non-PDF inputs.
 
 > These files are listed as local sample inputs. Because `data/samples/` is ignored, the team should confirm whether to keep binary sample files outside Git or explicitly approve tracking them before merging.
@@ -122,4 +122,4 @@ The committed branch text claimed chunk counts using a `512/50 overlap` setup an
 
 The binary sample files were kept as local ignored inputs, not tracked Git content. Merge only this manifest evidence unless the team explicitly approves committing raw files under `data/samples/`.
 
-*Document maintained by: Tung Phuong Anh Huynh - CSIT321 Project 37, Group 19*
+*Document maintained by: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
