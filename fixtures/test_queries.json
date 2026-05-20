@@ -1,0 +1,162 @@
+[
+  {
+    "id": "Q001",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What embedding model is used in the rag_poc notebook?",
+    "expected_answer": "The notebook uses sentence-transformers/all-MiniLM-L6-v2 for embeddings.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q002",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What is the embedding vector dimension produced by the model?",
+    "expected_answer": "The embedding dimension is 384.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q003",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What vector database is used to store embeddings?",
+    "expected_answer": "The notebook uses ChromaDB as the vector database.",
+    "source_topic": "Vector Database"
+  },
+  {
+    "id": "Q004",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What source file is ingested into the RAG pipeline?",
+    "expected_answer": "The source document is book_embNLP_draft.pdf.",
+    "source_topic": "PDF Ingestion"
+  },
+  {
+    "id": "Q005",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What chunk size is configured for splitting the document?",
+    "expected_answer": "The configured chunk size is 1024 characters.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q006",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What chunk overlap is configured in the notebook?",
+    "expected_answer": "The configured chunk overlap is 0.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q007",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "How many top matching chunks are retrieved during search?",
+    "expected_answer": "The system retrieves the top 5 chunks.",
+    "source_topic": "Retrieval"
+  },
+  {
+    "id": "Q008",
+    "category": "easy_factual",
+    "difficulty": 1,
+    "question": "What relevance threshold is used to trigger fallback behavior?",
+    "expected_answer": "The relevance distance threshold is 0.65.",
+    "source_topic": "Fallback"
+  },
+  {
+    "id": "Q009",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "Why are embeddings used in a RAG system?",
+    "expected_answer": "Embeddings convert text into numerical vectors so semantic similarity search can be performed.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q010",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "Why is chunking necessary before storing the PDF in the vector database?",
+    "expected_answer": "Chunking breaks long documents into smaller searchable pieces that improve retrieval accuracy.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q011",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "Why is ChromaDB suitable for this proof-of-concept project?",
+    "expected_answer": "ChromaDB efficiently stores embeddings and supports fast similarity search for retrieval.",
+    "source_topic": "Vector Database"
+  },
+  {
+    "id": "Q012",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "Why does retrieving the top 5 chunks improve answer generation?",
+    "expected_answer": "It provides the language model with the most relevant context instead of the entire document.",
+    "source_topic": "Retrieval"
+  },
+  {
+    "id": "Q013",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "What happens if the Ollama model is unavailable during generation?",
+    "expected_answer": "The notebook falls back to a deterministic extractive answer using retrieved text.",
+    "source_topic": "Generation"
+  },
+  {
+    "id": "Q014",
+    "category": "medium_reasoning",
+    "difficulty": 2,
+    "question": "Why are normalized embeddings useful during retrieval?",
+    "expected_answer": "Normalization improves cosine similarity comparison between vectors.",
+    "source_topic": "Embeddings"
+  },
+  {
+    "id": "Q015",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "Why should unrelated questions such as weather queries trigger fallback responses?",
+    "expected_answer": "Because they are outside the document scope and no relevant chunks should be retrieved.",
+    "source_topic": "Fallback"
+  },
+  {
+    "id": "Q016",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "How does RAG reduce hallucinations compared with prompting an LLM alone?",
+    "expected_answer": "RAG grounds responses in retrieved source text instead of relying only on model memory.",
+    "source_topic": "RAG Theory"
+  },
+  {
+    "id": "Q017",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "What trade-off might occur if chunk size is made too small?",
+    "expected_answer": "Small chunks may lose context and reduce answer quality even if retrieval becomes precise.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q018",
+    "category": "hard_reasoning",
+    "difficulty": 3,
+    "question": "What trade-off might occur if chunk size is made too large?",
+    "expected_answer": "Large chunks may contain noise and reduce retrieval precision.",
+    "source_topic": "Chunking"
+  },
+  {
+    "id": "Q019",
+    "category": "edge_case",
+    "difficulty": 3,
+    "question": "What should the system do if the PDF contains no readable text?",
+    "expected_answer": "The system should report extraction failure or return no usable chunks for indexing.",
+    "source_topic": "PDF Ingestion"
+  },
+  {
+    "id": "Q020",
+    "category": "edge_case",
+    "difficulty": 3,
+    "question": "What should happen if no retrieved chunk passes the relevance threshold?",
+    "expected_answer": "The system should return a fallback response indicating insufficient relevant information.",
+    "source_topic": "Fallback"
+  }
+]

@@ -182,6 +182,10 @@ Sprint 5 starts using GitHub Actions as a demo-readiness gate:
 - `.github/workflows/docker-demo.yml` can be run manually before demo rehearsal
   and smoke-tests PostgreSQL, ChromaDB, Ollama service readiness, Flask API
   health, Streamlit health, and the tools container.
+- `scripts/sprint5_integration_gate.py` is shared by CI and the Docker workflow
+  to catch unresolved merge-conflict markers, unsafe tracked sample binaries,
+  old `itegration/` paths, and Compose service-contract drift before demo
+  recording.
 
 This is not a public deployment pipeline yet. It is a controlled local-demo
 pipeline so the team can prove the infrastructure layer is reproducible before

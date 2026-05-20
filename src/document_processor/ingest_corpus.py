@@ -13,8 +13,8 @@ COLLECTION  = "csit321_course"
 COURSE_ID   = "CSIT321"
  
 # ── Threshold ──
-SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   # 1 − 0.65
-DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65"))   # rag_config.md value
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   
+DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65")) 
 
 def _load_embedder():
     try:
@@ -28,7 +28,7 @@ def _load_embedder():
         return model, "all-MiniLM-L6-v2", dim
     except Exception as exc:
         print(
-            f"WARNING: SentenceTransformer unavailable ({type(exc).__name__})          ║\n"
+            f"WARNING: SentenceTransformer unavailable ({type(exc).__name__}) \n"
             f" Falling back to OfflineEmbedder (FNV-1a hash, dim=384). \n"
             f" Retrieval quality will be significantly lower. \n"
             f" Install sentence-transformers to restore full quality. \n"
