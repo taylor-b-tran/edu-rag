@@ -58,7 +58,7 @@ def query():
         return jsonify({"error": "Not enrolled in this course."}), 403
 
     started = time.time()
-    result = _state().query_fixture(question)
+    result = _state().get_generator().generate(question, course_id=course_id)
     session_id = _state().record_session_message(
         session_id=session_id,
         user_id=user.get("user_id"),
@@ -69,7 +69,7 @@ def query():
     result.update(
         {
             "session_id": session_id,
-            "backend_mode": "fixture",
+            "backend_mode": "chromadb",
             "latency_ms": round((time.time() - started) * 1000),
         }
     )
