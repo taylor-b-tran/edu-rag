@@ -12,6 +12,7 @@ __MACOSX/
 ~$*.docx
 data/samples/
 apps/integration/logs/
+chroma_data/
 AGENTS.md
 .agents/
 .ai/
