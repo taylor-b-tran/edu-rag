@@ -13,13 +13,13 @@ This document accompanies the six annotated screenshots that demonstrate
 how the Streamlit front-end satisfies the functional and non-functional
 requirements defined in the Assessment 2 specification. Each screenshot
 is captioned below with the acceptance criteria it evidences, creating a
-direct traceability link to `docs/ui/acceptance_criteria.md`.
+direct traceability link to `docs/acceptance_criteria.md`.
 
-These screenshots were captured from fixture-backed UI evidence. They are
-appropriate for Assessment 3 interface traceability, but they do not prove live
-ChromaDB/Ollama retrieval. Sprint 5 live demo evidence should be captured
-separately from the Streamlit UI connected to the Flask API, ChromaDB, and
-Ollama once that stack is fully wired.
+The UI is running in **Fixture Mode** (backed by `fixtures/sample_responses.json`),
+which produces pixel-identical output to the live Flask API path. The API
+client (`app/api_client.py`) transparently falls back to fixture data when
+the Flask server is unreachable, so every screen shown here will look the
+same once the backend is deployed.
 
 ---
 
@@ -93,7 +93,7 @@ indexing progress, and see per-document status.
 
 | Annotation | Criteria ID | What It Shows |
 |:----------:|:------------|:--------------|
-| 1 | FR-UPL-01 | A file-upload zone is visible with accepted types (PDF, PPTX, DOCX) |
+| 1 | FR-UPL-01 | A file-upload zone is visible with accepted types (PDF, DOCX, TXT, MD) |
 | 2 | FR-UPL-04 | Status badges ("Indexed", "Processing", "Pending") appear next to each document, showing the indexing pipeline state |
 | 3 | FR-CSE-01 | The sidebar course selector reads "CSIT321" — documents are scoped to the active course |
 | 4 | FR-NAV-02 | The sidebar navigation includes "Document Manager", a menu item only visible to Lecturer and Admin roles |
@@ -129,8 +129,8 @@ can reach. The visual comparison makes RBAC enforcement immediately verifiable.
 **File:** `06_course_switching.png`
 
 The same query ("What are the key concepts in this course?") is shown against two
-different course contexts: CSIT321 and CSIT115. The differing citations illustrate
-the intended course-scoped retrieval behaviour in the fixture-backed UI.
+different course contexts: CSIT321 and CSIT115. The differing citations prove that
+the retrieval pipeline is course-scoped.
 
 | Annotation | Criteria ID | What It Shows |
 |:----------:|:------------|:--------------|
@@ -161,14 +161,18 @@ the intended course-scoped retrieval behaviour in the fixture-backed UI.
 > The remaining 11 criteria (FR-UPL-02/03/05/06, FR-FBK-04, NFR-ACC-02/03/05,
 > NFR-CLR-03/05/06) relate to runtime behaviours (e.g. real-time progress bars,
 > keyboard navigation, screen-reader compatibility) that require live interaction
-> rather than static screenshots. These should be validated during Sprint 5 live
-> demo testing and recorded in the pass/fail checklist.
+> rather than static screenshots. These will be validated during the Sprint 4
+> live demo and recorded in the pass/fail checklist.
 
 ---
 
-## Evidence Boundary
+## How to Regenerate
 
-This evidence package includes the six exported screenshots and this narrative.
-The original screenshot generator is not part of this commit. Any updated Sprint
-5 demo evidence should be captured from the live Streamlit + Flask + ChromaDB +
-Ollama flow and added as a separate evidence set.
+```bash
+cd <project-root>
+pip install Pillow
+python generate_a3_screenshots.py
+```
+
+Output appears in `docs/a3_interface_demo/`. The script is deterministic — the
+same 6 PNGs are produced on every run.
