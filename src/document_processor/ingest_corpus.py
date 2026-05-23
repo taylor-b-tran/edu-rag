@@ -1,6 +1,5 @@
 import os, time
-import chromadb
-from chromadb.config import Settings
+# chromadb imported lazily inside get_chroma_client() — CI has no chromadb installed
 from src.document_processor.seed_documents import SEED_DOCUMENTS
 
 # ── ChromaDB connection ──
@@ -41,7 +40,9 @@ def _load_embedder():
         model = OfflineEmbedder()
         return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
 
-def get_chroma_client() -> chromadb.ClientAPI:
+def get_chroma_client():
+    import chromadb                        # lazy import
+    from chromadb.config import Settings   # lazy import
     if CHROMA_HOST:
         print(f"[INFO] Connecting to ChromaDB HTTP service at {CHROMA_HOST}:{CHROMA_PORT}")
         return chromadb.HttpClient(
@@ -52,7 +53,7 @@ def get_chroma_client() -> chromadb.ClientAPI:
     print(f"[INFO] Using local ChromaDB PersistentClient at {CHROMA_PATH}")
     return chromadb.PersistentClient(path=CHROMA_PATH)
 
-def get_or_create_collection(client: chromadb.ClientAPI):
+def get_or_create_collection(client):
     return client.get_or_create_collection(
         name=COLLECTION,
         metadata={"hnsw:space": "cosine"},

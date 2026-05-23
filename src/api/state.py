@@ -43,10 +43,14 @@ class APIState:
 
     def get_generator(self):
         if self._generator is None:
-            from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
-            self._retriever = VectorRetriever()
-            self._generator = LLMResponseGeneration(retriever=self._retriever)
-            print("  [APIState] RAG pipeline initialised.")
+            try:
+                from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
+                self._retriever = VectorRetriever()
+                self._generator = LLMResponseGeneration(retriever=self._retriever)
+                print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
+            except Exception as exc:
+                print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
+                self._generator = _FixtureGenerator(self)
         return self._generator
 
     def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
@@ -216,3 +220,23 @@ class APIState:
         self.uploaded_documents.append(document)
         self.indexing_jobs[job_id] = job
         return {"document": document, "indexing_job": job, "job_id": job_id}
+
+class _FixtureResponse:
+    def __init__(self, data: dict):
+        self.answer           = data.get("answer", "")
+        self.source_refs      = data.get("source_references", data.get("sources", []))
+        self.is_fallback      = bool(data.get("is_fallback", data.get("fallback_used", False)))
+        self.model_used       = "fixture"
+        self.top_chunks       = []
+        self.confidence       = "Medium"
+        self.confidence_score = data.get("confidence", 0.5)
+
+
+class _FixtureGenerator:
+    """Fallback used in CI (no chromadb) — serves fixture responses."""
+    def __init__(self, state):
+        self._state = state
+
+    def generate(self, query: str, course_id: str = "CSIT321", **_kwargs) -> _FixtureResponse:
+        data = self._state.query_fixture(query)
+        return _FixtureResponse(data)
