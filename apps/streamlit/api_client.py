@@ -10,7 +10,7 @@ Endpoints (defined in Assessment 2, Section: WebApplication):
   POST /api/auth/login        → JWT + user profile
   POST /api/auth/refresh      → new JWT from refresh token
   POST /api/query             → RAG pipeline query
-  POST /api/upload            → document upload + indexing
+  POST /api/documents/upload  → document upload + indexing
   GET  /api/documents         → list documents (course_id scoped)
   GET  /api/sessions          → list chat sessions
   GET  /api/sessions/<id>     → get session messages
@@ -44,7 +44,7 @@ class APIConfig:
     base_url: str = os.getenv("PAEDIA_API_URL", "http://localhost:5000")
     timeout: int = int(os.getenv("PAEDIA_API_TIMEOUT", "10"))
     max_retries: int = int(os.getenv("PAEDIA_API_RETRIES", "2"))
-    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "false").lower() == "true"
+    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "true").lower() == "true"
 
 
 # ─── FIXTURE LOADER ──────────────────────────────────────────────────
@@ -222,27 +222,15 @@ class PaediaAPIClient:
         if result and result.get("access_token"):
             self._jwt_token = result["access_token"]
             self._refresh_token = result.get("refresh_token")
-            user = result.get("user", {})
-            if user.get("role"):
-                user["role"] = str(user["role"]).capitalize()
             return {
                 "success": True,
-                "user": user,
+                "user": result.get("user", {}),
                 "jwt_token": self._jwt_token,
                 "error": None,
             }
 
-        # Fixture fallback — validate against demo_users passwords
-        if self._fixtures:
-            for u in self._fixtures.get("demo_users", []):
-                if u.get("email", "").lower() == email.lower():
-                    if u.get("password") == password:
-                        profile = {k: v for k, v in u.items() if k != "password"}
-                        profile.setdefault("name", u.get("username", email))
-                        profile["role"] = profile.get("role", "student").capitalize()
-                        return {"success": True, "user": profile, "jwt_token": None, "error": None}
-                    return {"success": False, "user": {}, "error": "Invalid email or password.", "use_demo_auth": False}
-        return {"success": False, "user": {}, "error": "Invalid email or password.", "use_demo_auth": False}
+        # Fixture fallback — return None to let main.py handle demo credentials
+        return {"success": False, "user": {}, "error": None, "use_demo_auth": True}
 
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
         """
@@ -296,7 +284,7 @@ class PaediaAPIClient:
         """
         Upload a document for processing and indexing.
 
-        Live API: POST /api/upload (multipart)
+        Live API: POST /api/documents/upload (multipart)
         Fixture fallback: return a mock Document record with status "pending"
 
         Returns: { "success": bool, "document": dict, "error": str|None }
@@ -304,7 +292,7 @@ class PaediaAPIClient:
         if self._check_api() and HAS_REQUESTS:
             try:
                 resp = requests.post(
-                    f"{self.config.base_url}/api/upload",
+                    f"{self.config.base_url}/api/documents/upload",
                     files={"file": (filename, file_bytes)},
                     data={"course_id": course_id},
                     headers={"Authorization": f"Bearer {self._jwt_token}"} if self._jwt_token else {},
@@ -312,10 +300,7 @@ class PaediaAPIClient:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                document = data.get("document", data)
-                if data.get("job_id") and "indexing_job_id" not in document:
-                    document["indexing_job_id"] = data["job_id"]
-                return {"success": True, "document": document, "error": None}
+                return {"success": True, "document": data.get("document", {}), "error": None}
             except Exception as e:
                 logger.warning("Document upload failed: %s", e)
 
@@ -372,10 +357,10 @@ class PaediaAPIClient:
         """
         Poll indexing job status for a document.
 
-        Live API: GET /api/indexing-jobs/<job_id>
+        Live API: GET /api/documents/<id>/status
         Fixture fallback: return { "status": "indexed", "progress_percent": 100 }
         """
-        result = self._get(f"/api/indexing-jobs/{document_id}")
+        result = self._get(f"/api/documents/{document_id}/status")
         if result:
             return result
         return {"status": "indexed", "progress_percent": 100}
@@ -384,9 +369,16 @@ class PaediaAPIClient:
         """
         List courses the user is enrolled in.
 
-        Live API: not exposed in the Sprint 3 API spec yet.
-        Fixture fallback: return courses from sample_responses.json.
+        Live API: GET /api/courses
+        Fixture fallback: return courses from sample_responses.json
         """
+        result = self._get("/api/courses", {"user_id": user_id} if user_id else None)
+        if result and isinstance(result, list):
+            return result
+        if result and "courses" in result:
+            return result["courses"]
+
+        # Fixture fallback
         if self._fixtures:
             return self._fixtures.get("courses", [])
         return []
