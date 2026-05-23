@@ -2,7 +2,6 @@ import os, requests
 from dataclasses import dataclass, field
 from typing import List, Optional
 from src.document_processor.ingest_corpus import (
-    get_chroma_client, get_or_create_collection,
     CHROMA_PATH, COLLECTION, COURSE_ID, SIMILARITY_THRESHOLD, _load_embedder
 )
 
@@ -31,6 +30,7 @@ class GeneratedResponse:
 
 class VectorRetriever:
     def __init__(self):
+        from src.document_processor.ingest_corpus import get_chroma_client, get_or_create_collection
         client           = get_chroma_client()
         self._collection = get_or_create_collection(client)
         self._model, self._model_name, _ = _load_embedder()
