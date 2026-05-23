@@ -100,9 +100,9 @@ docker compose exec api python -m src.document_processor.ingest_corpus
 
 Expected output (abbreviated):
 ```
-==============================================================
+--------------------------------------------------------------
   EduRAG – Seeded Corpus Ingestion  (S5-T17)
-==============================================================
+--------------------------------------------------------------
   ChromaDB target : chromadb:8000
   Collection      : csit321_course
   Seed documents  : <N>
@@ -111,9 +111,9 @@ Expected output (abbreviated):
   [OK] Collection total: <N> chunks
   [TEST] Smoke-test: 'What is RAG?' ...
   [TEST] PASSED
-==============================================================
+--------------------------------------------------------------
   Status: OK
-==============================================================
+--------------------------------------------------------------
 ```
 
 If the corpus is already ingested, add `--force` to re-ingest cleanly:

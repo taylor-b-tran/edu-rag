@@ -243,7 +243,7 @@ Run with: `python -m pytest -v --tb=short` from repo root.
 ## 9. Validation Evidence
 
 ```
-============================= test session starts ==============================
+---- test session starts ----
 platform win32 -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0 -- C:\Python314\python.exe
 cachedir: .pytest_cache
 rootdir: /home/claude/edu-rag-fixed
@@ -270,7 +270,7 @@ test/test_chunker.py::TestEmptyAndWhitespace::test_empty_string_returns_empty_li
 ... [90 more chunker + integration gate tests] ...
 test/test_sprint5_integration_gate.py::test_seeded_ingestion_imports_seed_documents_and_offline_embedder PASSED [100%]
 
-======================== 108 passed, 1 warning in 3.81s ========================
+108 passed, 1 warning in 3.81s
 ```
 
 **Compile checks:**
