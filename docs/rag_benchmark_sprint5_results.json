@@ -1,0 +1,242 @@
+{
+  "timestamp": "2026-05-24T15:45:44Z",
+  "model": "llama3.2",
+  "embedder": "all-MiniLM-L6-v2",
+  "n_chunks_indexed": 18,
+  "settings": {
+    "num_predict": 256,
+    "timeout_s": 300,
+    "temperature": 0.1
+  },
+  "results": [
+    {
+      "id": "Q01",
+      "category": "Easy Factual",
+      "question": "What is Retrieval-Augmented Generation (RAG)?",
+      "confidence": "Medium",
+      "confidence_score": 0.521,
+      "is_fallback": false,
+      "expected_fallback": false,
+      "fallback_match": true,
+      "generation_ok": false,
+      "n_sources": 5,
+      "sources": [
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 1,
+          "topic": "RAG Fundamentals",
+          "week": "Week 1",
+          "similarity": 0.681
+        },
+        {
+          "source_file": "Week6_RAG_Evaluation.pdf",
+          "page": 1,
+          "topic": "RAG Evaluation",
+          "week": "Week 6",
+          "similarity": 0.575
+        },
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 2,
+          "topic": "RAG Fundamentals",
+          "week": "Week 1",
+          "similarity": 0.562
+        },
+        {
+          "source_file": "Week6_RAG_Evaluation.pdf",
+          "page": 2,
+          "topic": "RAG Evaluation",
+          "week": "Week 6",
+          "similarity": 0.413
+        },
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 3,
+          "topic": "System Overview",
+          "week": "Week 1",
+          "similarity": 0.373
+        }
+      ],
+      "latency_ms": 300877,
+      "model_used": "llama3.2",
+      "answer_length": 94,
+      "answer": "[LLM Error: HTTPConnectionPool(host='ollama', port=11434): Read timed out. (read timeout=300)]"
+    },
+    {
+      "id": "Q02",
+      "category": "Easy Factual",
+      "question": "What embedding model does EduRAG use and what is its dimension?",
+      "confidence": "Medium",
+      "confidence_score": 0.397,
+      "is_fallback": false,
+      "expected_fallback": false,
+      "fallback_match": true,
+      "generation_ok": true,
+      "n_sources": 5,
+      "sources": [
+        {
+          "source_file": "Week2_Vector_Embeddings.pdf",
+          "page": 1,
+          "topic": "Vector Embeddings",
+          "week": "Week 2",
+          "similarity": 0.469
+        },
+        {
+          "source_file": "Week4_Flask_WebApplication.pdf",
+          "page": 5,
+          "topic": "Flask API",
+          "week": "Week 4",
+          "similarity": 0.415
+        },
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 3,
+          "topic": "System Overview",
+          "week": "Week 1",
+          "similarity": 0.373
+        },
+        {
+          "source_file": "Week6_RAG_Evaluation.pdf",
+          "page": 2,
+          "topic": "RAG Evaluation",
+          "week": "Week 6",
+          "similarity": 0.367
+        },
+        {
+          "source_file": "Week7_Security_Deployment.pdf",
+          "page": 1,
+          "topic": "Security & Deployment",
+          "week": "Week 7",
+          "similarity": 0.361
+        }
+      ],
+      "latency_ms": 96308,
+      "model_used": "llama3.2",
+      "answer_length": 156,
+      "answer": "According to the course material, EduRAG uses the all-MiniLM-L6-v2 embedding model, which produces 384-dimensional vectors. (Week1_RAG_Introduction.pdf p.3)"
+    },
+    {
+      "id": "Q03",
+      "category": "Hard Reasoning",
+      "question": "Why was ChromaDB chosen over FAISS for EduRAG, and how does course_id metadata filtering prevent cross-course retrieval leakage?",
+      "confidence": "Medium",
+      "confidence_score": 0.554,
+      "is_fallback": false,
+      "expected_fallback": false,
+      "fallback_match": true,
+      "generation_ok": false,
+      "n_sources": 5,
+      "sources": [
+        {
+          "source_file": "Week3_ChromaDB_VectorStore.pdf",
+          "page": 1,
+          "topic": "ChromaDB",
+          "week": "Week 3",
+          "similarity": 0.732
+        },
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 3,
+          "topic": "System Overview",
+          "week": "Week 1",
+          "similarity": 0.542
+        },
+        {
+          "source_file": "Week3_ChromaDB_VectorStore.pdf",
+          "page": 2,
+          "topic": "ChromaDB",
+          "week": "Week 3",
+          "similarity": 0.534
+        },
+        {
+          "source_file": "Week7_Security_Deployment.pdf",
+          "page": 5,
+          "topic": "Security & Deployment",
+          "week": "Week 7",
+          "similarity": 0.486
+        },
+        {
+          "source_file": "Week6_RAG_Evaluation.pdf",
+          "page": 2,
+          "topic": "RAG Evaluation",
+          "week": "Week 6",
+          "similarity": 0.478
+        }
+      ],
+      "latency_ms": 300838,
+      "model_used": "llama3.2",
+      "answer_length": 94,
+      "answer": "[LLM Error: HTTPConnectionPool(host='ollama', port=11434): Read timed out. (read timeout=300)]"
+    },
+    {
+      "id": "Q04",
+      "category": "Applied / Procedural",
+      "question": "How does EduRAG handle a student question when no retrieved chunk exceeds the similarity threshold?",
+      "confidence": "High",
+      "confidence_score": 0.614,
+      "is_fallback": false,
+      "expected_fallback": false,
+      "fallback_match": true,
+      "generation_ok": true,
+      "n_sources": 5,
+      "sources": [
+        {
+          "source_file": "Week6_RAG_Evaluation.pdf",
+          "page": 2,
+          "topic": "RAG Evaluation",
+          "week": "Week 6",
+          "similarity": 0.667
+        },
+        {
+          "source_file": "Week2_Vector_Embeddings.pdf",
+          "page": 3,
+          "topic": "Vector Embeddings",
+          "week": "Week 2",
+          "similarity": 0.642
+        },
+        {
+          "source_file": "Week1_RAG_Introduction.pdf",
+          "page": 3,
+          "topic": "System Overview",
+          "week": "Week 1",
+          "similarity": 0.628
+        },
+        {
+          "source_file": "Week5_Ollama_Generation.pdf",
+          "page": 2,
+          "topic": "Ollama & LLM Generation",
+          "week": "Week 5",
+          "similarity": 0.583
+        },
+        {
+          "source_file": "Week2_Vector_Embeddings.pdf",
+          "page": 1,
+          "topic": "Vector Embeddings",
+          "week": "Week 2",
+          "similarity": 0.549
+        }
+      ],
+      "latency_ms": 144884,
+      "model_used": "llama3.2",
+      "answer_length": 335,
+      "answer": "According to Context 1 | Week6_RAG_Evaluation.pdf p.2, when no retrieved chunk exceeds the cosine similarity threshold (SIMILARITY_THRESHOLD), the system must not silently use general model knowledge as if it were course material. Instead, the response is labelled: 'Based on general knowledge \u2014 not verified against course materials.'"
+    },
+    {
+      "id": "Q05",
+      "category": "Off-topic / Fallback",
+      "question": "What is the best recipe for chocolate cake and how long should I bake it?",
+      "confidence": "Low",
+      "confidence_score": 0.0,
+      "is_fallback": true,
+      "expected_fallback": true,
+      "fallback_match": true,
+      "generation_ok": false,
+      "n_sources": 0,
+      "sources": [],
+      "latency_ms": 300944,
+      "model_used": "llama3.2",
+      "answer_length": 163,
+      "answer": "Based on general knowledge \u2014 not verified against course materials.\n\n[LLM Error: HTTPConnectionPool(host='ollama', port=11434): Read timed out. (read timeout=300)]"
+    }
+  ]
+}

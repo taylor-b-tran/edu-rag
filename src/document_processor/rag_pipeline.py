@@ -87,7 +87,7 @@ class LLMResponseGeneration:
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
                 f"[STUDENT QUESTION]\n{query}\n\n[PAEDIA ANSWER]")
 
-    def _call_ollama(self, prompt):
+    def _call_ollama(self, prompt, chunks=None):
         try:
             resp = requests.post(
                 f"{OLLAMA_HOST}/api/generate",
@@ -101,7 +101,7 @@ class LLMResponseGeneration:
                 "[Ollama not running] Start with: ollama serve && ollama pull llama3.2\n\n"
                 "Retrieved context (retrieval succeeded):\n" +
                 "\n".join(f"• {c.citation_label()}: {c.text[:200]}…"
-                          for c in [])
+                          for c in (chunks or []))
             ), False
         except Exception as exc:
             return f"[LLM Error: {exc}]", False
@@ -131,7 +131,7 @@ class LLMResponseGeneration:
         good        = [c for c in all_chunks if c.similarity >= SIMILARITY_THRESHOLD]
         is_fallback = len(good) == 0
         prompt      = self._build_prompt(query, good, history)
-        raw, ok     = self._call_ollama(prompt)
+        raw, ok     = self._call_ollama(prompt, chunks=good)
         answer      = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         conf, cscore= self._confidence(good)
         return GeneratedResponse(
