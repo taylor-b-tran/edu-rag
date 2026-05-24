@@ -9,7 +9,7 @@ from src.document_processor.ingest_corpus import (
 TOP_K        = int(os.getenv("TOP_K", "5"))
 OLLAMA_HOST  = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
-FALLBACK_LABEL = "Based on general knowledge — not verified against course materials."
+FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course materials."
 
 @dataclass
 class RetrievedChunk:
@@ -57,7 +57,7 @@ class VectorRetriever:
         return chunks
 
 class LLMResponseGeneration:
-    def __init__(self, retriever: Optional[VectorRetriever] = None):
+    def __init__(self, retriever=None):
         self._retriever = retriever or VectorRetriever()
 
     def _build_prompt(self, query, chunks, history=None):
@@ -87,7 +87,8 @@ class LLMResponseGeneration:
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
                 f"[STUDENT QUESTION]\n{query}\n\n[PAEDIA ANSWER]")
 
-    def _call_ollama(self, prompt):
+    def _call_ollama(self, prompt, chunks=None):
+        chunks = chunks or []
         try:
             resp = requests.post(
                 f"{OLLAMA_HOST}/api/generate",
@@ -97,11 +98,13 @@ class LLMResponseGeneration:
             resp.raise_for_status()
             return resp.json().get("response","").strip(), True
         except requests.exceptions.ConnectionError:
+            context_lines = (
+                "\n".join(f"\u2022 {c.citation_label()}: {c.text[:200]}\u2026" for c in chunks)
+                if chunks else "  (no chunks retrieved)"
+            )
             return (
                 "[Ollama not running] Start with: ollama serve && ollama pull llama3.2\n\n"
-                "Retrieved context (retrieval succeeded):\n" +
-                "\n".join(f"• {c.citation_label()}: {c.text[:200]}…"
-                          for c in [])
+                "Retrieved context (retrieval succeeded):\n" + context_lines
             ), False
         except Exception as exc:
             return f"[LLM Error: {exc}]", False
@@ -126,13 +129,13 @@ class LLMResponseGeneration:
         return refs
 
     def generate(self, query, course_id=COURSE_ID, top_k=TOP_K,
-                 history=None) -> GeneratedResponse:
+                 history=None) -> "GeneratedResponse":
         all_chunks  = self._retriever.search(query, course_id=course_id, top_k=top_k)
-        good        = [c for c in all_chunks if c.similarity >= SIMILARITY_THRESHOLD]
+        good = [c for c in all_chunks if c.similarity >= SIMILARITY_THRESHOLD]
         is_fallback = len(good) == 0
-        prompt      = self._build_prompt(query, good, history)
-        raw, ok     = self._call_ollama(prompt)
-        answer      = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
+        prompt = self._build_prompt(query, good, history)
+        raw, ok = self._call_ollama(prompt, chunks=good)
+        answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         conf, cscore= self._confidence(good)
         return GeneratedResponse(
             answer=answer, source_refs=self._source_refs(good),
@@ -141,13 +144,13 @@ class LLMResponseGeneration:
 
 if __name__ == "__main__":
     gen = LLMResponseGeneration()
-    q   = input("Question (Enter for default): ").strip() or \
+    q = input("Question (Enter for default): ").strip() or \
           "What is Retrieval-Augmented Generation and how does it work?"
-    print(f"\nQuery: {q}\n{'─'*60}")
+    print(f"\nQuery: {q}\n{'\u2500'*60}")
     r = gen.generate(q)
     print(f"Confidence: {r.confidence} ({r.confidence_score:.3f})")
     print(f"Fallback  : {r.is_fallback}")
     print("Sources:")
     for s in r.source_refs:
-        print(f"  • {s['source_file']} p.{s['page']} [{s['topic']}] sim={s['similarity']}")
+        print(f"  \u2022 {s['source_file']} p.{s['page']} [{s['topic']}] sim={s['similarity']}")
     print(f"\nAnswer:\n{r.answer}")

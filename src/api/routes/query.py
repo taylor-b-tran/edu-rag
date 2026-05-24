@@ -13,6 +13,16 @@ _RATE_STORE: dict[str, list[float]] = {}
 _RATE_MAX = 10
 _RATE_WINDOW = 60
 
+_AMBIGUOUS_PATTERNS = (
+    "tell me everything",
+    "explain everything",
+    "what do you know",
+    "tell me about the course",
+    "summarize everything",
+    "give me all",
+    "what is this course",
+)
+
 
 def _state():
     return current_app.config["EDURAG_API_STATE"]
@@ -28,6 +38,14 @@ def _check_rate(ip: str) -> bool:
     timestamps.append(now)
     _RATE_STORE[ip] = timestamps
     return True
+
+
+def _is_ambiguous(question: str) -> bool:
+    """Return True if the question is too vague for meaningful RAG retrieval."""
+    lowered = question.lower()
+    if len(question.split()) < 3:
+        return True
+    return any(pat in lowered for pat in _AMBIGUOUS_PATTERNS)
 
 
 @query_bp.post("/query")
@@ -53,12 +71,35 @@ def query():
     if not question:
         return jsonify({"error": "query is required"}), 400
 
+    if _is_ambiguous(question):
+        logger.info("Ambiguous query from user %s: %r", user.get("user_id"), question)
+        return jsonify({
+            "error": "ambiguous_query",
+            "message": (
+                "Your question is too broad for course-specific retrieval. "
+                "Please ask about a specific topic, concept, or week from CSIT321 "
+                "(e.g. 'What is retrieval-augmented generation?' or 'Explain the chunking strategy from Week 5')."
+            ),
+        }), 422
+
     if not _state().is_enrolled(user, course_id):
         logger.warning("User %s attempted access to unauthorised course %s", user.get("user_id"), course_id)
         return jsonify({"error": "Not enrolled in this course."}), 403
 
     started = time.time()
-    generated = _state().get_generator().generate(question, course_id=course_id)
+    try:
+        generated = _state().get_generator().generate(question, course_id=course_id)
+    except Exception as exc:
+        logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
+        return jsonify({
+            "error": "generation_unavailable",
+            "message": (
+                "The answer generation service is temporarily unavailable. "
+                "Please ensure Ollama is running (`ollama serve`) and try again."
+            ),
+            "detail": str(exc),
+        }), 503
+
     result = {
         "answer": generated.answer,
         "source_references": generated.source_refs,
