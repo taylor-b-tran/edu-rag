@@ -70,7 +70,10 @@ def test_login_rejects_missing_fields():
 # ─── Query ────────────────────────────────────────────────────────────
 
 
-def test_query_returns_fixture_answer_when_authenticated():
+def test_query_returns_grounded_answer_with_citations_when_authenticated():
+    """Asserts the full /api/query contract — works in both ChromaDB-backed and
+    fixture-fallback modes (the response shape is identical; only `model_used` and
+    `source_references` content differ)."""
     c = _client()
     token = _login(c, "student@uow.edu.au", "student123")
 
@@ -85,9 +88,44 @@ def test_query_returns_fixture_answer_when_authenticated():
 
     assert response.status_code == 200
     body = response.get_json()
-    assert "answer" in body
+
+    assert isinstance(body.get("answer"), str) and body["answer"].strip()
     assert body["session_id"]
-    assert "source_references" in body
+    assert body.get("backend_mode") == "chromadb"
+    assert isinstance(body.get("model_used"), str) and body["model_used"]
+    assert isinstance(body.get("source_references"), list)
+    assert isinstance(body.get("is_fallback"), bool)
+    assert body.get("confidence") in {"Low", "Medium", "High"}
+    assert isinstance(body.get("confidence_score"), (int, float))
+    assert 0.0 <= body["confidence_score"] <= 1.0
+    assert isinstance(body.get("latency_ms"), int) and body["latency_ms"] >= 0
+
+    if not body["is_fallback"] and body["model_used"] != "fixture":
+        for ref in body["source_references"]:
+            assert "source_file" in ref or "source" in ref
+
+
+def test_query_off_topic_question_does_not_fabricate_citations():
+    """Off-topic queries must either return is_fallback=true OR drop to Low confidence
+    with no citations — they must NOT fabricate sources from the seeded corpus."""
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.post(
+        "/api/query",
+        json={"query": "What is the best chocolate cake recipe?", "course_id": "CSIT321"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+
+    is_low_confidence = body.get("confidence") == "Low"
+    is_explicit_fallback = body.get("is_fallback") is True
+    has_no_sources = len(body.get("source_references", [])) == 0
+    assert is_low_confidence or is_explicit_fallback or has_no_sources, (
+        f"Off-topic query produced grounded answer: {body}"
+    )
 
 
 def test_query_returns_401_without_token():
