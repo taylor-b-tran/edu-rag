@@ -95,7 +95,6 @@ The hard-reasoning timeout that previously forced demo recordings to skip Q01/Q0
 | Seeded corpus is 18 hand-written chunks, not the full CSIT321 lecture set | Benchmark is illustrative, not population-level | Future sprint: ingest the actual lecture PDFs through `chunker.py` (already tested standalone) |
 | Document upload is queued but not indexed into ChromaDB by the worker | A lecturer's upload does not yet affect retrieval | Mark as fixture-backed in demo script; reuse `seed_documents.py` flow as the indexer reference |
 | Auth + sessions are in-memory | API restart loses sessions | Out of scope for Sprint 5; PostgreSQL schema already in `db/migrations/` for next sprint |
-| Ambiguous-question clarification (S5-AC-09) not yet a separate code path | "Low confidence" answers still attempt a response | Confidence label is exposed; UI shows the badge; explicit "ask me to clarify" path deferred |
 
 ## 6. Demo script (11 steps, from `sprint_5_kickoff.md` §10)
 

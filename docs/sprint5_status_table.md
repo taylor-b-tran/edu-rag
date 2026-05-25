@@ -32,6 +32,8 @@
 | S5-T16 | Sprint 5 status table (this doc) | Tai | Done | This file |
 | S5-T17 | Seed corpus ingestion path | Ngoc | Done | [`src/document_processor/seed_documents.py`](../src/document_processor/seed_documents.py), [`ingest_corpus.py`](../src/document_processor/ingest_corpus.py) · merged PR #27 + #31 |
 | S5-T18 | Ollama generation wired into API | Ngoc | Done | [`src/api/routes/query.py`](../src/api/routes/query.py), [`rag_pipeline.py`](../src/document_processor/rag_pipeline.py) · merged PR #35 |
+| S5-T19 | Ambiguous-question detection (closes S5-AC-09) | Ngoc | Done | `query.py` 422 path + `test_query_returns_422_for_ambiguous_question` / `..._single_word_question` · merged PR #40 |
+| S5-T20 | RAG limitations document | Ngoc | Done | [`docs/rag_limitations.md`](rag_limitations.md) · merged PR #42 |
 
 ## 2. Hygiene / Cross-cutting
 
@@ -54,7 +56,7 @@
 | S5-AC-06 | Demo runbook uses clean checkout | Done | [`README_docker.md`](../README_docker.md), `apps/integration/start.sh` |
 | S5-AC-07 | ≥5 seeded queries return grounded answers + citations | Done | Pipeline wired (PR #35); 5/5 retrieval correct + citations present (`rag_benchmark_sprint5_results.json`); generation 3/5 on CPU baseline, 5/5 once GPU enabled (25 May) — pending formal re-run on GPU host |
 | S5-AC-08 | Off-topic returns clear course-grounded fallback | Done | `FALLBACK_LABEL` in `rag_pipeline.py`; `_FixtureGenerator` fallback path |
-| S5-AC-09 | Ambiguous questions ask for clarification / low-confidence | Not started | Confidence label exists; explicit clarification prompt not yet added |
+| S5-AC-09 | Ambiguous questions ask for clarification / low-confidence | Done | `query.py` returns 422 `ambiguous_query` for single-word / vague prompts (PR #40); confidence label exposed for low-similarity answers |
 | S5-AC-10 | Live 31-query benchmark separated from fixture-mode | Ongoing | Fixture benchmark in `rag_config_benchmark_31q.json`; live results pending S5-T07 |
 | S5-AC-11 | A3 demo script states implemented / fixture / planned | Done | [`docs/a3_demo_script.md`](a3_demo_script.md) — narration per demo step, labels each call-out as implemented/fixture/planned |
 | S5-AC-12 | No secrets / cache / agent artifacts committed | Done | `.gitignore` covers `chroma_data/`, `data/samples/`, `.agents/`, `.ai/`, `AGENTS.md`; integration gate validates |

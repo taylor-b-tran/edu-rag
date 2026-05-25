@@ -142,7 +142,7 @@
 **Action:** Read `sprint5_implementation_summary.md` §5 verbatim or paraphrase the five rows.
 
 **Narration:**
-> "We are explicit about what is live and what is fixture-backed: (1) the demo GPU is 8 GB VRAM, so qwen3:14b runs on a separate machine; (2) seeded corpus is 18 chunks across Weeks 1–7, not the full CSIT321 lecture set — that's a Sprint 6 ingestion task; (3) lecturer uploads queue but don't yet flow to ChromaDB — also Sprint 6; (4) auth and sessions are in-memory — the Postgres schema is staged; (5) ambiguous-question clarification is a confidence label only — an explicit clarification prompt is deferred."
+> "We are explicit about what is live and what is fixture-backed: (1) the demo GPU is 8 GB VRAM, so qwen3:14b runs on a separate machine; (2) seeded corpus is 18 chunks across Weeks 1–7, not the full CSIT321 lecture set — that's a Sprint 6 ingestion task; (3) lecturer uploads queue but don't yet flow to ChromaDB — also Sprint 6; (4) auth and sessions are in-memory — the Postgres schema is staged; (5) full RAG limitations are catalogued in `docs/rag_limitations.md`."
 
 **Label:** All five limitations = **Planned (Sprint 6 or deferred)**, all documented.
 
