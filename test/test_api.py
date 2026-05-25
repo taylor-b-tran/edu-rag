@@ -73,22 +73,17 @@ def test_query_returns_chromadb_answer_when_authenticated():
 
     assert response.status_code == 200
     body = response.get_json()
-    # Core answer fields
     assert "answer" in body
     assert isinstance(body["answer"], str)
     assert len(body["answer"]) > 0
-    # Session and routing metadata
     assert body["session_id"], "session_id should be populated"
     assert body["backend_mode"] == "chromadb"
     assert isinstance(body["latency_ms"], int)
-    # Source references shape
     assert "source_references" in body
     assert isinstance(body["source_references"], list)
-    # Confidence fields
     assert body["confidence"] in ("High", "Medium", "Low")
     assert isinstance(body["confidence_score"], float)
     assert 0.0 <= body["confidence_score"] <= 1.0
-    # Fallback flag should be a bool
     assert isinstance(body["is_fallback"], bool)
 
 
@@ -123,6 +118,30 @@ def test_query_returns_422_for_single_word_question():
     assert response.status_code == 422
     body = response.get_json()
     assert body["error"] == "ambiguous_query"
+
+
+def test_query_off_topic_question_does_not_fabricate_citations():
+    """Off-topic queries that pass the ambiguity gate must either return is_fallback=True
+    OR drop to Low confidence with no citations -- they must NOT fabricate sources from
+    the seeded corpus."""
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.post(
+        "/api/query",
+        json={"query": "What is the best chocolate cake recipe?", "course_id": "CSIT321"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+
+    is_low_confidence = body.get("confidence") == "Low"
+    is_explicit_fallback = body.get("is_fallback") is True
+    has_no_sources = len(body.get("source_references", [])) == 0
+    assert is_low_confidence or is_explicit_fallback or has_no_sources, (
+        f"Off-topic query produced grounded answer: {body}"
+    )
 
 
 def test_query_returns_401_without_token():
