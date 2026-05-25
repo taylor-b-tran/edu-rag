@@ -32,7 +32,10 @@ cp .env.example .env
 # Edit .env if you need to change ports or model
 
 # 3. Build and start the core services
+# CPU only (default):
 docker compose up -d --build postgres chromadb ollama
+# Or with NVIDIA GPU (requires Docker NVIDIA runtime + drivers):
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build postgres chromadb ollama
 
 # 4. Pull a generation model (one of these)
 docker exec edurag-ollama-1 ollama pull llama3.2     # 2 GB, fast inference
@@ -102,8 +105,11 @@ The fixture fallback path means **the API never returns 500 from a missing depen
 ### Daily restart (everything cached)
 
 ```bash
-docker compose up -d
+docker compose up -d                                                       # CPU-only
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d       # with GPU
 ```
+
+> The GPU overlay (`docker-compose.gpu.yml`) adds `gpus: all` to the Ollama service. Verify after start with `docker exec edurag-ollama-1 nvidia-smi`. Without the overlay Ollama silently falls back to CPU — a single `llama3.2` query takes ~96 s on CPU vs ~10 s on an RTX 5060.
 
 ### Clean re-ingest
 

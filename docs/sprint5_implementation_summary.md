@@ -46,7 +46,7 @@ Full results: [`docs/rag_benchmark_sprint5_results.json`](rag_benchmark_sprint5_
 |---|---|
 | Embedding model | `all-MiniLM-L6-v2` (SentenceTransformers, 384-dim) |
 | Vector store | ChromaDB 1.5.8 (HTTP service in Compose) |
-| LLM | `llama3.2` (Ollama, CPU inference) |
+| LLM | `llama3.2` (Ollama; CPU on benchmark host, GPU after 25 May — see §4.3) |
 | Chunks indexed | 18 (Weeks 1–7 of CSIT321 seed corpus) |
 | `top_k` | 5 |
 | `SIMILARITY_THRESHOLD` | 0.35 |
@@ -71,19 +71,31 @@ Of the 5 queries, **3 returned a completed answer** (Q02, Q04, Q05) and **2 hit 
 
 **Latency observation:** llama3.2 on CPU varies from 96 s (Q02, short answer) to 300+ s timeout (Q01/Q03 hard-reasoning prompts). Cold-start adds ~10 s on the first call. A GPU host would compress all of these into the seconds range.
 
-**Implication for demo:** record on a GPU host if available. On CPU, demo using Q02-style short factual queries (verified 96 s), warm the model first with a throwaway query, and explicitly skip hard-reasoning prompts during the live recording in favour of pre-captured screenshots.
+### 4.3 GPU enablement (25 May 2026)
+
+The benchmark above was captured on a CPU-only Ollama container. On 25 May the demo host was re-deployed with the `docker-compose.gpu.yml` overlay (NVIDIA runtime, RTX 5060 8 GB VRAM). Ad-hoc verification through `/api/query` on `llama3.2`:
+
+| Query type | CPU (24 May) | GPU (25 May) |
+|---|---|---|
+| Easy factual (Q02-style) | 96 s | 8–10 s |
+| Hard reasoning (Q01/Q03-style) | 300 s timeout | 26–29 s |
+| Off-topic fallback (Q05-style) | n/a (retrieval-only path) | ~10 s |
+| Sustained throughput | < 1 tok/s | 24–30 tok/s |
+| Cold-start (model load into VRAM) | n/a | ~40 s, then cached |
+
+The hard-reasoning timeout that previously forced demo recordings to skip Q01/Q03 is no longer a constraint. Cold-start should still be warmed once before recording.
+
+**Implication for demo:** record live on the GPU host; all 5 benchmark queries now complete inside the LLM timeout. The formal 5-query benchmark in `rag_benchmark_sprint5_results.json` will be re-run on the GPU host (and optionally extended to `qwen3:14b` on a higher-VRAM machine) before A3 submission — see Sprint 5 status table §5.
 
 ## 5. Limitations (declared, not hidden)
 
 | Limitation | Impact | Mitigation |
 |---|---|---|
-| LLM is CPU-bound on the demo host | Each query takes tens of seconds | Pre-warm Ollama before recording; consider switching to `qwen3:14b` only on a GPU host |
+| Demo GPU has 8 GB VRAM (RTX 5060) | `qwen3:14b` (~9 GB) won't fit fully on the GPU — partial CPU offload defeats the speedup | Stick to `llama3.2` (≈2 GB) on this host; run the optional 14B benchmark on a higher-VRAM machine and attach results |
 | Seeded corpus is 18 hand-written chunks, not the full CSIT321 lecture set | Benchmark is illustrative, not population-level | Future sprint: ingest the actual lecture PDFs through `chunker.py` (already tested standalone) |
 | Document upload is queued but not indexed into ChromaDB by the worker | A lecturer's upload does not yet affect retrieval | Mark as fixture-backed in demo script; reuse `seed_documents.py` flow as the indexer reference |
 | Auth + sessions are in-memory | API restart loses sessions | Out of scope for Sprint 5; PostgreSQL schema already in `db/migrations/` for next sprint |
 | Ambiguous-question clarification (S5-AC-09) not yet a separate code path | "Low confidence" answers still attempt a response | Confidence label is exposed; UI shows the badge; explicit "ask me to clarify" path deferred |
-| `rag_pipeline.py:104` fallback citation list iterates `[]` (cosmetic bug) | Off-Ollama fallback message never lists citations even though retrieval succeeded | One-line fix scheduled before A3 freeze |
-| `test_query_returns_fixture_answer_when_authenticated` is named after old behaviour | Test still passes but is no longer descriptive | Rename and add real RAG assertion deferred to post-A3 |
 
 ## 6. Demo script (11 steps, from `sprint_5_kickoff.md` §10)
 
