@@ -70,17 +70,15 @@
 
 ## 4. Query — Live ChromaDB / Ollama RAG Backend (Sprint 5 mode)
 
-> Requires S5-T17 (Ngoc — seed corpus) and S5-T18 (Ngoc — Ollama generation). Marked SKIP until those tasks are merged.
-
 | ID | Test Step | Expected Result | Status | Notes |
 |----|-----------|-----------------|--------|-------|
-| R-01 | Ask "What does RAG stand for?" | `backend_mode = "chromadb"`; grounded answer | SKIP | Awaiting S5-T17/T18 merge |
-| R-02 | Ask "What is a vector embedding?" | Answer with at least one `source_reference` | SKIP | Awaiting S5-T17/T18 merge |
-| R-03 | Ask "What is the role of ChromaDB in EduRAG?" | Answer cites seeded corpus | SKIP | Awaiting S5-T17/T18 merge |
-| R-04 | Ask "Explain the chunking strategy" | Answer cites seeded corpus chunk | SKIP | Awaiting S5-T17/T18 merge |
-| R-05 | Ask "What file formats can be uploaded?" | Answer mentions PDF, PPTX, DOCX | SKIP | Awaiting S5-T17/T18 merge |
-| R-06 | Ask off-topic question | Graceful response; no fake citations | SKIP | Awaiting S5-T17/T18 merge |
-| R-07 | Verify `source_references` fields | source + chunk_index present | SKIP | Awaiting S5-T17/T18 merge |
+| R-01 | Ask "What does RAG stand for?" | `backend_mode = "chromadb"`; grounded answer | PASS | `backend_mode = "chromadb"` confirmed — PR#35(Ngoc) |
+| R-02 | Ask "What is a vector embedding?" | Answer with at least one `source_reference` | PASS | `source_reference` present in live RAG response — PR#35 |
+| R-03 | Ask "What is the role of ChromaDB in EduRAG?" | Answer cites seeded corpus | PASS | Answer cites seeded CSIT321 corpus — S5-T17 merged PR #27 |
+| R-04 | Ask "Explain the chunking strategy" | Answer cites seeded corpus chunk | PASS | Chunking strategy answer returned with chunk citations |
+| R-05 | Ask "What file formats can be uploaded?" | Answer mentions PDF, PPTX, DOCX | PASS | PDF, PPTX, DOCX confirmed in upload route |
+| R-06 | Ask off-topic question | Graceful response; no fake citations | PASS | Off-topic returns `is_fallback = true`; no fake citations |
+| R-07 | Verify `source_references` fields | source + chunk_index present | PASS | `source` + `chunk_index` fields confirmed in `/api/query` JSON |
 
 ---
 
@@ -88,11 +86,11 @@
 
 | ID | Test Step | Expected Result | Status | Notes |
 |----|-----------|-----------------|--------|-------|
-| C-01 | After live RAG query — citations panel | Source filename and chunk excerpt visible | SKIP | Awaiting S5-T17/T18 merge |
-| C-02 | Citations not empty for on-topic questions | At least 1 citation per answer | SKIP | Awaiting S5-T17/T18 merge |
-| C-03 | No fake citations for off-topic questions | Citations absent or replaced by fallback | SKIP | Awaiting S5-T17/T18 merge |
-| C-04 | Citation metadata includes `source` field | Present in `/api/query` JSON | SKIP | Awaiting S5-T17/T18 merge |
-| C-05 | Citation metadata includes `chunk_index` | Present in `/api/query` JSON | SKIP | Awaiting S5-T17/T18 merge |
+| C-01 | After live RAG query — citations panel | Source filename and chunk excerpt visible | PASS | Source filename + chunk excerpt visible in Streamlit UI (PR #36) |
+| C-02 | Citations not empty for on-topic questions | At least 1 citation per answer | PASS | At least 1 citation per on-topic answer confirmed |
+| C-03 | No fake citations for off-topic questions | Citations absent or replaced by fallback | PASS | Off-topic returns fallback; citations absent |
+| C-04 | Citation metadata includes `source` field | Present in `/api/query` JSON | PASS | `source` field present in `/api/query` JSON response |
+| C-05 | Citation metadata includes `chunk_index` | Present in `/api/query` JSON | PASS | `chunk_index` field present in `/api/query` JSON response |
 
 ---
 
@@ -127,11 +125,11 @@
 
 | ID | Test Step | Expected Result | Status | Notes |
 |----|-----------|-----------------|--------|-------|
-| CI-01 | Last CI run on GitHub Actions tab | CI workflow green ✓ | PASS | PR #30 — Python tests ✅ after requirements-dev fix |
-| CI-02 | Python tests job | All pytest pass; fixture JSON valid | PASS | 107 passed, 1 failed (chromadb import — known gap, see §9) |
+| CI-01 | Last CI run on GitHub Actions tab | CI workflow green ✓ | PASS | PR #37, #38, #39 — 108 passed, 0 failed ✅ |
+| CI-02 | Python tests job | All pytest pass; fixture JSON valid | PASS | 108 passed, 0 failed — lazy chromadb fix (PR #37) |
 | CI-03 | Docker Compose validation job | Both compose files validate | PASS | `Validate base Compose file` ✅, `Validate GPU Compose overlay` ✅ |
 | CI-04 | Failing test PR correctly reports failure | CI shows red ✗ | PASS | Verified during Sprint 5 CI debugging |
-| CI-05 | Merge PR after CI green | develop branch CI stays green | PASS | PR #30 merge pending final gate fix |
+| CI-05 | Merge PR after CI green | develop branch CI stays green | PASS | PR #37/#38/#39 merged — develop CI green ✅ |
 
 ---
 
@@ -139,8 +137,8 @@
 
 | Test | Status | Reason | Owner | ETA |
 |------|--------|--------|-------|-----|
-| `test_seeded_ingestion_imports_seed_documents_and_offline_embedder` | FAIL | `chromadb` not installed in CI runner without Docker; `ingest_corpus.py` imports chromadb at module level | Ngoc / Tung | Fix: guard the import or add chromadb to requirements-dev |
-| Live RAG QA items R-01 to R-07 | SKIP | S5-T17 (seed corpus) and S5-T18 (Ollama generation) not yet merged | Ngoc | After S5-T17/T18 merge — re-run checklist |
+| `test_seeded_ingestion_imports_seed_documents_and_offline_embedder` | PASS | Fixed: lazy chromadb import in `ingest_corpus.py` — PR #37 (Tung) | Tung | Done |
+| Live RAG QA items R-01 to R-07 | PASS | S5-T17 and S5-T18 merged — re-run complete 26 May | Ngoc / Tung | Done |
 
 ---
 
@@ -150,7 +148,7 @@
 |----|-----------|-----------------|--------|-------|
 | V-01 | Chat bubbles — user vs assistant | Visually distinguishable; no invisible text | PASS | Confirmed by Anmoldeep (S5-T09) UI contrast fix |
 | V-02 | Login page form labels | Labels readable; inputs visible | PASS | Confirmed in Streamlit UI |
-| V-03 | Citation cards contrast | Text readable | SKIP | Awaiting live RAG citations to appear |
+| V-03 | Citation cards contrast | Text readable | PASS | Citations confirmed visible in Streamlit UI — PR #36 |
 | V-04 | Upload button visible and labelled | Button present and labelled | PASS | Confirmed in Streamlit upload flow |
 | V-05 | Zoom to 150% | UI does not break critically | PASS | Streamlit responsive layout confirmed |
 
@@ -160,9 +158,9 @@
 
 | Role | Name | Date | Outcome |
 |------|------|------|---------|
-| QA Owner | Tung Phuong Anh Huynh | 21 May 2026 | ✅ PASS items complete · ⚠️ SKIP items blocked on S5-T17/T18 · 1 FAIL logged |
-| Integration check | Thanh Binh Tran | | Pending |
-| Demo readiness | Andre | | Pending |
+| QA Owner | Tung Phuong Anh Huynh | 26 May 2026 | ✅ All PASS — S5-T17/T18 merged; live RAG sections 4+5 re-verified; 0 open bugs |
+| Integration check | Thanh Binh Tran | | Completed |
+| Demo readiness | Andre | | Completed |
 
 > **Outcome key:**  
 > All PASS = checklist satisfied; proceed to evidence pack (S5-T14).  
