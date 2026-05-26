@@ -32,6 +32,40 @@ The demo path now uses the explicit `api` and `streamlit` services.
 
 ## Quick Start
 
+### Option A — wrapper script with auto model selection (recommended)
+
+The wrapper inspects the host GPU via `nvidia-smi`, picks an Ollama model that
+fits the available VRAM, writes `DEFAULT_OLLAMA_MODEL` into `.env`, brings up
+the stack with the right Compose overlay, and pulls the selected model.
+
+```powershell
+# Windows PowerShell
+pwsh scripts/start_stack.ps1
+```
+
+```bash
+# Linux / macOS / Git Bash
+bash scripts/start_stack.sh
+```
+
+Decision rule:
+
+| Detected VRAM            | Compose overlay              | Selected model |
+|--------------------------|------------------------------|----------------|
+| ≥ 12 GB                  | `docker-compose.gpu.yml`     | `qwen3:14b`    |
+| > 0 GB but < 12 GB       | `docker-compose.gpu.yml`     | `llama3.2`     |
+| no NVIDIA GPU detected   | base Compose only (CPU mode) | `llama3.2`     |
+
+Why the 8 – 12 GB band falls into `llama3.2`: the `qwen3:14b` working set is
+around 10 GB including KV cache, so an 8 – 12 GB GPU partially offloads to RAM
+and loses the speedup the model is chosen for. The threshold can be overridden
+with `VRAM_THRESHOLD_GB=…` (bash) or `-VramThresholdGb …` (PowerShell). Models
+can be overridden with `HIGH_VRAM_MODEL` / `LOW_VRAM_MODEL` (bash) or
+`-HighVramModel` / `-LowVramModel` (PowerShell). Pass `SKIP_PULL=1` or
+`-SkipPull` to skip the model pull at the end.
+
+### Option B — manual
+
 1. Copy the example environment file:
 
 ```powershell
@@ -140,18 +174,22 @@ docker compose --profile tools run --rm app sh
 
 ## Pull a Local Model
 
-The Ollama container starts the runtime, but it does not automatically pull a
-model. For the Sprint 3 test machine, `qwen3:14b` is the recommended default
-because the hardware check confirmed an RTX 5080 with 16 GB VRAM.
+If you used the wrapper script in Quick Start Option A, the model has already
+been pulled for you. The section below covers the manual path when you bring
+the stack up with `docker compose` directly.
+
+For the Sprint 3 test machine, `qwen3:14b` is the recommended default because
+the hardware check confirmed an RTX 5080 with 16 GB VRAM.
 
 ```powershell
 docker compose exec ollama ollama pull qwen3:14b
 ```
 
-Fallback model for machines with less VRAM:
+Fallback model for machines with less VRAM (≤ 8 GB, or the 8 – 12 GB band
+where `qwen3:14b` would partially offload to RAM):
 
 ```powershell
-docker compose exec ollama ollama pull qwen3:8b
+docker compose exec ollama ollama pull llama3.2
 ```
 
 ## Default Connection Values
@@ -164,13 +202,16 @@ docker compose exec ollama ollama pull qwen3:8b
 
 ## Known Scope Limitations
 
-- No automatic model pull on startup
-- The current Flask query route can still fall back to fixture mode until the
-  live ChromaDB plus Ollama path is fully wired behind `/api/query`
+- The current Flask query route can still fall back to fixture mode if the
+  live ChromaDB plus Ollama path is unreachable at startup; see
+  `src/api/state.py` `_FixtureGenerator`.
 - GPU access depends on Docker Desktop exposing the NVIDIA runtime correctly.
   Confirm with `docker compose exec ollama ollama ps` after generation; it
   should not show `100% CPU` for the selected model when the GPU override is
   active.
+- The auto-select wrapper inspects only the first NVIDIA GPU (`nvidia-smi`
+  index 0). On multi-GPU machines, the host VRAM total is taken from that
+  device.
 
 ## Sprint 5 CI/CD Note
 
