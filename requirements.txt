@@ -11,6 +11,7 @@ python-pptx==1.0.2
 requests==2.33.1
 streamlit==1.51.0
 numpy==2.1.2
+psycopg[binary]==3.2.3
 nbformat==5.10.4
 nbclient==0.10.4
 ipykernel==6.30.1

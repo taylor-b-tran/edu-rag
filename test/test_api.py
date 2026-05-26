@@ -172,12 +172,12 @@ def test_query_rejects_non_object_json_body():
 
 def test_query_returns_403_for_unenrolled_course():
     c = _client()
-    # lecturer@uow.edu.au is only enrolled in CSIT214
+    # lecturer@uow.edu.au teaches CSIT214 and CSIT321; CSIT999 is unknown.
     token = _login(c, "lecturer@uow.edu.au", "lecturer123")
 
     response = c.post(
         "/api/query",
-        json={"query": "Tell me about RAG", "course_id": "CSIT321"},
+        json={"query": "Tell me about RAG", "course_id": "CSIT999"},
         headers=_auth(token),
     )
 

@@ -11,6 +11,7 @@ Sprint 5 updates:
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 import os
 import re
@@ -36,8 +37,31 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* ── Force light-theme CSS custom properties (prevents dark mode override) ── */
+:root,
+html[data-theme="dark"],
+html[data-theme="light"],
+html {
+    --primary-color: #0D9488 !important;
+    --background-color: #F8F9FA !important;
+    --secondary-background-color: #FFFFFF !important;
+    --text-color: #1E293B !important;
+    --font: 'Inter', sans-serif !important;
+    color-scheme: light !important;
+}
+
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
-.stApp { background-color: #F8F9FA; }
+.stApp {
+    background-color: #F8F9FA !important;
+    color: #1E293B !important;
+    color-scheme: light !important;
+}
+
+/* ── Universal text visibility — nuclear option for dark-mode resistance ── */
+.stApp .main .block-container,
+.stApp .main .block-container * {
+    color: #1E293B;
+}
 
 /* ── Main area text visibility (handles dark mode browser overrides) ── */
 .stApp [data-testid="stMain"] .stMarkdown p,
@@ -65,6 +89,9 @@ div[data-baseweb="select"] {
     color: #1B2A4A !important;
     background: #FFFFFF !important;
 }
+div[data-baseweb="select"] * {
+    color: #1B2A4A !important;
+}
 div[data-baseweb="popover"] * {
     color: #1B2A4A !important;
     background-color: #FFFFFF !important;
@@ -72,6 +99,45 @@ div[data-baseweb="popover"] * {
 div[role="listbox"] * {
     background-color: #FFFFFF !important;
     color: #1B2A4A !important;
+}
+
+/* ── Tabs, Expanders, Alerts — readability ── */
+.stTabs [data-baseweb="tab-list"] button {
+    color: #475569 !important;
+}
+.stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+    color: #0D9488 !important;
+}
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary span {
+    color: #1E293B !important;
+}
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    color: #1E293B !important;
+}
+.stAlert p, .stAlert span, .stAlert div {
+    color: inherit !important;
+}
+.stCaption, [data-testid="stCaptionContainer"] {
+    color: #64748B !important;
+}
+
+/* ── File uploader area ── */
+[data-testid="stFileUploader"] label,
+[data-testid="stFileUploader"] span,
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] p {
+    color: #334155 !important;
+}
+[data-testid="stFileUploader"] section {
+    border-color: #CBD5E1 !important;
+    background-color: #FFFFFF !important;
+}
+
+/* ── Dividers ── */
+.stApp hr,
+.stApp [data-testid="stMain"] hr {
+    border-color: #E2E8F0 !important;
 }
 
 /* ── Sidebar — navy bg, ensure ALL text is readable ── */
@@ -306,7 +372,7 @@ footer {visibility: hidden;}
 
 @st.cache_data
 def load_responses():
-    fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_responses.json")
+    fixture_path = os.path.join(os.path.dirname(__file__), "..", "..", "fixtures", "sample_responses.json")
     if os.path.exists(fixture_path):
         with open(fixture_path, "r") as f:
             return json.load(f)
@@ -329,6 +395,8 @@ def get_api_client():
 api = get_api_client()
 DEFAULT_COURSE_ID = "CSIT321"
 COURSE_FALLBACKS = [DEFAULT_COURSE_ID, "CSIT214"]
+LOGIN_COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "components", "login_form")
+login_form_component = components.declare_component("paedia_login_form", path=LOGIN_COMPONENT_DIR)
 
 
 # ─── DEMO CREDENTIALS ──────────────────────────────────────────────
@@ -391,6 +459,15 @@ def _default_course_for_user(user: dict) -> str:
     return DEFAULT_COURSE_ID if DEFAULT_COURSE_ID in options else options[0]
 
 
+def _course_display_label(course_code: str) -> str:
+    courses = data.get("courses", []) if data else []
+    for course in courses:
+        if course.get("course_code") == course_code:
+            name = course.get("name")
+            return f"{course_code} — {name}" if name else course_code
+    return course_code
+
+
 def init_session_state():
     defaults = {
         "authenticated": False,
@@ -407,6 +484,7 @@ def init_session_state():
         "course_options": COURSE_FALLBACKS,
         "selected_course_id": DEFAULT_COURSE_ID,
         "login_error": None,
+        "last_login_nonce": None,
         "pending_send": False,
         "query_state": None,
         "upload_progress": None,
@@ -519,6 +597,38 @@ def get_confidence_label(confidence) -> str:
     return "No confidence data"
 
 
+def handle_login_submit() -> None:
+    """Authenticate from login form state."""
+    email = st.session_state.get("login_email", "").strip()
+    password = st.session_state.get("login_password", "")
+    login_result = api.login(email, password)
+    if login_result.get("success"):
+        user = _normalise_user_for_ui(login_result.get("user", {}))
+        st.session_state.authenticated = True
+        st.session_state.jwt_token = login_result.get("jwt_token")
+        st.session_state.user = user
+        st.session_state.course_options = _course_options_for_user(user)
+        st.session_state.course_id = _default_course_for_user(user)
+        st.session_state.selected_course_id = st.session_state.course_id
+        st.session_state.login_error = None
+        create_new_session("Welcome Chat")
+    elif login_result.get("use_demo_auth"):
+        user = DEMO_USERS.get(email)
+        if user and user["password"] == password:
+            user = _normalise_user_for_ui({k: v for k, v in user.items() if k != "password"})
+            st.session_state.authenticated = True
+            st.session_state.user = user
+            st.session_state.course_options = _course_options_for_user(user)
+            st.session_state.course_id = _default_course_for_user(user)
+            st.session_state.selected_course_id = st.session_state.course_id
+            st.session_state.login_error = None
+            create_new_session("Welcome Chat")
+        else:
+            st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+    else:
+        st.session_state.login_error = login_result.get("error") or "Invalid email or password."
+
+
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
 
 def render_login_page():
@@ -537,42 +647,21 @@ def render_login_page():
         st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown("#### Welcome back!")
 
-        email = st.text_input("Email Address", placeholder="student@uow.edu.au", key="login_email")
-        password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+        login_payload = login_form_component(
+            default_email=st.session_state.get("login_email", ""),
+            key="login_form_component",
+        )
 
         if st.session_state.login_error:
             st.error(st.session_state.login_error)
 
-        if st.button("Sign In", type="primary", use_container_width=True):
-            login_result = api.login(email.strip(), password)
-            if login_result.get("success"):
-                user = _normalise_user_for_ui(login_result.get("user", {}))
-                st.session_state.authenticated = True
-                st.session_state.jwt_token = login_result.get("jwt_token")
-                st.session_state.user = user
-                st.session_state.course_options = _course_options_for_user(user)
-                st.session_state.course_id = _default_course_for_user(user)
-                st.session_state.selected_course_id = st.session_state.course_id
-                st.session_state.login_error = None
-                create_new_session("Welcome Chat")
-                st.rerun()
-            elif login_result.get("use_demo_auth"):
-                user = DEMO_USERS.get(email.strip())
-                if user and user["password"] == password:
-                    user = _normalise_user_for_ui({k: v for k, v in user.items() if k != "password"})
-                    st.session_state.authenticated = True
-                    st.session_state.user = user
-                    st.session_state.course_options = _course_options_for_user(user)
-                    st.session_state.course_id = _default_course_for_user(user)
-                    st.session_state.selected_course_id = st.session_state.course_id
-                    st.session_state.login_error = None
-                    create_new_session("Welcome Chat")
-                    st.rerun()
-                else:
-                    st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
-                    st.rerun()
-            else:
-                st.session_state.login_error = login_result.get("error") or "Invalid email or password."
+        if isinstance(login_payload, dict) and login_payload.get("submitted"):
+            nonce = login_payload.get("nonce")
+            if nonce != st.session_state.get("last_login_nonce"):
+                st.session_state.last_login_nonce = nonce
+                st.session_state.login_email = login_payload.get("email", "")
+                st.session_state.login_password = login_payload.get("password", "")
+                handle_login_submit()
                 st.rerun()
 
         st.markdown("""
@@ -657,10 +746,12 @@ def render_sidebar():
 
         # ── Loaded documents ──
         st.markdown("**Loaded Documents**")
-        for doc in st.session_state.documents[:5]:
+        course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+        docs = api.get_documents(course_id)
+        for doc in docs[:5]:
             doc_name = doc.get("filename", doc.get("name", "Unknown"))
-            status = doc.get("status", "pending")
-            status_color = "#10B981" if status == "indexed" else ("#F59E0B" if status == "processing" else "#EF4444")
+            status = str(doc.get("status", "pending")).lower()
+            status_color = "#10B981" if status in ("indexed", "completed") else ("#F59E0B" if status == "processing" else "#EF4444")
             st.markdown(
                 f"<div class='doc-card'>"
                 f"<span>📄</span>"
@@ -671,8 +762,8 @@ def render_sidebar():
             )
 
         st.divider()
-        docs_count = len(st.session_state.documents)
-        indexed = sum(1 for d in st.session_state.documents if d.get("status") == "indexed")
+        docs_count = len(docs)
+        indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
         api_icon = "🟢" if api.is_live else "🟡"
         st.caption(f"{docs_count} docs loaded · {indexed} indexed · Semantic search ON")
         st.caption(f"{api_icon} {api.mode_label}")
@@ -754,22 +845,27 @@ def render_chat_page():
     with col1:
         st.markdown("### 💬 Ask your course materials")
     with col2:
-        docs_count = len(st.session_state.documents)
+        current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+        live_docs = api.get_documents(current_course)
+        indexed_live = sum(
+            1 for d in live_docs
+            if str(d.get("status") or d.get("indexing_status") or "").lower() in ("indexed", "completed")
+        )
         model_label = "ollama/llama3" if not api.is_live else "Live API"
         st.markdown(
-            f"<span class='status-badge badge-ready'>{docs_count} docs indexed</span> "
+            f"<span class='status-badge badge-ready'>{indexed_live} docs indexed</span> "
             f"{get_model_badge(model_label)}",
             unsafe_allow_html=True,
         )
     with col3:
         course_options = st.session_state.get("course_options") or COURSE_FALLBACKS
-        current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
         if current_course not in course_options:
             course_options = [current_course] + list(course_options)
         selected_course = st.selectbox(
             "Course",
             course_options,
             index=course_options.index(current_course),
+            format_func=_course_display_label,
             label_visibility="collapsed",
             key="selected_course_id",
         )
@@ -874,19 +970,18 @@ def render_chat_page():
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
                     api_indicator = " · 🟢 Live API" if msg.get("from_api") else ""
 
-                    st.markdown(f"""
-                    <div class="clearfix"><div class="{msg_class}">
-                        {fallback_html}
-                        {answer_html}
-                        {sources_html}
-                        <div class="confidence-bar">
-                            <div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>
-                        </div>
-                        <div class="confidence-text">
-                            {conf_label}: {conf_pct}% · {model_badge} · {timestamp_str}{api_indicator}
-                        </div>
-                    </div></div>
-                    """, unsafe_allow_html=True)
+                    html_content = (
+                        f'<div class="clearfix"><div class="{msg_class}">'
+                        f'{fallback_html}{answer_html}{sources_html}'
+                        f'<div class="confidence-bar">'
+                        f'<div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>'
+                        f'</div>'
+                        f'<div class="confidence-text">'
+                        f'{conf_label}: {conf_pct}% · {model_badge} · {timestamp_str}{api_indicator}'
+                        f'</div>'
+                        f'</div></div>'
+                    )
+                    st.markdown(html_content, unsafe_allow_html=True)
 
                     # Retrieval details expander (T10)
                     rmeta = msg.get("retrieval_metadata")
@@ -919,19 +1014,9 @@ def render_chat_page():
     # ── Input bar ──
     st.markdown("<br>", unsafe_allow_html=True)
 
-    with st.form("chat_form", clear_on_submit=True):
-        col1, col2 = st.columns([9, 1])
-        with col1:
-            user_input = st.text_input(
-                "Ask a question",
-                placeholder="Ask a question about your course materials...",
-                label_visibility="collapsed",
-                key="chat_input",
-            )
-        with col2:
-            send_clicked = st.form_submit_button("➤", type="primary", use_container_width=True)
+    user_input = st.chat_input("Ask a question about your course materials...")
 
-    if send_clicked and user_input and user_input.strip():
+    if user_input and user_input.strip():
         # Show query state animation (T11)
         state_placeholder = st.empty()
         stages = [
@@ -1028,10 +1113,16 @@ def render_uploads_page():
         help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here",
     )
 
-    # Upload progress simulation (T11)
+    if "processed_uploads" not in st.session_state:
+        st.session_state.processed_uploads = set()
+
     if uploaded_files:
         for f in uploaded_files:
-            _simulate_upload_progress(f.name, len(f.getvalue()))
+            file_key = f"{f.name}_{len(f.getvalue())}"
+            if file_key not in st.session_state.processed_uploads:
+                _run_real_upload_and_indexing(f, st.session_state.course_id)
+                st.session_state.processed_uploads.add(file_key)
+                st.rerun()
 
     st.divider()
     st.markdown("**Uploaded Documents**")
@@ -1045,6 +1136,34 @@ def render_doc_manager_page():
     role = st.session_state.user.get("role", "Student")
     st.markdown(f"<span class='status-badge badge-processing'>{role} View</span>", unsafe_allow_html=True)
 
+    course_options = st.session_state.get("course_options") or _course_options_for_user(st.session_state.user)
+    current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    if current_course not in course_options:
+        course_options = [current_course] + list(course_options)
+
+    col_sel, col_refresh = st.columns([4, 2])
+    with col_sel:
+        st.markdown("**Target course for upload**")
+        selected_course = st.selectbox(
+            "Course",
+            course_options,
+            index=course_options.index(current_course),
+            format_func=_course_display_label,
+            label_visibility="collapsed",
+            key="doc_manager_course_select",
+        )
+    with col_refresh:
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        if st.button("🔄 Refresh Status", type="primary", use_container_width=True):
+            st.rerun()
+
+    if selected_course != st.session_state.get("course_id"):
+        st.session_state.course_id = selected_course
+        st.session_state.selected_course_id = selected_course
+        st.rerun()
+
+    st.caption(f"Uploads will be indexed under **{_course_display_label(selected_course)}**.")
+
     uploaded_files = st.file_uploader(
         "Upload course materials",
         type=["pdf", "pptx", "docx", "txt", "md"],
@@ -1052,64 +1171,74 @@ def render_doc_manager_page():
         help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here. Max 50 MB per file.",
     )
 
-    # Upload progress simulation (T11)
+    if "processed_uploads" not in st.session_state:
+        st.session_state.processed_uploads = set()
+
     if uploaded_files:
         for f in uploaded_files:
-            _simulate_upload_progress(f.name, len(f.getvalue()))
-
-    col1, col2, col3 = st.columns([3, 3, 2])
-    with col1:
-        st.selectbox("Course", ["CSIT321 - Project Development", "CSIT214 - Database Systems", "ISIT312 - Big Data"], label_visibility="collapsed")
-    with col3:
-        if st.button("🔄 Refresh Status", type="primary", use_container_width=True):
-            st.info("Document statuses refreshed.")
+            file_key = f"{f.name}_{len(f.getvalue())}_{selected_course}"
+            if file_key not in st.session_state.processed_uploads:
+                _run_real_upload_and_indexing(f, selected_course)
+                st.session_state.processed_uploads.add(file_key)
+                st.rerun()
 
     st.divider()
     st.markdown("**UPLOADED DOCUMENTS**")
     _render_document_table(student_view=False)
 
 
-def _simulate_upload_progress(filename: str, file_size: int):
-    """Show staged upload progress (T11)."""
+def _run_real_upload_and_indexing(f, course_id):
+    filename = f.name
+    file_bytes = f.getvalue()
+    file_size = len(file_bytes)
+
     progress_placeholder = st.empty()
-    stages = [
-        ("⬆️ Uploading", "upload"),
-        ("📝 Extracting text", "extract"),
-        ("✂️ Chunking (~500 tokens)", "chunk"),
-        ("🧬 Embedding (all-MiniLM-L6-v2)", "embed"),
-        ("💾 Indexing in ChromaDB", "index"),
-        ("✅ Complete", "done"),
-    ]
+    progress_placeholder.info(f"Uploading {filename}...")
 
-    for step_idx, (label, _) in enumerate(stages):
-        html = f'<div class="upload-progress"><strong>{filename}</strong> ({file_size / 1024:.1f} KB)<br>'
-        for j, (slabel, _) in enumerate(stages):
-            if j < step_idx:
-                html += f'<div class="upload-step upload-step-done">✅ {slabel}</div>'
-            elif j == step_idx:
-                html += f'<div class="upload-step upload-step-active">⏳ {slabel}...</div>'
-            else:
-                html += f'<div class="upload-step upload-step-pending">⬜ {slabel}</div>'
-        html += '</div>'
-        progress_placeholder.markdown(html, unsafe_allow_html=True)
-        time.sleep(0.4)
+    res = api.upload_document(file_bytes, filename, course_id)
+    if not res.get("success"):
+        progress_placeholder.error(f"❌ Upload failed: {res.get('error', 'Unknown error')}")
+        return
 
-    time.sleep(0.3)
-    progress_placeholder.success(f"✅ {filename} — uploaded and indexed successfully!")
+    job_id = res.get("job_id")
+    if not job_id:
+        progress_placeholder.success(f"✅ {filename} — uploaded successfully!")
+        return
+
+    stages = {
+        "queued": "⏳ Queued in system...",
+        "processing": "🧠 Ingesting (extracting text, chunking, embedding)...",
+        "completed": "✅ Completed",
+        "failed": "❌ Failed",
+    }
+
+    while True:
+        status_res = api.get_indexing_status(job_id)
+        status = str(status_res.get("status", "queued")).lower()
+        progress = status_res.get("progress_percent", 0)
+
+        if status == "completed":
+            progress_placeholder.success(f"✅ {filename} — uploaded and indexed successfully!")
+            break
+        elif status == "failed":
+            err_msg = status_res.get("error", "Unknown indexing error")
+            progress_placeholder.error(f"❌ Indexing failed for {filename}: {err_msg}")
+            break
+        else:
+            msg = stages.get(status, "⏳ Processing...")
+            progress_placeholder.markdown(
+                f'<div class="upload-progress"><strong>{filename}</strong> ({file_size / 1024:.1f} KB)<br>'
+                f'<div class="upload-step upload-step-active">{msg} ({progress}%)</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            time.sleep(1.0)
 
 
 def _render_document_table(student_view: bool = False):
     """Render document list with status badges (shared by uploads + doc manager)."""
-    docs_data = [
-        {"name": "Week3_Lecture_Normalisation.pdf", "type": "PDF", "size": "2.4 MB", "status": "Indexed", "uploaded": "15 Apr 2026", "chunks": 24},
-        {"name": "DatabaseNotes_Joins_Indexing.pptx", "type": "PPTX", "size": "5.1 MB", "status": "Indexed", "uploaded": "15 Apr 2026", "chunks": 18},
-        {"name": "Textbook_Ch9_QueryOptimisation.pdf", "type": "PDF", "size": "8.7 MB", "status": "Indexed", "uploaded": "14 Apr 2026", "chunks": 38},
-    ]
-    if not student_view:
-        docs_data += [
-            {"name": "Week5_Indexing_QueryPlans.docx", "type": "DOCX", "size": "1.1 MB", "status": "Processing", "uploaded": "20 Apr 2026", "chunks": 0},
-            {"name": "RAG_Pipeline_Overview.pdf", "type": "PDF", "size": "1.8 MB", "status": "Indexed", "uploaded": "13 Apr 2026", "chunks": 16},
-        ]
+    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    docs = api.get_documents(course_id)
 
     headers = ["File Name", "Type", "Size", "Status", "Uploaded"]
     if not student_view:
@@ -1119,23 +1248,40 @@ def _render_document_table(student_view: bool = False):
         col.markdown(f"**{header}**")
     st.markdown("<hr style='margin: 4px 0; border: none; border-top: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
 
-    for doc in docs_data:
+    for doc in docs:
+        doc_id = doc.get("document_id") or doc.get("id") or "unknown"
+        doc_name = doc.get("filename") or doc.get("original_filename") or "Unknown"
+        doc_type = doc.get("file_type") or doc_name.rsplit(".", 1)[-1] if "." in doc_name else "unknown"
+        doc_type = str(doc_type).upper()
+        if "/" in doc_type:
+            doc_type = doc_type.split("/")[-1].replace("VND.OPENXMLFORMATS-OFFICEDOCUMENT.PRESENTATIONML.PRESENTATION", "pptx").replace("VND.OPENXMLFORMATS-OFFICEDOCUMENT.WORDPROCESSINGML.DOCUMENT", "docx")
+
+        size_bytes = doc.get("file_size_bytes") or doc.get("size_bytes") or 0
+        doc_size = f"{size_bytes / (1024*1024):.1f} MB" if size_bytes else "—"
+
+        status = str(doc.get("status") or "pending").lower()
+        badge_class = "badge-indexed" if status in ("indexed", "completed") else ("badge-processing" if status == "processing" else "badge-failed")
+
+        uploaded_at = doc.get("uploaded_at") or doc.get("uploaded") or "—"
+        doc_uploaded = uploaded_at.split("T")[0] if "T" in uploaded_at else uploaded_at
+
         cols = st.columns([4, 1, 1, 1, 2] + ([1] if not student_view else []))
-        cols[0].markdown(f"📄 {doc['name']}")
-        cols[1].markdown(f"<span style='color: #475569;'>{doc['type']}</span>", unsafe_allow_html=True)
-        cols[2].markdown(f"<span style='color: #475569;'>{doc['size']}</span>", unsafe_allow_html=True)
-        badge_class = "badge-indexed" if doc["status"] == "Indexed" else ("badge-processing" if doc["status"] == "Processing" else "badge-failed")
-        cols[3].markdown(f"<span class='status-badge {badge_class}'>{doc['status']}</span>", unsafe_allow_html=True)
-        cols[4].markdown(f"<span style='color: #475569;'>{doc['uploaded']}</span>", unsafe_allow_html=True)
+        cols[0].markdown(f"📄 {doc_name}")
+        cols[1].markdown(f"<span style='color: #475569;'>{doc_type}</span>", unsafe_allow_html=True)
+        cols[2].markdown(f"<span style='color: #475569;'>{doc_size}</span>", unsafe_allow_html=True)
+        cols[3].markdown(f"<span class='status-badge {badge_class}'>{status.capitalize()}</span>", unsafe_allow_html=True)
+        cols[4].markdown(f"<span style='color: #475569;'>{doc_uploaded}</span>", unsafe_allow_html=True)
         if not student_view:
             c1, c2 = cols[5].columns(2)
-            c1.button("🔄", key=f"retry_{doc['name']}")
-            c2.button("🗑️", key=f"delmgr_{doc['name']}")
+            c1.button("🔄", key=f"retry_{doc_id}")
+            if c2.button("🗑️", key=f"delmgr_{doc_id}"):
+                api.delete_document(doc_id)
+                st.rerun()
 
     st.divider()
-    indexed = sum(1 for d in docs_data if d["status"] == "Indexed")
-    total_chunks = sum(d.get("chunks", 0) for d in docs_data)
-    st.caption(f"{len(docs_data)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
+    indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
+    total_chunks = sum(d.get("chunks", 0) for d in docs)
+    st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
 
 
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
