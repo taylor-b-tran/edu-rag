@@ -39,6 +39,41 @@ st.markdown("""
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
 .stApp { background-color: #F8F9FA; }
 
+/* ── Main area text visibility (handles dark mode browser overrides) ── */
+.stApp [data-testid="stMain"] .stMarkdown p,
+.stApp [data-testid="stMain"] .stMarkdown li,
+.stApp [data-testid="stMain"] .stMarkdown span,
+.stApp [data-testid="stMain"] .stMarkdown label,
+.stApp [data-testid="stMain"] .stMarkdown div,
+.stApp [data-testid="stMain"] h1,
+.stApp [data-testid="stMain"] h2,
+.stApp [data-testid="stMain"] h3,
+.stApp [data-testid="stMain"] h4,
+.stApp [data-testid="stMain"] h5,
+.stApp [data-testid="stMain"] h6,
+.stApp [data-testid="stMain"] label,
+.stApp [data-testid="stMain"] p,
+.stApp [data-testid="stMain"] span,
+.stApp [data-testid="stMain"] li,
+.stApp [data-testid="stMain"] small,
+.stApp [data-testid="stMain"] .stCaption {
+    color: #1E293B !important;
+}
+
+/* ── Selectbox and popovers dropdowns styling to ensure readable text ── */
+div[data-baseweb="select"] {
+    color: #1B2A4A !important;
+    background: #FFFFFF !important;
+}
+div[data-baseweb="popover"] * {
+    color: #1B2A4A !important;
+    background-color: #FFFFFF !important;
+}
+div[role="listbox"] * {
+    background-color: #FFFFFF !important;
+    color: #1B2A4A !important;
+}
+
 /* ── Sidebar — navy bg, ensure ALL text is readable ── */
 section[data-testid="stSidebar"] {
     background-color: #0F1B33;
