@@ -14,6 +14,3 @@ data/samples/
 apps/integration/logs/
 chroma_data/
 ci_pytest_raw_*.txt
-AGENTS.md
-.agents/
-.ai/
