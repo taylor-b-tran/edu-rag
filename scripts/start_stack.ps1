@@ -24,6 +24,7 @@ $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path -Parent $ScriptDir
 $EnvFile    = Join-Path $RepoRoot ".env"
 $EnvExample = Join-Path $RepoRoot ".env.example"
+$Utf8NoBom  = [System.Text.UTF8Encoding]::new($false)
 
 function Get-VramGb {
     $cmd = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -33,25 +34,33 @@ function Get-VramGb {
         $first = ($raw | Select-Object -First 1)
         if ($null -eq $first) { return 0 }
         $mb = [int]($first.ToString().Trim())
-        return [Math]::Floor($mb / 1024)
+        return [int][Math]::Floor(($mb + 512) / 1024)
     } catch {
         return 0
     }
 }
 
+function Write-EnvFileLines {
+    param([string[]]$Lines)
+    $content = ($Lines -join [Environment]::NewLine) + [Environment]::NewLine
+    [System.IO.File]::WriteAllText($EnvFile, $content, $Utf8NoBom)
+}
+
 function Set-EnvVar {
     param([string]$Key, [string]$Value)
     if (Test-Path $EnvFile) {
-        $lines = Get-Content $EnvFile
+        $lines = [System.IO.File]::ReadAllLines($EnvFile)
         $pattern = "^$([regex]::Escape($Key))="
         if ($lines -match $pattern) {
-            $lines = $lines -replace $pattern + ".*", "$Key=$Value"
-            $lines | Set-Content -Path $EnvFile -Encoding utf8
+            $lines = $lines | ForEach-Object {
+                if ($_ -match $pattern) { "$Key=$Value" } else { $_ }
+            }
+            Write-EnvFileLines $lines
         } else {
-            Add-Content -Path $EnvFile -Value "$Key=$Value" -Encoding utf8
+            Write-EnvFileLines ($lines + "$Key=$Value")
         }
     } else {
-        "$Key=$Value" | Set-Content -Path $EnvFile -Encoding utf8
+        Write-EnvFileLines @("$Key=$Value")
     }
 }
 

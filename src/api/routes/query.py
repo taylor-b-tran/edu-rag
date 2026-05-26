@@ -50,26 +50,42 @@ def _is_ambiguous(question: str) -> bool:
 
 @query_bp.post("/query")
 def query():
+    state = _state()
     ip = request.remote_addr or "unknown"
     if not _check_rate(ip):
         logger.warning("Rate limit exceeded for IP %s", ip)
         return jsonify({"error": "Too many requests. Limit is 10 per minute."}), 429
 
-    user = _state().validate_bearer(request.headers.get("Authorization"))
+    user = state.validate_bearer(request.headers.get("Authorization"))
     if user is None:
         return jsonify({"error": "Authentication required."}), 401
 
     try:
-        body = request.get_json(force=False, silent=False) or {}
+        body = request.get_json(force=False, silent=False)
     except Exception:
         return jsonify({"error": "invalid JSON body"}), 400
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON body must be an object"}), 400
 
-    question = (body.get("query") or "").strip()
-    course_id = body.get("course_id", "CSIT321")
+    question_raw = body.get("query") or ""
+    course_id_raw = body.get("course_id", "CSIT321")
     session_id = body.get("session_id")
+    if not isinstance(question_raw, str):
+        return jsonify({"error": "query must be a string"}), 400
+    if not isinstance(course_id_raw, str):
+        return jsonify({"error": "course_id must be a string"}), 400
+    if session_id is not None and not isinstance(session_id, str):
+        return jsonify({"error": "session_id must be a string"}), 400
+
+    question = question_raw.strip()
+    course_id = course_id_raw.strip()
 
     if not question:
         return jsonify({"error": "query is required"}), 400
+    if not course_id:
+        return jsonify({"error": "course_id is required"}), 400
 
     if _is_ambiguous(question):
         logger.info("Ambiguous query from user %s: %r", user.get("user_id"), question)
@@ -82,13 +98,13 @@ def query():
             ),
         }), 422
 
-    if not _state().is_enrolled(user, course_id):
+    if not state.is_enrolled(user, course_id):
         logger.warning("User %s attempted access to unauthorised course %s", user.get("user_id"), course_id)
         return jsonify({"error": "Not enrolled in this course."}), 403
 
     started = time.time()
     try:
-        generated = _state().get_generator().generate(question, course_id=course_id)
+        generated = state.get_generator().generate(question, course_id=course_id)
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
         return jsonify({
@@ -108,7 +124,7 @@ def query():
         "model_used": generated.model_used,
         "is_fallback": generated.is_fallback,
     }
-    session_id = _state().record_session_message(
+    session_id = state.record_session_message(
         session_id=session_id,
         user_id=user.get("user_id"),
         course_id=course_id,
@@ -118,7 +134,7 @@ def query():
     result.update(
         {
             "session_id": session_id,
-            "backend_mode": "chromadb",
+            "backend_mode": state.backend_mode,
             "latency_ms": round((time.time() - started) * 1000),
         }
     )

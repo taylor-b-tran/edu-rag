@@ -39,7 +39,7 @@ detect_vram_gb() {
     echo 0
     return
   fi
-  echo $(( mb / 1024 ))
+  echo $(( (mb + 512) / 1024 ))
 }
 
 upsert_env_var() {
@@ -51,7 +51,10 @@ upsert_env_var() {
       sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
     fi
   else
-    printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    if [[ -s "$ENV_FILE" ]] && [[ "$(tail -c 1 "$ENV_FILE" | od -An -t x1 | tr -d ' ')" != "0a" ]]; then
+      printf '\n' >> "$ENV_FILE"
+    fi
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
   fi
 }
 

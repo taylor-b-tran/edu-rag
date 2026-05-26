@@ -25,6 +25,8 @@ def test_health_reports_core_routes():
     assert body["status"] == "ok"
     assert "/api/query" in body["routes"]
     assert "/api/upload" in body["routes"]
+    assert body["mode"] in {"not_initialized", "chromadb", "fixture"}
+    assert isinstance(body["rag_available"], bool)
 
 # ─── Auth ─────────────────────────────────────────────────────────────
 
@@ -152,6 +154,20 @@ def test_query_returns_401_without_token():
     )
 
     assert response.status_code == 401
+
+
+def test_query_rejects_non_object_json_body():
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.post(
+        "/api/query",
+        json=[1, 2, 3],
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "JSON body must be an object"
 
 
 def test_query_returns_403_for_unenrolled_course():

@@ -292,6 +292,8 @@ def get_api_client():
     return PaediaAPIClient(APIConfig())
 
 api = get_api_client()
+DEFAULT_COURSE_ID = "CSIT321"
+COURSE_FALLBACKS = [DEFAULT_COURSE_ID, "CSIT214"]
 
 
 # ─── DEMO CREDENTIALS ──────────────────────────────────────────────
@@ -323,6 +325,37 @@ DEMO_USERS = {
 
 # ─── SESSION STATE INIT ────────────────────────────────────────────
 
+def _normalise_user_for_ui(user: dict) -> dict:
+    ui_user = dict(user or {})
+    role = str(ui_user.get("role", "student"))
+    role_map = {"student": "Student", "lecturer": "Lecturer", "admin": "Admin"}
+    ui_user["role"] = role_map.get(role.lower(), role)
+    ui_user["id"] = ui_user.get("id") or ui_user.get("user_id") or ui_user.get("username") or ""
+    return ui_user
+
+
+def _course_options_for_user(user: dict) -> list[str]:
+    courses = data.get("courses", []) if data else []
+    enrolled = set(user.get("enrolled_courses", []) or [])
+    role = str(user.get("role", "")).lower()
+    options: list[str] = []
+    for course in courses:
+        code = course.get("course_code") or course.get("course_id")
+        course_id = course.get("course_id")
+        if not code:
+            continue
+        if role == "admin" or course_id in enrolled or code in enrolled:
+            options.append(code)
+    if not options:
+        options = [c for c in COURSE_FALLBACKS if c]
+    return list(dict.fromkeys(options))
+
+
+def _default_course_for_user(user: dict) -> str:
+    options = _course_options_for_user(user)
+    return DEFAULT_COURSE_ID if DEFAULT_COURSE_ID in options else options[0]
+
+
 def init_session_state():
     defaults = {
         "authenticated": False,
@@ -335,7 +368,9 @@ def init_session_state():
         "sessions": [],
         "active_session_id": None,
         "session_id": None,
-        "course_id": None,
+        "course_id": DEFAULT_COURSE_ID,
+        "course_options": COURSE_FALLBACKS,
+        "selected_course_id": DEFAULT_COURSE_ID,
         "login_error": None,
         "pending_send": False,
         "query_state": None,
@@ -353,16 +388,21 @@ init_session_state()
 
 def create_new_session(title="New Chat"):
     """Create a new chat session and make it active."""
+    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
     session = {
         "session_id": str(uuid.uuid4())[:8],
+        "backend_session_id": None,
         "title": title,
         "messages": [],
-        "course_id": st.session_state.get("course_id", "CSIT214"),
+        "course_id": course_id,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "message_count": 0,
     }
     st.session_state.sessions.append(session)
     st.session_state.active_session_id = session["session_id"]
+    st.session_state.session_id = None
+    st.session_state.course_id = course_id
+    st.session_state.selected_course_id = course_id
     st.session_state.messages = session["messages"]
     return session
 
@@ -383,6 +423,9 @@ def switch_session(session_id):
         if s["session_id"] == session_id:
             st.session_state.active_session_id = session_id
             st.session_state.messages = s["messages"]
+            st.session_state.session_id = s.get("backend_session_id")
+            st.session_state.course_id = s.get("course_id", DEFAULT_COURSE_ID)
+            st.session_state.selected_course_id = st.session_state.course_id
             return
 
 
@@ -390,15 +433,15 @@ def switch_session(session_id):
 
 def get_ai_response(query: str) -> dict:
     """Query the RAG pipeline via the API client."""
-    course_id = st.session_state.get("course_id")
+    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
     session_id = st.session_state.get("session_id")
-    return api.query(query, course_id=course_id or "", session_id=session_id)
+    return api.query(query, course_id=course_id, session_id=session_id)
 
 
 def get_suggested_prompts() -> list:
-    if data:
-        return random.sample(data["suggested_prompts"], min(4, len(data["suggested_prompts"])))
-    return ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
+    fallback = ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
+    prompts = data.get("suggested_prompts", fallback) if data else fallback
+    return random.sample(prompts, min(4, len(prompts)))
 
 
 def get_model_badge(model_used: str) -> str:
@@ -410,8 +453,28 @@ def get_model_badge(model_used: str) -> str:
     return f'<span class="model-badge model-unknown">🔧 {model_used}</span>'
 
 
-def get_confidence_label(confidence: float) -> str:
+def _confidence_score(confidence, confidence_score=None) -> float:
+    if isinstance(confidence_score, (int, float)):
+        return max(0.0, min(float(confidence_score), 1.0))
+    if isinstance(confidence, (int, float)):
+        return max(0.0, min(float(confidence), 1.0))
+    if isinstance(confidence, str):
+        label_scores = {"high": 0.9, "medium": 0.6, "low": 0.3}
+        lowered = confidence.lower()
+        if lowered in label_scores:
+            return label_scores[lowered]
+        try:
+            return max(0.0, min(float(confidence), 1.0))
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def get_confidence_label(confidence) -> str:
     """Return human-readable confidence label."""
+    if isinstance(confidence, str) and confidence.lower() in {"high", "medium", "low"}:
+        return f"{confidence.capitalize()} confidence"
+    confidence = _confidence_score(confidence)
     if confidence >= 0.8:
         return "High confidence"
     elif confidence >= 0.5:
@@ -446,15 +509,35 @@ def render_login_page():
             st.error(st.session_state.login_error)
 
         if st.button("Sign In", type="primary", use_container_width=True):
-            user = DEMO_USERS.get(email)
-            if user and user["password"] == password:
+            login_result = api.login(email.strip(), password)
+            if login_result.get("success"):
+                user = _normalise_user_for_ui(login_result.get("user", {}))
                 st.session_state.authenticated = True
-                st.session_state.user = {k: v for k, v in user.items() if k != "password"}
+                st.session_state.jwt_token = login_result.get("jwt_token")
+                st.session_state.user = user
+                st.session_state.course_options = _course_options_for_user(user)
+                st.session_state.course_id = _default_course_for_user(user)
+                st.session_state.selected_course_id = st.session_state.course_id
                 st.session_state.login_error = None
                 create_new_session("Welcome Chat")
                 st.rerun()
+            elif login_result.get("use_demo_auth"):
+                user = DEMO_USERS.get(email.strip())
+                if user and user["password"] == password:
+                    user = _normalise_user_for_ui({k: v for k, v in user.items() if k != "password"})
+                    st.session_state.authenticated = True
+                    st.session_state.user = user
+                    st.session_state.course_options = _course_options_for_user(user)
+                    st.session_state.course_id = _default_course_for_user(user)
+                    st.session_state.selected_course_id = st.session_state.course_id
+                    st.session_state.login_error = None
+                    create_new_session("Welcome Chat")
+                    st.rerun()
+                else:
+                    st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+                    st.rerun()
             else:
-                st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+                st.session_state.login_error = login_result.get("error") or "Invalid email or password."
                 st.rerun()
 
         st.markdown("""
@@ -573,6 +656,7 @@ def render_sidebar():
             st.caption(role)
 
         if st.button("🚪 Sign Out", use_container_width=True):
+            api.clear_auth()
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -597,16 +681,24 @@ def _send_message(text: str):
 
     response = get_ai_response(text)
     now2 = datetime.now()
+    backend_session_id = response.get("session_id")
+    if backend_session_id:
+        st.session_state.session_id = backend_session_id
+        if session:
+            session["backend_session_id"] = backend_session_id
+            session["course_id"] = st.session_state.get("course_id") or DEFAULT_COURSE_ID
 
     msg = {
         "role": "assistant",
         "content": response.get("answer", ""),
         "source_references": response.get("source_references", []),
         "confidence": response.get("confidence", 0),
+        "confidence_score": response.get("confidence_score"),
         "model_used": response.get("model_used", "ollama/llama3"),
         "token_count": response.get("token_count", 0),
         "is_fallback": response.get("is_fallback", False),
         "from_api": response.get("from_api", False),
+        "backend_mode": response.get("backend_mode"),
         "retrieval_metadata": response.get("retrieval_metadata"),
         "error_type": response.get("error_type"),
         "error_message": response.get("error_message"),
@@ -623,7 +715,7 @@ def _send_message(text: str):
 def render_chat_page():
     session = get_active_session()
 
-    col1, col2, col3 = st.columns([5, 3, 2])
+    col1, col2, col3, col4 = st.columns([5, 3, 2, 2])
     with col1:
         st.markdown("### 💬 Ask your course materials")
     with col2:
@@ -635,11 +727,31 @@ def render_chat_page():
             unsafe_allow_html=True,
         )
     with col3:
+        course_options = st.session_state.get("course_options") or COURSE_FALLBACKS
+        current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+        if current_course not in course_options:
+            course_options = [current_course] + list(course_options)
+        selected_course = st.selectbox(
+            "Course",
+            course_options,
+            index=course_options.index(current_course),
+            label_visibility="collapsed",
+            key="selected_course_id",
+        )
+    if selected_course != st.session_state.get("course_id"):
+        st.session_state.course_id = selected_course
+        st.session_state.session_id = None
+        if session:
+            session["course_id"] = selected_course
+            session["backend_session_id"] = None
+    with col4:
         if st.button("🗑️ Clear chat", use_container_width=True):
             st.session_state.messages = []
+            st.session_state.session_id = None
             if session:
                 session["messages"] = []
                 session["message_count"] = 0
+                session["backend_session_id"] = None
             st.rerun()
 
     st.markdown("<hr style='margin: 0 0 16px 0; border: none; border-top: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
@@ -704,22 +816,24 @@ def render_chat_page():
                     if msg.get("source_references"):
                         sources_html = '<div class="source-label">📄 Retrieved from:</div>'
                         for src in msg["source_references"]:
-                            section = src.get("section", "")
+                            filename = src.get("filename") or src.get("source_file") or src.get("source") or "Document"
+                            page_number = src.get("page_number") or src.get("page") or "?"
+                            section = src.get("section") or src.get("topic") or ""
                             section_str = f" · {section}" if section else ""
                             collection = src.get("collection_name", "")
                             collection_str = f" [{collection}]" if collection else ""
                             sim_pct = int(src.get("similarity", 0) * 100)
                             sources_html += (
                                 f'<span class="source-chip">'
-                                f'📄 {src.get("filename", "Document")} · p.{src.get("page_number", "?")}'
+                                f'📄 {filename} · p.{page_number}'
                                 f'{section_str} · {sim_pct}%{collection_str}'
                                 f'</span>'
                             )
 
-                    confidence = msg.get("confidence", 0)
+                    confidence = _confidence_score(msg.get("confidence"), msg.get("confidence_score"))
                     conf_color = "#10B981" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EF4444")
                     conf_pct = int(confidence * 100)
-                    conf_label = get_confidence_label(confidence)
+                    conf_label = get_confidence_label(msg.get("confidence", confidence))
                     model_used = msg.get("model_used", "")
                     model_badge = get_model_badge(model_used)
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"

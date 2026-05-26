@@ -3,7 +3,7 @@
 **Task:** S5-T05  
 **Owner:** Tung Phuong Anh Huynh  
 **Created:** 15 May 2026  
-**Last updated:** 21 May 2026  
+**Last updated:** 26 May 2026
 **Sprint:** 5 (14 May – 28 May 2026)
 
 > Work through each section in order. Mark each item **PASS**, **FAIL**, or **SKIP** (with reason).  
@@ -171,3 +171,27 @@
 ---
 
 *Owner: Tung Phuong Anh Huynh — CSIT321 Project 37, Group 19*
+---
+
+## 12. Post-Fix Regression Recheck - 26 May 2026
+
+| Area | Check | Result | Evidence |
+|---|---|---|---|
+| Docker stack | Rebuilt with `docker compose up -d --build` | PASS | api, streamlit, postgres, chromadb, and ollama healthy/running |
+| Compose contracts | Base and GPU Compose config validation | PASS | `docker compose config --quiet` returned cleanly for both variants |
+| API auth | Student login through Flask API | PASS | Returned `dev_access_...` token and role `student` |
+| API malformed JSON | `/api/query` with JSON list body | PASS | Returned HTTP 400 instead of 500 |
+| Live RAG query | Authenticated CSIT321 query through Flask API | PASS | `backend_mode=chromadb`, `model_used=qwen3:14b`, 5 sources, `session_id` present |
+| Health mode | `/api/health` after live query | PASS | Returned `mode=chromadb`, `rag_available=true` |
+| Backend session reuse | Inline Flask test with stubbed generator reused supplied `session_id` | PASS | One backend session contained two messages |
+| Streamlit login | Browser login as student | PASS | UI showed Student, Live API, and CSIT321 course selector |
+| Streamlit API error render | Browser query `RAG` through live API ambiguity path | PASS | UI rendered Ambiguous Query message without crashing |
+| Streamlit long-query timeout | API client timeout policy | PASS | `PAEDIA_QUERY_TIMEOUT` defaults to 180 s; long query calls do not retry/fallback silently |
+| PowerShell wrapper | Parse and BOM checks | PASS | PowerShell parse OK; local `.env` starts `41-50-50`, not BOM |
+| Python syntax | `py_compile` on modified Python files | PASS | No syntax errors |
+
+Notes:
+
+- Local host Python still lacks Flask, so `python -m pytest test -q` cannot run outside Docker in this shell.
+- The runtime Docker image installs `requirements.txt` only and does not include `pytest`; inline API checks were run inside the container instead.
+- Bash wrapper syntax could not be checked through WSL because this environment returned `Access is denied`; static inspection confirmed the edited append path.
