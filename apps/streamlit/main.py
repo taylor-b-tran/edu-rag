@@ -1290,27 +1290,69 @@ def render_admin_page():
     st.markdown("### ⚙️ Admin Dashboard")
     st.markdown("<span class='status-badge' style='background:#FEE2E2; color:#991B1B;'>Admin</span>", unsafe_allow_html=True)
 
+    stats = api.get_admin_stats() if api.is_live else {}
+    offline = stats.get("_offline") or not api.is_live
+    docs_count = stats.get("documents", 0)
+    uploads_count = stats.get("uploaded_documents", 0)
+    queries_total = stats.get("queries_total", 0)
+    sessions_count = stats.get("sessions", 0)
+    users_count = stats.get("users", 0)
+    courses_count = stats.get("courses", 0)
+    warmup = stats.get("warmup") or {}
+    warmup_status = warmup.get("status", "unknown")
+    mode_label = stats.get("mode", "unknown")
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Users", "142", "↑ 12 this week")
-    c2.metric("Documents", "38", "5 courses")
-    c3.metric("Queries Today", "87", "↑ 23%")
-    c4.metric("Avg Response", "1.2s", "within target")
+    c1.metric("Users (fixtures)", users_count if users_count else "—",
+              f"{courses_count} courses" if courses_count else "no fixture")
+    c2.metric("Documents", docs_count if docs_count else "—",
+              f"{uploads_count} uploaded" if uploads_count else "seed only")
+    c3.metric("Queries (lifetime)", queries_total if queries_total else "—",
+              f"{sessions_count} sessions" if sessions_count else "no sessions yet")
+    warmup_delta = "ready" if warmup_status == "ok" else warmup_status
+    c4.metric("Backend mode", mode_label, warmup_delta)
+
+    if offline:
+        st.warning("Admin metrics offline — API not reachable. Showing zeros from fixture fallback.")
+    else:
+        st.caption(f"Live from /api/admin/stats · Ollama warm-up: {warmup_status}"
+                   + (f" ({warmup.get('elapsed_ms')} ms)" if warmup.get("elapsed_ms") else ""))
 
     st.divider()
     st.markdown("#### User Management")
+    st.caption("Demo users are read from `fixtures/sample_responses.json`. Editing is not wired in Sprint 5.")
 
     col1, col2 = st.columns([4, 2])
     with col1:
-        st.text_input("Search", placeholder="🔍 Search users...", label_visibility="collapsed", key="admin_search")
+        search_query = st.text_input("Search", placeholder="🔍 Search users...",
+                                     label_visibility="collapsed", key="admin_search")
     with col2:
-        st.button("+ Add User", type="primary", use_container_width=True)
+        st.button("+ Add User", type="primary", use_container_width=True, disabled=True,
+                  help="Disabled in Sprint 5 — user provisioning not yet wired to API")
 
-    users = [
-        {"name": "Anmoldeep Singh", "email": "anmoldeep@uow.edu.au", "role": "Student", "last": "2 hrs ago", "queries": 34, "status": "Active"},
-        {"name": "Prof. Jun Yan", "email": "junyan@uow.edu.au", "role": "Lecturer", "last": "1 hr ago", "queries": 12, "status": "Active"},
-        {"name": "Sarah Chen", "email": "schen@uow.edu.au", "role": "Student", "last": "5 hrs ago", "queries": 28, "status": "Active"},
-        {"name": "Admin User", "email": "admin@uow.edu.au", "role": "Admin", "last": "Just now", "queries": 5, "status": "Active"},
-    ]
+    fixture_users = data.get("demo_users", []) if isinstance(data, dict) else []
+    sessions = api.get_sessions() if api.is_live else []
+    queries_by_user: dict[str, int] = {}
+    for sess in sessions:
+        uid = sess.get("user_id") or sess.get("user_email") or "unknown"
+        queries_by_user[uid] = queries_by_user.get(uid, 0) + len(sess.get("messages", []) or [])
+
+    users = []
+    for u in fixture_users:
+        email = (u.get("email") or "").lower()
+        if search_query and search_query.lower() not in (u.get("name", "") + " " + email).lower():
+            continue
+        users.append({
+            "name": u.get("name") or u.get("username") or email or "Unknown",
+            "email": email or "—",
+            "role": (u.get("role") or "student").capitalize(),
+            "last": "—",
+            "queries": queries_by_user.get(u.get("user_id") or u.get("id"), 0),
+            "status": "Active" if u.get("enabled", True) else "Disabled",
+        })
+    if not users:
+        users = [{"name": "(no fixture users)", "email": "—", "role": "—",
+                  "last": "—", "queries": 0, "status": "—"}]
 
     cols = st.columns([3, 2, 2, 1, 1, 2])
     for col, header in zip(cols, ["User", "Role", "Last Active", "Queries", "Status", "Actions"]):

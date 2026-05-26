@@ -40,6 +40,8 @@ class APIState:
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
     _db_available: bool = field(default=False, init=False, repr=False)
+    warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
+                                          init=False, repr=False)
 
     def __post_init__(self) -> None:
         try:
@@ -58,6 +60,14 @@ class APIState:
                 type(exc).__name__, exc,
             )
             self._db_available = False
+
+        try:
+            from src.api import warmup
+            warmup.warmup_async(self)
+        except Exception as exc:
+            logger.warning("Failed to schedule Ollama warm-up: %s", exc)
+            self.warmup_status = {"status": "failed",
+                                  "error": f"{type(exc).__name__}: {exc}"}
 
     @property
     def fixture_loaded(self) -> bool:

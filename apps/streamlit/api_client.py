@@ -449,6 +449,23 @@ class PaediaAPIClient:
             return result
         return {"status": "indexed", "progress_percent": 100}
 
+    def get_admin_stats(self) -> dict:
+        """
+        Live admin/metrics snapshot.
+
+        Live API: GET /api/admin/stats
+        Fixture fallback: zeros so the UI still renders.
+        """
+        result = self._get("/api/admin/stats")
+        if result and isinstance(result, dict):
+            return result
+        return {
+            "documents": 0, "uploaded_documents": 0, "indexing_jobs": 0,
+            "sessions": 0, "queries_total": 0, "users": 0, "courses": 0,
+            "mode": "fixture", "warmup": {"status": "unknown"},
+            "_offline": True,
+        }
+
     def get_courses(self, user_id: Optional[str] = None) -> list:
         """
         List courses the user is enrolled in.
