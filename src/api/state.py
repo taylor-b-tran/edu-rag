@@ -36,10 +36,19 @@ class APIState:
     uploaded_documents: list[dict[str, Any]] = field(default_factory=list)
     _retriever: Any = field(default=None, init=False, repr=False)
     _generator: Any = field(default=None, init=False, repr=False)
+    _backend_mode: str = field(default="not_initialized", init=False, repr=False)
 
     @property
     def fixture_loaded(self) -> bool:
         return bool(self.fixtures)
+
+    @property
+    def backend_mode(self) -> str:
+        return self._backend_mode
+
+    @property
+    def rag_available(self) -> bool:
+        return self._backend_mode == "chromadb"
 
     def get_generator(self):
         if self._generator is None:
@@ -47,10 +56,12 @@ class APIState:
                 from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
                 self._retriever = VectorRetriever()
                 self._generator = LLMResponseGeneration(retriever=self._retriever)
+                self._backend_mode = "chromadb"
                 print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
             except Exception as exc:
                 print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
                 self._generator = _FixtureGenerator(self)
+                self._backend_mode = "fixture"
         return self._generator
 
     def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
@@ -233,7 +244,7 @@ class _FixtureResponse:
 
 
 class _FixtureGenerator:
-    """Fallback used in CI (no chromadb) — serves fixture responses."""
+    """Fallback used when ChromaDB or generation is unavailable."""
     def __init__(self, state):
         self._state = state
 

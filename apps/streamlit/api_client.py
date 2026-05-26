@@ -43,8 +43,9 @@ class APIConfig:
     """Configuration for the Flask WebApplication API connection."""
     base_url: str = os.getenv("PAEDIA_API_URL", "http://localhost:5000")
     timeout: int = int(os.getenv("PAEDIA_API_TIMEOUT", "10"))
+    query_timeout: int = int(os.getenv("PAEDIA_QUERY_TIMEOUT", "180"))
     max_retries: int = int(os.getenv("PAEDIA_API_RETRIES", "2"))
-    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "true").lower() == "true"
+    use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "false").lower() == "true"
 
 
 # ─── FIXTURE LOADER ──────────────────────────────────────────────────
@@ -121,18 +122,26 @@ class PaediaAPIClient:
         logger.info("API availability: %s", self._api_available)
         return self._api_available
 
-    def _post(self, endpoint: str, payload: dict) -> Optional[dict]:
+    def _post(
+        self,
+        endpoint: str,
+        payload: dict,
+        timeout: Optional[int] = None,
+        max_retries: Optional[int] = None,
+    ) -> Optional[dict]:
         """Make a POST request to the Flask API. Returns None on failure."""
         if not self._check_api():
             return None
         url = f"{self.config.base_url}{endpoint}"
-        for attempt in range(self.config.max_retries + 1):
+        attempts = self.config.max_retries if max_retries is None else max_retries
+        request_timeout = timeout or self.config.timeout
+        for attempt in range(attempts + 1):
             try:
                 resp = requests.post(
                     url,
                     json=payload,
                     headers=self._headers(),
-                    timeout=self.config.timeout,
+                    timeout=request_timeout,
                 )
                 if resp.status_code == 401 and self._refresh_token:
                     # Try token refresh once
@@ -141,13 +150,20 @@ class PaediaAPIClient:
                             url,
                             json=payload,
                             headers=self._headers(),
-                            timeout=self.config.timeout,
+                            timeout=request_timeout,
                         )
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    try:
+                        error = resp.json()
+                    except Exception:
+                        error = {"error": resp.text or resp.reason}
+                    error["_api_error"] = True
+                    error["status_code"] = resp.status_code
+                    return error
                 return resp.json()
             except Exception as e:
                 logger.warning("API POST %s attempt %d failed: %s", endpoint, attempt + 1, e)
-                if attempt < self.config.max_retries:
+                if attempt < attempts:
                     time.sleep(0.5 * (attempt + 1))
         return None
 
@@ -230,6 +246,14 @@ class PaediaAPIClient:
             }
 
         # Fixture fallback — return None to let main.py handle demo credentials
+        if result and result.get("_api_error"):
+            return {
+                "success": False,
+                "user": {},
+                "error": result.get("error") or result.get("message") or "Login failed.",
+                "status_code": result.get("status_code"),
+            }
+
         return {"success": False, "user": {}, "error": None, "use_demo_auth": True}
 
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
@@ -250,17 +274,51 @@ class PaediaAPIClient:
         }
         """
         # Try live API
+        api_live = self._check_api()
         result = self._post("/api/query", {
             "query": query_text,
             "course_id": course_id,
             "session_id": session_id,
-        })
+        }, timeout=self.config.query_timeout, max_retries=0)
         if result and "answer" in result:
             result["from_api"] = True
             return result
+        if result and result.get("_api_error"):
+            message = result.get("message") or result.get("error") or "The API rejected this request."
+            return {
+                "answer": message,
+                "source_references": [],
+                "confidence": "Low",
+                "confidence_score": 0.0,
+                "model_used": "api_error",
+                "token_count": 0,
+                "is_fallback": True,
+                "from_api": True,
+                "error_type": result.get("error"),
+                "error_message": message,
+                "status_code": result.get("status_code"),
+            }
+        if api_live:
+            return {
+                "answer": "The live API did not return a response before the query timeout.",
+                "source_references": [],
+                "confidence": "Low",
+                "confidence_score": 0.0,
+                "model_used": "api_timeout",
+                "token_count": 0,
+                "is_fallback": True,
+                "from_api": True,
+                "error_type": "api_timeout",
+                "error_message": "The live API request timed out.",
+            }
 
         # Fixture fallback
         return self._fixture_query(query_text)
+
+    def clear_auth(self) -> None:
+        """Clear cached tokens after UI logout."""
+        self._jwt_token = None
+        self._refresh_token = None
 
     def _fixture_query(self, query_text: str) -> dict:
         """Match query against fixture responses."""

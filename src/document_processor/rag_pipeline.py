@@ -146,7 +146,8 @@ if __name__ == "__main__":
     gen = LLMResponseGeneration()
     q = input("Question (Enter for default): ").strip() or \
           "What is Retrieval-Augmented Generation and how does it work?"
-    print(f"\nQuery: {q}\n{'\u2500'*60}")
+    separator = "-" * 60
+    print(f"\nQuery: {q}\n{separator}")
     r = gen.generate(q)
     print(f"Confidence: {r.confidence} ({r.confidence_score:.3f})")
     print(f"Fallback  : {r.is_fallback}")

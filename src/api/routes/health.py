@@ -12,11 +12,13 @@ def _state():
 
 @health_bp.get("/health")
 def health():
+    state = _state()
     return jsonify(
         {
             "status": "ok",
-            "mode": "fixture",
-            "fixture_loaded": _state().fixture_loaded,
+            "mode": state.backend_mode,
+            "rag_available": state.rag_available,
+            "fixture_loaded": state.fixture_loaded,
             "routes": [
                 "/api/auth/login",
                 "/api/query",
@@ -31,12 +33,13 @@ def health():
 @health_bp.get("/admin/stats")
 @health_bp.get("/metrics")
 def metrics():
+    state = _state()
     return jsonify(
         {
-            "documents": len(_state().list_documents()),
-            "sessions": len(_state().sessions),
-            "indexing_jobs": len(_state().indexing_jobs),
-            "mode": "fixture",
+            "documents": len(state.list_documents()),
+            "sessions": len(state.sessions),
+            "indexing_jobs": len(state.indexing_jobs),
+            "mode": state.backend_mode,
         }
     )
 
@@ -44,4 +47,4 @@ def metrics():
 @health_bp.get("/admin/audit-logs")
 @health_bp.get("/logs")
 def logs():
-    return jsonify({"logs": [], "mode": "fixture"})
+    return jsonify({"logs": [], "mode": _state().backend_mode})

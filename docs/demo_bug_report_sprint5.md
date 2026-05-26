@@ -2,7 +2,7 @@
 
 **Task:** S5-T08
 **Sprint:** 5 (14 May – 28 May 2026)
-**Last updated:** 24 May 2026
+**Last updated:** 26 May 2026
 **Sign-off target:** Demo freeze 27–28 May
 
 > Log every observed defect found during Sprint 5 QA, integration, or rehearsal. Mark as **Open**, **Fix in progress**, or **Resolved** with the PR or commit reference. A failing item in `docs/qa_checklist_sprint5.md` must appear here before the demo freeze.
@@ -36,6 +36,15 @@
 | DEMO-006 | Medium | Sprint 5 integration gate caught `===` separator lines in `ci_pytest_raw_sprint5.txt` as conflict markers | 23 May | PR #38 + #39 (Tung) — remove the raw output file from tracking |
 | DEMO-007 | Medium | `docker-compose.yml` set `OLLAMA_BASE_URL` but `rag_pipeline.py` reads `OLLAMA_HOST` — API never reached Ollama inside Compose network | 24 May | This PR — rename to `OLLAMA_HOST` and add `OLLAMA_MODEL` env override |
 | DEMO-008 | Low | `rag_pipeline._call_ollama` fallback message iterated `for c in []` instead of the retrieved chunks list, so citations were never printed in Ollama-down branch | 24 May | This PR — pass `chunks=good` from `generate()` |
+
+| DEMO-009 | Blocker | Streamlit login used local `DEMO_USERS`, so the UI never received a Flask API JWT and queries silently fell back to fixtures | 26 May | This fix - API-first login, UI role normalization, CSIT321 course selector, and backend session-id persistence |
+| DEMO-010 | Blocker | `rag_pipeline.py` had an import-time f-string `SyntaxError`, forcing API fallback mode before ChromaDB could initialise | 26 May | This fix - replace the invalid f-string separator expression in the CLI smoke block |
+| DEMO-011 | High | Streamlit query client timed out after 10 s while qwen live RAG takes about 90-120 s, causing fixture fallback despite a healthy backend | 26 May | This fix - add `PAEDIA_QUERY_TIMEOUT` default 180 s and disable retries for long query calls |
+| DEMO-012 | High | `course_id` was initialised as `None` and never set in chat state, causing live API queries to send an empty course id | 26 May | This fix - default chat course to `CSIT321`, add a course selector, and reset backend session on course changes |
+| DEMO-013 | Medium | `/api/health`, `/metrics`, and `/logs` hardcoded `mode: fixture` even after ChromaDB mode initialised | 26 May | This fix - expose dynamic `backend_mode` and `rag_available` from API state |
+| DEMO-014 | Medium | `/api/query` could raise 500 for non-object JSON bodies such as lists | 26 May | This fix - validate request JSON shape and field types before reading `.get(...)` |
+| DEMO-015 | Medium | PowerShell wrapper wrote `.env` as UTF-8 with BOM under Windows PowerShell 5.1 | 26 May | This fix - write `.env` with `System.Text.UTF8Encoding($false)` |
+| DEMO-016 | Low | Raw QA evidence logs such as `ci_pytest_raw_sprint5.txt` could reappear as untracked commit noise | 26 May | This fix - ignore `ci_pytest_raw_*.txt` while preserving Tung's local evidence file |
 
 ## 3. Known limitations (not bugs, documented in `sprint5_implementation_summary.md` §5)
 
