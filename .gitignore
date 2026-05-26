@@ -14,3 +14,6 @@ data/samples/
 apps/integration/logs/
 chroma_data/
 ci_pytest_raw_*.txt
+
+# Assessment rubrics from UOW — keep local only, never push to repo.
+docs/A3_Marking-*.pdf

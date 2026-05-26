@@ -78,7 +78,7 @@ Student / Lecturer / Admin
 | Sprint 1–2 | Complete | Architecture decisions, module interface design, Assessment 2 documentation |
 | Sprint 3 | Complete | Working RAG PoC notebook, Docker stack, PostgreSQL schema, API specification, prompt strategy, retrieval benchmark, privacy/ethics review, UI wireframes, test query corpus |
 | Sprint 4 | Complete | Flask API with JWT auth, role-based access control, course-scoped query enforcement, Streamlit UI connected to live API, document upload/indexing flow, PPTX/DOCX parser validation |
-| Sprint 5 | In Progress | CI/CD pipeline (GitHub Actions), Docker demo-readiness workflow, live RAG wiring (fixture → ChromaDB + Ollama), A3 evidence pack |
+| Sprint 5 | Near-final (revision 3, 27 May 2026) | CI/CD pipeline (GitHub Actions), Docker demo-readiness workflow, live RAG wiring (ChromaDB + Ollama qwen3:14b on GPU), live document upload→indexing→retrieval, upload metadata persisted to PostgreSQL, automatic Ollama warm-up at API startup, live admin dashboard metrics, A3 evidence pack — see [`docs/sprint5_handover.md`](docs/sprint5_handover.md) |
 
 ### What is working now
 
@@ -95,8 +95,11 @@ Student / Lecturer / Admin
 - **Role-based access control**: lecturer/admin only for upload/delete; students blocked with 403
 - **Course-scoped query enforcement**: students cannot query courses they are not enrolled in
 - **Streamlit UI** connected to live Flask API via `apps/integration/start.sh`
-- **Document upload flow** wired end-to-end: UI → `api_client.upload_document()` → Flask → indexing job queue
-- PPTX and DOCX parser paths validated with extended test suite (104 tests passing)
+- **Document upload flow** wired end-to-end: UI → `api_client.upload_document()` → Flask → background chunker → embedder → ChromaDB → student retrieval (Sprint 5 rev 2, 26 May)
+- **Upload metadata + indexing jobs persisted to PostgreSQL** via `src/api/db.py`; `APIState` hydrates from Postgres on startup so uploads survive `docker compose restart api` (Sprint 5 rev 2, 26 May)
+- **Automatic Ollama warm-up** at API startup (`src/api/warmup.py`) — no more 45 s cold-start on the first demo query; `/api/health.warmup` exposes status and `/api/warmup` re-warms on demand (Sprint 5 rev 3, 27 May)
+- **Live admin dashboard metrics** — Streamlit admin page reads `/api/admin/stats` for KPI tiles and `fixtures/sample_responses.json::demo_users` (joined with `/api/sessions` for per-user query counts) for the User Management table (Sprint 5 rev 3, 27 May)
+- PPTX and DOCX parser paths validated with extended test suite (**112 tests passing** as of Sprint 5 rev 3)
 
 ### Current report and planning artifacts
 
@@ -113,7 +116,7 @@ Student / Lecturer / Admin
 |---|---|---|
 | Language | Python | Across all modules |
 | UI prototype | Streamlit | Student-facing Q&A + admin dashboard |
-| API layer | Flask + Blueprints | `src/api/` — JWT auth, role-scoped routes, fixture-backed Sprint 4 prototype |
+| API layer | Flask + Blueprints | `src/api/` — JWT auth, role-scoped routes, live RAG via ChromaDB + Ollama, Postgres-persisted upload metadata, background Ollama warm-up |
 | Text extraction | PyMuPDF (`fitz`) | PDF-first; PPTX/DOCX in progress |
 | Text splitting | LangChain `RecursiveCharacterTextSplitter` | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 384-dimensional, fully local |
@@ -236,10 +239,12 @@ Sprint 5 reruns the same corpus against live ChromaDB retrieval.
 ├── materials/               # Sample course PDF for the PoC
 ├── notebooks/               # rag_poc.ipynb — executed RAG pipeline
 ├── src/
-│   ├── api/                 # Flask REST API (Sprint 4)
+│   ├── api/                 # Flask REST API
 │   │   ├── app.py           # App factory
-│   │   ├── state.py         # In-memory state + auth helpers
-│   │   └── routes/          # auth, query, documents, sessions, health
+│   │   ├── state.py         # APIState — hot cache, Postgres hydration, warm-up trigger
+│   │   ├── db.py            # Postgres persistence for uploaded_documents + indexing_jobs (Sprint 5 rev 2)
+│   │   ├── warmup.py        # Background Ollama warm-up (Sprint 5 rev 3)
+│   │   └── routes/          # auth, query, documents, sessions, health (incl. /api/warmup, /api/admin/stats)
 │   ├── document_processor/  # chunker.py (PDF, PPTX, DOCX)
 │   └── vector_retriever/    # embedder.py
 ├── test/                    # Pytest: API auth, chunker, PPTX/DOCX integration
@@ -261,9 +266,9 @@ All changes merge through pull requests into `develop`. Direct pushes to `main` 
 
 ## Known Limitations
 
-- **Fixture-backed query path** — the Flask `/api/query` route returns fuzzy-matched fixture responses, not live ChromaDB retrieval. Wiring the real pipeline is the primary Sprint 5 deliverable.
-- **31-question benchmark is fixture-mode only** — the 6 PASS / 6 PARTIAL / 19 FAIL result reflects fixture matching, not actual retrieval quality. The benchmark will be rerun against live ChromaDB in Sprint 5.
-- **Session data is in-memory** — uploaded document records and session history reset on Flask restart; persistent storage is a post-Sprint 5 item.
+- **Auth + chat sessions are in-memory** — login users come from `fixtures/sample_responses.json`; session/message history is stored on `APIState` and resets on Flask restart. PostgreSQL schema for users/sessions is staged for Sprint 6.
+- **31-question benchmark is fixture-mode only** — the 6 PASS / 6 PARTIAL / 19 FAIL result reflects fixture matching, not actual retrieval quality. Sprint 5 added a live 5-query benchmark on real ChromaDB+Ollama (`docs/rag_benchmark_sprint5_results.json`); the 31-question live re-run is a Sprint 6 item.
+- **Demo GPU is 8 GB VRAM (RTX 5060)** — `qwen3:14b` runs but partial CPU offload limits throughput. A separate higher-VRAM host is planned for the optional 14B benchmark.
 - **No public deployment** — the system is designed for local demo only. Cloud hosting requires resolving secrets, data privacy, and cost boundaries before any public deployment.
 
 ---
