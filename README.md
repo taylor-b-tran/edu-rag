@@ -216,7 +216,7 @@ Edit `.env` if you need non-default ports — most teammates leave it as-is. Def
 | `POSTGRES_PORT` | `5432` | Change if you have local Postgres running |
 | `CHROMA_PORT` | `8000` | Change if 8000 is in use (Jupyter often grabs this) |
 | `OLLAMA_PORT` | `11434` | Rarely conflicts |
-| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | Set to `llama3.2` on GPUs < 12 GB VRAM (or let the wrapper script do it) |
+| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | The wrapper script in §6.1 will **overwrite** this automatically based on your GPU. Only set this by hand if you are running §6.2 manual compose AND your GPU is < 12 GB VRAM — change to `llama3.2`, otherwise the 14 B model partially offloads to RAM and silently loses the speedup |
 | `POSTGRES_PASSWORD` | `edurag_dev_password` | Dev-only password. Do not commit changes |
 
 > **Never commit `.env`** — it is gitignored. If you add secrets (e.g. `OPENAI_API_KEY` for optional GPT fallback), they stay local.
@@ -225,38 +225,72 @@ Edit `.env` if you need non-default ports — most teammates leave it as-is. Def
 
 ## 6. First-time startup
 
-There are two ways to start the stack.
+There are two ways to start the stack. **For new team members, use 6.1.** It's the safe default.
 
-### Option A — Auto-wrapper (recommended, GPU-aware)
-
-The wrapper inspects your GPU via `nvidia-smi`, picks an Ollama model that fits the VRAM, writes `DEFAULT_OLLAMA_MODEL` into `.env`, brings the stack up with the right Compose overlay, and pulls the model.
+### 6.1 Auto-wrapper (recommended, GPU-aware) — `scripts/start_stack.ps1`
 
 ```powershell
 pwsh scripts/start_stack.ps1
 ```
 
-The decision rule:
+This is the only path that **automatically detects your GPU** and picks the right model. Run it once after `git clone`. Subsequent daily restarts can use plain `docker compose up -d` because the wrapper persists its decision into `.env`.
 
-| Detected VRAM | Compose overlay | Selected model |
-|---|---|---|
-| ≥ 12 GB | `docker-compose.gpu.yml` | `qwen3:14b` |
-| 0 < VRAM < 12 GB | `docker-compose.gpu.yml` | `llama3.2` |
-| No NVIDIA GPU | base Compose only (CPU mode) | `llama3.2` |
+**What the wrapper does, in order:**
 
-Override knobs (see `scripts/start_stack.ps1 -Help`):
+1. **Detects GPU VRAM** via `nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits` (rounded to nearest GB).
+2. **Picks the model + compose overlay** using this decision rule:
 
-- `-VramThresholdGb 16` — raise the cutoff for `qwen3:14b`.
-- `-HighVramModel mixtral:8x7b` — use a different big model.
-- `-LowVramModel phi3:mini` — use a different small model.
-- `-SkipPull` — skip the model download (you will pull it manually later).
+   | Detected VRAM | Compose overlay | Selected model | Why |
+   |---|---|---|---|
+   | **≥ 12 GB** | `docker-compose.gpu.yml` | `qwen3:14b` | Full 14 B model fits in VRAM; ~10 s/query |
+   | **0 < VRAM < 12 GB** | `docker-compose.gpu.yml` | `llama3.2` | Avoids partial CPU offload that would defeat the speedup of running the bigger model |
+   | **No NVIDIA GPU** | base Compose only (CPU mode) | `llama3.2` | ~60–180 s/query — slow but functional |
+3. **Writes `DEFAULT_OLLAMA_MODEL=<chosen>` into `.env`** (creates `.env` from `.env.example` if missing; **overwrites** any existing value of that key). After this step, plain `docker compose up -d` will use the right model without re-running the wrapper.
+4. **Brings the stack up:** `docker compose <compose-args> up -d --build`.
+5. **Waits up to 60 s** for Ollama to answer `http://localhost:11434/api/tags`.
+6. **Pulls the chosen model** via `docker compose exec ollama ollama pull <model>` (cached if already present). Skip with `-SkipPull`.
 
-### Option B — Manual compose (when you want explicit control)
+**Overrides** (handy when you know better than the defaults):
 
 ```powershell
-# CPU-only (safe everywhere)
+pwsh scripts/start_stack.ps1 `
+  -VramThresholdGb 16 `             # raise cutoff (e.g., still pick llama3.2 on 12-15 GB)
+  -HighVramModel "mixtral:8x7b" `   # use a different big model
+  -LowVramModel "phi3:mini" `       # use a different small model
+  -SkipPull                         # skip the ollama pull at the end
+```
+
+**When to re-run the wrapper:**
+
+- You switch machines (different GPU).
+- You change GPU (new card, BIOS-disabled card, etc.).
+- You want to manually change models — easier to edit `.env` directly though.
+
+**You do NOT need to re-run it for:**
+
+- Daily restart of an already-configured machine. Use `docker compose up -d` (or with the GPU overlay if you want to reload it explicitly).
+- Code changes in `src/` or `apps/` — those are volume-mounted, restart with `docker compose restart api streamlit`.
+
+**Caveats** the wrapper does not handle:
+
+- **Multi-GPU hosts:** it only reads `nvidia-smi` index 0 (the first GPU). On a 2× 8 GB host, you will be classified as 8 GB, not 16 GB total. Set `DEFAULT_OLLAMA_MODEL` and the compose overlay manually if you want to run the big model with NCCL-style multi-GPU.
+- **Runtime VRAM changes:** the API does not re-detect after startup. Models are bound at API start via env var. If a process eats your VRAM mid-session, restart the stack.
+- **Linux/macOS:** PowerShell is the supported path on Windows. For other OSes use `bash scripts/start_stack.sh` (same logic, same flags).
+
+### 6.2 Manual compose (when you want explicit control)
+
+Use this if you are debugging the stack itself, or you have specific requirements the wrapper does not cover (multi-GPU, non-default ports, custom models).
+
+**Important:** manual compose **does not detect anything**. It uses `DEFAULT_OLLAMA_MODEL` from your `.env` as-is. If you have an 8 GB GPU and you forgot to edit `.env`, you will silently get `qwen3:14b` partially-offloaded and queries will be slow. Either:
+
+- Edit `.env` to set `DEFAULT_OLLAMA_MODEL=llama3.2` before bringing the stack up, OR
+- Run `pwsh scripts/start_stack.ps1` once first (just for the detection), then drop back to manual.
+
+```powershell
+# CPU-only (safe everywhere — no GPU passthrough)
 docker compose up -d --build
 
-# NVIDIA GPU (requires §3.3 done)
+# NVIDIA GPU (requires §3.3 done; adds GPU overlay)
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 ```
 
@@ -285,7 +319,7 @@ If anything is `Restarting` or `Exited`, jump to [§12 Troubleshooting](#12-trou
 
 ## 7. Pull the LLM model
 
-If you used Option A (auto-wrapper), this is already done — skip to §8. If you used Option B (manual compose), pull the model yourself.
+If you used §6.1 (auto-wrapper), this is already done — skip to §8. If you used §6.2 (manual compose), pull the model yourself.
 
 ```powershell
 # Pick ONE based on your GPU:
