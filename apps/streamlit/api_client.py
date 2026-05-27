@@ -60,7 +60,7 @@ def _load_fixtures() -> Optional[dict]:
         return _fixture_cache
 
     paths = [
-        os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_responses.json"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "fixtures", "sample_responses.json"),
         os.path.join("fixtures", "sample_responses.json"),
     ]
     for path in paths:
@@ -342,15 +342,15 @@ class PaediaAPIClient:
         """
         Upload a document for processing and indexing.
 
-        Live API: POST /api/documents/upload (multipart)
+        Live API: POST /api/upload (multipart)
         Fixture fallback: return a mock Document record with status "pending"
 
-        Returns: { "success": bool, "document": dict, "error": str|None }
+        Returns: { "success": bool, "document": dict, "job_id": str|None, "error": str|None }
         """
         if self._check_api() and HAS_REQUESTS:
             try:
                 resp = requests.post(
-                    f"{self.config.base_url}/api/documents/upload",
+                    f"{self.config.base_url}/api/upload",
                     files={"file": (filename, file_bytes)},
                     data={"course_id": course_id},
                     headers={"Authorization": f"Bearer {self._jwt_token}"} if self._jwt_token else {},
@@ -358,9 +358,15 @@ class PaediaAPIClient:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return {"success": True, "document": data.get("document", {}), "error": None}
+                return {
+                    "success": True,
+                    "document": data.get("document", {}),
+                    "job_id": data.get("job_id"),
+                    "error": None
+                }
             except Exception as e:
                 logger.warning("Document upload failed: %s", e)
+                return {"success": False, "document": {}, "job_id": None, "error": str(e)}
 
         # Fixture fallback — return mock document record
         import uuid
@@ -373,7 +379,27 @@ class PaediaAPIClient:
             "status": "pending",
             "uploaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
-        return {"success": True, "document": mock_doc, "error": None}
+        return {"success": True, "document": mock_doc, "job_id": None, "error": None}
+
+    def delete_document(self, document_id: str) -> dict:
+        """
+        Delete a document.
+
+        Live API: DELETE /api/document/<id>
+        """
+        if self._check_api() and HAS_REQUESTS:
+            try:
+                resp = requests.delete(
+                    f"{self.config.base_url}/api/document/{document_id}",
+                    headers={"Authorization": f"Bearer {self._jwt_token}"} if self._jwt_token else {},
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                logger.warning("Document deletion failed: %s", e)
+                return {"success": False, "error": str(e)}
+        return {"status": "success", "message": "Document deleted."}
 
     def get_documents(self, course_id: Optional[str] = None) -> list:
         """
@@ -411,17 +437,34 @@ class PaediaAPIClient:
             return result["sessions"]
         return []
 
-    def get_indexing_status(self, document_id: str) -> dict:
+    def get_indexing_status(self, job_id: str) -> dict:
         """
         Poll indexing job status for a document.
 
-        Live API: GET /api/documents/<id>/status
+        Live API: GET /api/indexing-jobs/<job_id>
         Fixture fallback: return { "status": "indexed", "progress_percent": 100 }
         """
-        result = self._get(f"/api/documents/{document_id}/status")
+        result = self._get(f"/api/indexing-jobs/{job_id}")
         if result:
             return result
         return {"status": "indexed", "progress_percent": 100}
+
+    def get_admin_stats(self) -> dict:
+        """
+        Live admin/metrics snapshot.
+
+        Live API: GET /api/admin/stats
+        Fixture fallback: zeros so the UI still renders.
+        """
+        result = self._get("/api/admin/stats")
+        if result and isinstance(result, dict):
+            return result
+        return {
+            "documents": 0, "uploaded_documents": 0, "indexing_jobs": 0,
+            "sessions": 0, "queries_total": 0, "users": 0, "courses": 0,
+            "mode": "fixture", "warmup": {"status": "unknown"},
+            "_offline": True,
+        }
 
     def get_courses(self, user_id: Optional[str] = None) -> list:
         """

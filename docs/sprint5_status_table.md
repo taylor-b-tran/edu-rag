@@ -3,7 +3,7 @@
 **Task:** S5-T16
 **Owner:** Tai Huynh
 **Sprint window:** 14 May – 28 May 2026
-**Last updated:** 26 May 2026
+**Last updated:** 27 May 2026 (revision 3 - final fix wave: PERF/TEST/UI closed)
 
 > Status key: **Done** = file/PR/result exists and reviewed · **Ongoing** = work in progress with clear next step · **Not started** = no work begun · **Blocked** = waiting on another task or external dependency.
 > Update by editing this table directly. Keep evidence column to one canonical link per row.
@@ -85,3 +85,19 @@
 | A3 demo recording (now demo host has GPU) | Whole team, lead Thanh | 27–28 May | Pending rehearsal |
 | Formal re-run of 5-query benchmark on GPU host (replace CPU baseline) | Tung or Tai | Before 28 May | Pending — GPU enabled on demo host 25 May, ad-hoc latency 8–30 s/query |
 | Optional: pull `qwen3:14b` and run 31-query benchmark on a higher-VRAM GPU machine | Thanh | Before 28 May | Pending — separate machine outside demo host |
+
+## 6. Post-26-May fix verification (revision 2)
+
+| Finding | Severity | Status | Verified via |
+|---|---|---|---|
+| QA-ENROLL-001 | High | Done | Lecturer fixture enrolled in CSIT321 + CSIT214; verified 22-25-17 video (no 403 querying CSIT321) |
+| QA-UPLOAD-COURSE-001 | High | Done | Doc Manager selector now authoritative; verified 22-25-17 video |
+| QA-DOCVIS-001 | High | Done | `resolve_course()` code/UUID dual lookup; verified student saw lecturer's PDFs |
+| QA-DOCS-AUTH-001 | Medium | Done | `/api/upload` + `/api/documents` return 403 for non-enrolled courses |
+| QA-UI-COURSE-001 | Medium | Done | Chat header uses live `api.get_documents()`; verified `0 -> 5 docs indexed` transition |
+| QA-DEPLOY-001 | Medium | Done | GPU `deploy.devices` moved out of base `docker-compose.yml`; CPU teammates unblocked |
+| QA-DATA-001 | High | Done | Upload metadata + indexing jobs now persist to Postgres via `src/api/db.py` |
+| QA-HYGIENE-001 | Low | Done | `.streamlit/config.toml` kept tracked (light-theme override) |
+| QA-PERF-001 | Medium | Done (rev 3) | `src/api/warmup.py` + background `APIState.__post_init__` warm-up + `/api/warmup` route + `/api/health.warmup` status. Verified `status=ok, elapsed_ms=164` |
+| QA-TEST-001 | Medium | Done (rev 3) | `pytest==8.3.3` added to `requirements.txt`; rebuild bakes it into the api image |
+| QA-UI-001 | Low | Done (rev 3) | `render_admin_page()` reads `/api/admin/stats` for KPI tiles + `fixtures::demo_users` joined with `/api/sessions` for user table; offline banner + disabled Add User |

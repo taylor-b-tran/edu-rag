@@ -3,7 +3,7 @@
 **Task:** S5-T15
 **Owner:** Tai Huynh
 **Sprint:** 5 (14 May – 28 May 2026)
-**Last updated:** 24 May 2026
+**Last updated:** 27 May 2026 (revision 3 — Ollama warm-up, pytest baked in, admin metrics live)
 
 > Honest snapshot of what works, what is fixture-backed, and what remains planned. This is the primary file the A3 demo script reads from. Every claim here links to a source file or evidence artifact.
 
@@ -34,9 +34,10 @@ Move Paedia from a Sprint 4 prototype that returned fixture answers into a demo-
 
 | Capability | Why it is still fixture | Path to live |
 |---|---|---|
-| Document upload indexing | `/api/upload` queues a job and returns `indexing_status: queued`; the actual chunker → embedder → ChromaDB pipeline is not wired into the queue worker | Wire `src/document_processor/chunker.py` + ingestion into the indexing-job worker; today the only path that touches ChromaDB is the seed-corpus script |
 | Login + user profile | Hard-coded demo users in `fixtures/sample_responses.json` (student / lecturer / admin) — no Postgres-backed auth | Wire `src/api/routes/auth.py` to Postgres `users` table; out of scope for Sprint 5 demo |
 | Session history persistence | In-memory dict in `state.py` — lost on restart | Wire to Postgres `sessions` + `messages` tables; out of scope for Sprint 5 |
+
+> **Update 26 May (revision 2):** Document upload indexing moved out of this table. The full chunker -> embedder -> ChromaDB pipeline is now wired into the upload endpoint via a background thread, and upload metadata + indexing jobs persist to PostgreSQL through `src/api/db.py`. See §5 for the end-to-end verification.
 
 ## 4. Live retrieval benchmark (24 May 2026)
 
@@ -93,8 +94,14 @@ The hard-reasoning timeout that previously forced demo recordings to skip Q01/Q0
 |---|---|---|
 | Demo GPU has 8 GB VRAM (RTX 5060) | `qwen3:14b` (~9 GB) won't fit fully on the GPU — partial CPU offload defeats the speedup | Stick to `llama3.2` (≈2 GB) on this host; run the optional 14B benchmark on a higher-VRAM machine and attach results |
 | Seeded corpus is 18 hand-written chunks, not the full CSIT321 lecture set | Benchmark is illustrative, not population-level | Future sprint: ingest the actual lecture PDFs through `chunker.py` (already tested standalone) |
-| Document upload is queued but not indexed into ChromaDB by the worker | A lecturer's upload does not yet affect retrieval | Mark as fixture-backed in demo script; reuse `seed_documents.py` flow as the indexer reference |
-| Auth + sessions are in-memory | API restart loses sessions | Out of scope for Sprint 5; PostgreSQL schema already in `db/migrations/` for next sprint |
+| Auth tokens + chat sessions are in-memory | API restart loses sessions and forces re-login | Out of scope for Sprint 5; PostgreSQL schema already in `db/migrations/` for next sprint |
+
+> **Resolved in revision 2 (26 May):** Document upload is now indexed live into ChromaDB by the background thread, and upload metadata + indexing job records persist in PostgreSQL via `src/api/db.py`. A lecturer's upload affects retrieval immediately and survives `docker compose restart api`.
+>
+> **Resolved in revision 3 (27 May):** Three previously-open findings closed.
+> 1. **QA-PERF-001 (cold-start latency):** `src/api/warmup.py` runs in a background daemon thread from `APIState.__post_init__`, issuing a `/api/tags → /api/pull (if missing) → /api/generate (4-token ping)` sequence against Ollama. Warm-up status is exposed at `/api/health.warmup` and a `/api/warmup` route (admin/lecturer) re-warms on demand. Verified live: `status=ok, elapsed_ms=164`.
+> 2. **QA-TEST-001 (no pytest in image):** `pytest==8.3.3` pinned in `requirements.txt`. Next `docker compose build` rolls it into the api image.
+> 3. **QA-UI-001 (static admin metrics):** `render_admin_page()` now consumes `/api/admin/stats` for KPI tiles (documents, uploaded_documents, queries_total, sessions, users, courses, warmup status) and reads `demo_users` from the fixture for the User Management table (joined with `/api/sessions` for per-user query counts).
 
 ## 6. Demo script (11 steps, from `sprint_5_kickoff.md` §10)
 
@@ -104,8 +111,8 @@ The hard-reasoning timeout that previously forced demo recordings to skip Q01/Q0
 4. **Login as student** — Streamlit at `http://localhost:8501`, log in with `student@uow.edu.au / student123`.
 5. **Grounded query** — ask "What is Retrieval-Augmented Generation?" → answer cites `Week1_RAG_Introduction.pdf p.1` at similarity ≈0.68.
 6. **Off-topic query** — ask "Best chocolate cake recipe?" → fallback label + no fake citations.
-7. **Login as lecturer** — log in with `lecturer@uow.edu.au / lecturer123`; show upload button.
-8. **Upload a document** — pick any sample PDF; show `indexing_status: queued` in the documents list. State explicitly that indexing-job worker is fixture-backed for Sprint 5.
+7. **Login as lecturer** — log in with `lecturer@uow.edu.au / lecturer123`; show Document Manager with course selector populated from lecturer's enrolled courses.
+8. **Upload a document** — select CSIT321, pick a PDF (e.g. a Decision Tree lecture); status moves `queued -> processing -> indexed`. Switch to Q&A Chat, ask a question about the uploaded content, and show the citation from the uploaded filename — proves the live upload-to-retrieval path.
 9. **Session history** — show prior queries persist for the session.
 10. **Benchmark summary** — open `docs/rag_benchmark_sprint5.md` and read the 5-query result table.
 11. **Limitations + next sprint** — read §5 of this doc.

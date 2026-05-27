@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import time
 import uuid
@@ -9,6 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = REPO_ROOT / "fixtures" / "sample_responses.json"
@@ -37,6 +39,35 @@ class APIState:
     _retriever: Any = field(default=None, init=False, repr=False)
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
+    _db_available: bool = field(default=False, init=False, repr=False)
+    warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
+                                          init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        try:
+            from src.api import db
+            db.init_schema()
+            self.uploaded_documents = db.load_all_documents()
+            self.indexing_jobs = db.load_all_jobs()
+            self._db_available = True
+            logger.info(
+                "APIState hydrated from Postgres: %d documents, %d jobs.",
+                len(self.uploaded_documents), len(self.indexing_jobs),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Postgres unavailable (%s: %s). Upload metadata will be in-memory only.",
+                type(exc).__name__, exc,
+            )
+            self._db_available = False
+
+        try:
+            from src.api import warmup
+            warmup.warmup_async(self)
+        except Exception as exc:
+            logger.warning("Failed to schedule Ollama warm-up: %s", exc)
+            self.warmup_status = {"status": "failed",
+                                  "error": f"{type(exc).__name__}: {exc}"}
 
     @property
     def fixture_loaded(self) -> bool:
@@ -127,6 +158,19 @@ class APIState:
                     return True
         return False
 
+    def resolve_course(self, course_ref: str | None) -> tuple[str | None, str | None]:
+        """Resolve a course code or UUID to (course_id_uuid, course_code).
+
+        Returns (None, None) if not found. If the ref is unknown but truthy,
+        returns it back unchanged in the code slot so callers can still filter.
+        """
+        if not course_ref:
+            return None, None
+        for course in self.fixtures.get("courses", []):
+            if course.get("course_code") == course_ref or course.get("course_id") == course_ref:
+                return course.get("course_id"), course.get("course_code")
+        return None, course_ref
+
     def query_fixture(self, question: str) -> dict[str, Any]:
         responses = self.fixtures.get("responses", {})
         fallback = self.fixtures.get("fallback_response", {})
@@ -197,9 +241,15 @@ class APIState:
     def list_documents(self, course_id: str | None = None) -> list[dict[str, Any]]:
         documents = list(self.fixtures.get("documents", [])) + self.uploaded_documents
         if course_id:
+            uuid_form, code_form = self.resolve_course(course_id)
+            targets = {course_id}
+            if uuid_form:
+                targets.add(uuid_form)
+            if code_form:
+                targets.add(code_form)
             documents = [
                 doc for doc in documents
-                if doc.get("course_id") == course_id or doc.get("course_code") == course_id
+                if doc.get("course_id") in targets or doc.get("course_code") in targets
             ]
         return documents
 
@@ -207,10 +257,13 @@ class APIState:
         document_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
         extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
+        uuid_form, code_form = self.resolve_course(course_id)
         document = {
             "document_id": document_id,
             "id": document_id,
-            "course_id": course_id,
+            "course_id": code_form or course_id,
+            "course_code": code_form or course_id,
+            "course_uuid": uuid_form,
             "original_filename": filename,
             "filename": filename,
             "file_type": extension,
@@ -230,7 +283,68 @@ class APIState:
         }
         self.uploaded_documents.append(document)
         self.indexing_jobs[job_id] = job
+        if self._db_available:
+            try:
+                from src.api import db
+                db.insert_document(document)
+                db.insert_job(job)
+            except Exception as exc:
+                logger.warning("Failed to persist upload %s to Postgres: %s",
+                               document_id, exc)
         return {"document": document, "indexing_job": job, "job_id": job_id}
+
+    def update_document_status(self, document_id: str, status: str,
+                               chunks: int | None = None) -> None:
+        for doc in self.uploaded_documents:
+            if doc.get("document_id") == document_id:
+                doc["status"] = status
+                doc["indexing_status"] = status
+                if chunks is not None:
+                    doc["chunks"] = chunks
+                break
+        if self._db_available:
+            try:
+                from src.api import db
+                db.update_document_status(document_id, status, chunks)
+            except Exception as exc:
+                logger.warning("Failed to update document %s status in Postgres: %s",
+                               document_id, exc)
+
+    def update_job(self, job_id: str, status: str | None = None,
+                   progress_percent: int | None = None,
+                   error: str | None = None) -> None:
+        job = self.indexing_jobs.get(job_id)
+        if job is not None:
+            if status is not None:
+                job["status"] = status
+            if progress_percent is not None:
+                job["progress_percent"] = progress_percent
+            if error is not None:
+                job["error"] = error
+        if self._db_available:
+            try:
+                from src.api import db
+                db.update_job(job_id, status=status,
+                              progress_percent=progress_percent, error=error)
+            except Exception as exc:
+                logger.warning("Failed to update job %s in Postgres: %s",
+                               job_id, exc)
+
+    def delete_uploaded_document(self, document_id: str) -> bool:
+        before = len(self.uploaded_documents)
+        self.uploaded_documents = [
+            doc for doc in self.uploaded_documents
+            if doc.get("document_id") != document_id and doc.get("id") != document_id
+        ]
+        removed = len(self.uploaded_documents) != before
+        if removed and self._db_available:
+            try:
+                from src.api import db
+                db.delete_document(document_id)
+            except Exception as exc:
+                logger.warning("Failed to delete document %s from Postgres: %s",
+                               document_id, exc)
+        return removed
 
 class _FixtureResponse:
     def __init__(self, data: dict):

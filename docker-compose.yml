@@ -31,6 +31,9 @@ services:
         condition: service_started
     ports:
       - "${API_PORT:-5000}:5000"
+    volumes:
+      - ./:/workspace
+      - uploads_data:/workspace/data/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health >/dev/null || exit 1"]
       interval: 10s
@@ -70,6 +73,8 @@ services:
         condition: service_healthy
     ports:
       - "${APP_PORT:-8501}:8501"
+    volumes:
+      - ./:/workspace
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health >/dev/null || exit 1"]
       interval: 10s

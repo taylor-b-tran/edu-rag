@@ -3,7 +3,7 @@
 **Task:** S5-AC-11 (A3 demo script labels each step as implemented / fixture / planned)
 **Owner:** Tai Huynh
 **Sprint:** 5 (14 May – 28 May 2026)
-**Last updated:** 26 May 2026
+**Last updated:** 27 May 2026 (revision 3 — automatic Ollama warm-up + live admin metrics)
 **Recording window:** 27 – 28 May 2026
 **Demo host:** GPU-enabled (NVIDIA RTX 5060, 8 GB VRAM) — see `sprint5_runtime_notes.md` §6
 
@@ -17,7 +17,7 @@
 |---|---|---|
 | 1 | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d` | Ensure Ollama runs on GPU (without overlay it silently falls back to CPU and queries take 96 s+) |
 | 2 | `docker exec edurag-ollama-1 nvidia-smi` | Confirm RTX 5060 visible inside container |
-| 3 | Warm Ollama: send one throwaway query to load `llama3.2` into VRAM (avoids ~40 s cold-start on first recorded query) | Hidden in screen recording |
+| 3 | Confirm Ollama is warm via `curl http://localhost:5000/api/health` → expect `warmup.status=ok`. Revision 3 wires this automatically at API startup (`src/api/warmup.py`); no hidden throwaway query needed. If status is `degraded`, hit `/api/warmup` (admin auth) to re-warm | Visible in screen recording — proves no cold-start trick |
 | 4 | Browser to `http://localhost:8501`, clear cache, full-screen | Clean UI for capture |
 | 5 | Open second tab to GitHub Actions and one to `docs/rag_benchmark_sprint5.md` | For steps 1 and 10 |
 
@@ -104,14 +104,16 @@
 
 ---
 
-## 8. Document upload — **Implemented (queue) + Fixture-backed (indexing worker)**
+## 8. Document upload to retrieval — **Implemented (live, end-to-end)**
 
-**Action:** Pick any sample PDF, upload it. Show `indexing_status: queued` in the documents list.
+**Action:** Open Document Manager. Confirm course selector shows `CSIT321 - Project`. Pick a PDF the seeded corpus does not cover (e.g. `W5 - Decision Trees and Ensemble Methods.pdf`). Upload, watch status move `queued -> processing -> indexed`. Switch to Q&A Chat for CSIT321. Ask "Tell me about Decision Tree" and show the answer with citations pointing at the just-uploaded filename.
 
-**Narration (must say this part explicitly):**
-> "Upload returns 202 Accepted and queues an indexing job. **The chunker and embedder exist as standalone tested components, but the queue worker that runs them is fixture-backed in Sprint 5.** What this means for the demo: a lecturer's upload right now does not appear in retrieval results — only the seeded corpus does. Wiring the chunker into the queue worker is the first task of Sprint 6."
+**Narration:**
+> "Upload returns 202 Accepted, the background indexer chunks the PDF, generates 384-dimensional embeddings with `all-MiniLM-L6-v2`, and writes them straight into ChromaDB. The chat header reads the document count live from `/api/documents`, so we can see the index grow from N to N+1 without refreshing. Then we ask a question that only this uploaded document can answer — the response cites that filename with high confidence. Upload metadata also persists to PostgreSQL via `src/api/db.py`, so a `docker compose restart api` does not wipe the lecturer's uploads."
 
-**Label:** Upload + RBAC + queue = **Implemented**; queue worker → ChromaDB ingestion = **Fixture-backed**; full upload-to-retrieval = **Planned (Sprint 6)**.
+**Label:** Upload + RBAC + background indexing + ChromaDB persistence + Postgres metadata = **Implemented (revision 2, 26 May)**.
+
+**Evidence:** Manual video pass `C:\Users\Taylor\Videos\2026-05-26_22-25-17.mp4` (3:12) — lecturer uploads `W5-Decision_Trees` to CSIT321, queries it with 87% High confidence, student logs in and sees the document, queries `week9-Constraint_Satisfaction` and gets a cited Medium-confidence answer.
 
 ---
 
@@ -142,9 +144,9 @@
 **Action:** Read `sprint5_implementation_summary.md` §5 verbatim or paraphrase the five rows.
 
 **Narration:**
-> "We are explicit about what is live and what is fixture-backed: (1) the demo GPU is 8 GB VRAM, so qwen3:14b runs on a separate machine; (2) seeded corpus is 18 chunks across Weeks 1–7, not the full CSIT321 lecture set — that's a Sprint 6 ingestion task; (3) lecturer uploads queue but don't yet flow to ChromaDB — also Sprint 6; (4) auth and sessions are in-memory — the Postgres schema is staged; (5) full RAG limitations are catalogued in `docs/rag_limitations.md`."
+> "We are explicit about what is live and what is fixture-backed: (1) the demo GPU is 8 GB VRAM, so the `qwen3:14b` benchmark is captured on a separate higher-VRAM machine; (2) the seeded corpus is 18 chunks across Weeks 1–7 of CSIT321, supplemented at demo time by the lecturer's live uploads; (3) the lecturer upload-to-retrieval path is fully live as of revision 2 — uploads flow through the chunker, embedder, and into ChromaDB, with metadata persisted to PostgreSQL; (4) auth and chat sessions are still in-memory — the Postgres schema is staged for Sprint 6; (5) full RAG limitations are catalogued in `docs/rag_limitations.md`."
 
-**Label:** All five limitations = **Planned (Sprint 6 or deferred)**, all documented.
+**Label:** Limitations 1, 2, 4, 5 = **Documented or planned**. Limitation 3 (live upload) = **Implemented in revision 2**.
 
 ---
 
@@ -161,8 +163,9 @@
 | 5 | Ollama generation with citations | Implemented |
 | 6 | Off-topic fallback | Implemented |
 | 7 | Role-based access control | Implemented |
-| 8 | Upload + queue + RBAC | Implemented |
-| 8 | Indexing worker → ChromaDB | Fixture-backed |
+| 8 | Upload + RBAC + course selector | Implemented |
+| 8 | Background indexer → ChromaDB | Implemented (revision 2) |
+| 8 | Upload metadata persistence (Postgres) | Implemented (revision 2) |
 | 9 | Session display | Implemented |
 | 9 | Session persistence | Planned (Sprint 6) |
 | 10 | 5-query live benchmark | Implemented |
@@ -176,15 +179,17 @@
 
 | If… | Then… |
 |---|---|
-| Ollama cold-start takes 40 s on first query | Warm-up before recording — never on camera |
+| Ollama cold-start takes 40 s on first query | Should not happen in rev 3 — `src/api/warmup.py` seeds VRAM at API startup. If `/api/health.warmup.status` is not `ok`, hit `POST /api/warmup` (admin/lecturer) before recording |
 | ChromaDB returns 0 chunks for an on-topic query | Lower `SIMILARITY_THRESHOLD` to 0.25 temporarily and explain in narration |
 | Container collision on `edurag-chromadb` | `docker rm -f edurag-chromadb edurag-ollama-cpu edurag-postgres` — see `sprint5_runtime_notes.md` §8 |
-| Upload UI shows "indexing complete" instead of "queued" | The state label is the literal demo — narrate the fixture-backed line anyway, show the JSON response in network tab |
+| First uploaded-document query takes ~90 s on `qwen3:14b` | Acceptable — qwen3 is a thinking model; warn the panel before the upload step, or have a smaller follow-up query queued |
+| `docker compose restart api` mid-demo causes uploads to "vanish" | They will not — revision 2 hydrates from Postgres on startup. Wait 30s for healthcheck and refresh the page. The warm-up step also restarts in the background |
+| Admin metrics show all zeros + offline banner | API is unreachable from Streamlit; check `PAEDIA_API_URL` env in the streamlit container and `docker compose ps` for api healthcheck status |
 
 ---
 
 ## Post-recording
 
-1. Cut the warm-up query from the start of the recording.
+1. No need to cut a warm-up query — the API self-warms in the background, so the recording can start with `/api/health` showing `warmup.status=ok`.
 2. Verify every "implemented" call-out in the narration matches a green check in this script.
 3. Upload to the shared drive; paste the link into `a3_evidence_index.md` §11.
