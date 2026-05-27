@@ -40,6 +40,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # The full stack image set (api + streamlit shared image + chromadb +
+      # ollama + postgres) exceeds the ~14 GB free disk on a stock
+      # ubuntu-latest runner, causing intermittent
+      # "No space left on device" failures mid-pull. Freeing the runner's
+      # bundled tooling (dotnet, android, CodeQL, etc.) reclaims ~14 GB and
+      # makes the smoke test reliable without bloating runtime by much.
+      - name: Free up disk space on runner
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
       - name: Show Docker versions
         run: |
           docker --version
