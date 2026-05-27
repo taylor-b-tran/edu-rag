@@ -13,6 +13,26 @@ documents_bp = Blueprint("documents", __name__, url_prefix="/api")
 
 _LECTURER_ROLES = {"lecturer", "admin"}
 
+# Repo root: src/api/routes/documents.py -> parents[3] = repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _upload_dir() -> Path:
+    """Return the upload directory.
+
+    Order of precedence:
+    1. EDURAG_UPLOAD_DIR env var (set explicitly by ops/tests).
+    2. /workspace/data/uploads when /workspace exists and is writable (Docker).
+    3. <repo_root>/data/uploads (host runs, CI without a /workspace mount).
+    """
+    env_override = os.environ.get("EDURAG_UPLOAD_DIR")
+    if env_override:
+        return Path(env_override)
+    workspace = Path("/workspace")
+    if workspace.is_dir() and os.access(workspace, os.W_OK):
+        return workspace / "data" / "uploads"
+    return _REPO_ROOT / "data" / "uploads"
+
 
 def _state():
     return current_app.config["EDURAG_API_STATE"]
@@ -113,7 +133,7 @@ def upload_document():
 
     # Ensure secure filename and write content
     filename = secure_filename(uploaded_file.filename or "uploaded_document")
-    upload_dir = Path("/workspace/data/uploads")
+    upload_dir = _upload_dir()
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / filename
 
@@ -190,7 +210,7 @@ def delete_document(doc_id: str):
                 logger.info("Deleted ChromaDB chunks for document: %s", filename)
 
                 # Delete the file from host uploads directory too
-                file_path = Path("/workspace/data/uploads") / filename
+                file_path = _upload_dir() / filename
                 if file_path.exists():
                     os.remove(file_path)
             except Exception as e:
