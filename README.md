@@ -1,275 +1,873 @@
-# EduRAG
+# EduRAG / Paedia
 
-> A course-aware AI assistant that answers student questions from lecturer-provided materials — grounded in documents, not general web knowledge.
+> A course-aware AI assistant that answers student questions from lecturer-uploaded materials — grounded in documents, not general web knowledge.
 
-EduRAG is a six-person team project that applies **Retrieval-Augmented Generation (RAG)** to higher education. Students ask questions in natural language; the system retrieves the most relevant passages from indexed course documents and generates an answer with inline source citations. Off-topic or unsupported questions are explicitly labelled as fallback responses rather than presented as course-authoritative answers.
+EduRAG (product name: **Paedia**) is a six-person team project applying **Retrieval-Augmented Generation (RAG)** to higher education. Students ask questions in natural language; the system retrieves the most relevant passages from indexed course documents and generates an answer with inline source citations. Off-topic or unsupported questions are explicitly labelled as fallback responses rather than presented as course-authoritative answers.
 
----
-
-## Why This Exists
-
-University students routinely spend hours searching PDFs, slides, and lecture notes to find an answer that takes a few sentences to state. At the same time, generic AI tools like ChatGPT have no visibility into course-specific content and can produce confident but incorrect answers drawn from their general training data.
-
-EduRAG addresses both problems:
-
-- **Lecturers** upload course materials once. The system indexes them automatically.
-- **Students** ask questions in plain language and receive answers grounded in those materials, with page-level citations they can verify.
-- **Admins** monitor usage, manage access, and inspect an audit log of document events.
-
-The answer generation is always scoped to the enrolled course. Cross-course data leakage is a first-class design constraint, not an afterthought.
+This README is the **single entry point** for new team members. Read top-to-bottom on a clean Windows 11 machine and you will reach the point where a CSIT321 query returns a grounded answer with citations.
 
 ---
 
-## Technical Highlights
+## Table of Contents
 
-These are the engineering skills and practices demonstrated by this project:
-
-| Area | What was built |
-|---|---|
-| **RAG pipeline** | End-to-end: PDF extraction → chunking → embedding → vector retrieval → LLM generation with citation formatting and fallback detection |
-| **Vector search** | ChromaDB with `course_id` metadata filtering to enforce retrieval isolation per course |
-| **Relational data model** | PostgreSQL schema covering users, roles, courses, documents, indexing jobs, session history, and an immutable audit log |
-| **Local LLM inference** | Ollama running `qwen3:14b` — fully self-hosted, no external API calls required in development |
-| **API design** | Full OpenAPI 3.0 specification + Flask implementation (JWT auth, role-scoped endpoints, async indexing jobs, session history, admin monitoring) |
-| **Containerised stack** | Docker Compose with CPU and GPU override variants; service-health dependency ordering; named demo services (`api`, `streamlit`, `postgres`, `chromadb`, `ollama`) with health-check dependency chain |
-| **CI/CD** | GitHub Actions CI pipeline (Python compile, pytest, JSON validation, Compose config check on every PR) + manual Docker demo-readiness workflow (smoke-tests all five core services from a clean checkout) |
-| **Prompt engineering** | Evidence-cited safety-first prompt with confidence labelling, fallback phrasing, and injection-resistance notes |
-| **Evaluation assets** | Retrieval benchmark (chunk size, overlap, top-k, distance threshold) + 31-question labelled test corpus covering factual, reasoning, off-topic, and ambiguous cases |
-| **Privacy & ethics** | Explicit privacy policy, ethics review document, role-based access control model, data minimisation by category, and audit event trail |
-| **Team workflow** | Git branching strategy (main / develop / task branches), PR-only merges, per-sprint deliverable ownership tracked per member |
+1. [What you are about to run](#1-what-you-are-about-to-run)
+2. [System requirements](#2-system-requirements)
+3. [Install the prerequisites](#3-install-the-prerequisites)
+4. [Verify your GPU setup (NVIDIA)](#4-verify-your-gpu-setup-nvidia)
+5. [Clone and configure](#5-clone-and-configure)
+6. [First-time startup](#6-first-time-startup)
+7. [Pull the LLM model](#7-pull-the-llm-model)
+8. [Seed the course corpus](#8-seed-the-course-corpus)
+9. [Verify the stack works](#9-verify-the-stack-works)
+10. [Demo credentials](#10-demo-credentials)
+11. [Daily operations](#11-daily-operations)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Architecture overview](#13-architecture-overview)
+14. [Repository layout](#14-repository-layout)
+15. [Tech stack reference](#15-tech-stack-reference)
+16. [Contributing](#16-contributing)
+17. [Team](#17-team)
+18. [Project context](#18-project-context)
 
 ---
 
-## System Architecture
+## 1. What you are about to run
+
+When the setup is complete, your machine will be running a **five-service Docker stack**:
+
+| Service | Purpose | Port | Container name |
+|---|---|---|---|
+| `streamlit` | Student / lecturer / admin web UI (Paedia) | `8501` | `edurag-streamlit-1` |
+| `api` | Flask REST API (auth, query, upload, sessions) | `5000` | `edurag-api-1` |
+| `chromadb` | Vector database — stores chunk embeddings | `8000` | `edurag-chromadb-1` |
+| `ollama` | Local LLM inference (`qwen3:14b` or `llama3.2`) | `11434` | `edurag-ollama-1` |
+| `postgres` | Relational DB — auth, sessions, upload metadata | `5432` | `edurag-postgres-1` |
+
+The Streamlit UI talks to the Flask API. The API talks to ChromaDB (retrieval), Ollama (generation), and PostgreSQL (persistence). Nothing leaves your machine — both the embedding model (`all-MiniLM-L6-v2`) and the LLM (`qwen3:14b`) run locally.
+
+End-to-end demo flow:
+
+1. Lecturer logs in, uploads a PDF.
+2. API chunks it, generates 384-dimensional embeddings, writes to ChromaDB. Upload metadata is persisted to PostgreSQL so a `docker compose restart` does not lose it.
+3. Student logs in, asks a question.
+4. API retrieves top-5 most similar chunks (course-scoped via `course_id` metadata filter), formats them into a prompt, sends to Ollama.
+5. Ollama returns a grounded answer; the API returns it to Streamlit with file + page citations.
+
+---
+
+## 2. System requirements
+
+| Resource | Minimum | Recommended | Notes |
+|---|---|---|---|
+| **OS** | Windows 11 23H2 | Windows 11 24H2 | Tested on Windows 11 Pro 26200. Linux/macOS work but this guide is PowerShell-first |
+| **CPU** | 4 cores | 8 cores | Inference is mostly GPU, but PDF chunking + embeddings use CPU |
+| **RAM** | 16 GB | 32 GB | Ollama needs ~10 GB for `qwen3:14b` working set, leave 6 GB for other services |
+| **Disk** | 25 GB free | 40 GB free | `qwen3:14b` ~9 GB, `llama3.2` ~2 GB, Docker images ~6 GB, ChromaDB+Postgres ~1 GB, source ~500 MB, model cache ~5 GB |
+| **GPU** | None (CPU-only works, slow) | NVIDIA RTX with **≥ 12 GB VRAM** | RTX 5060 (8 GB) works but partially offloads; RTX 5080 (16 GB) is the dev host. Without GPU, a single `qwen3:14b` query takes 60–180 s |
+| **Network** | Once for image pulls + model download | — | After first setup the stack runs fully offline |
+
+> **Why ≥ 12 GB VRAM matters for `qwen3:14b`:** The 14-billion-parameter model's KV cache + weights need ~10 GB at runtime. An 8 GB GPU partially offloads layers to CPU and loses the latency advantage. The `scripts/start_stack.ps1` wrapper auto-selects `llama3.2` (2 GB) on GPUs in the 0–12 GB band so you do not pay this hidden cost.
+
+---
+
+## 3. Install the prerequisites
+
+Run these once per machine. All commands here are PowerShell unless noted.
+
+### 3.1 Docker Desktop (required)
+
+1. Download **Docker Desktop for Windows** from <https://www.docker.com/products/docker-desktop>.
+2. Run the installer. When prompted, **enable "Use WSL 2 instead of Hyper-V"**. This is required for NVIDIA GPU passthrough to Linux containers.
+3. After install, reboot.
+4. Launch Docker Desktop. Wait until the whale icon in the system tray shows "Engine running" (≈ 30 s on first launch).
+5. Verify from PowerShell:
+
+```powershell
+docker --version           # expect: Docker version 26.x or 29.x
+docker compose version     # expect: Docker Compose version v2.x
+docker run --rm hello-world
+```
+
+If `hello-world` prints "Hello from Docker!" you are good. If not, restart Docker Desktop and re-try.
+
+> **Docker Desktop resource settings.** Open Docker Desktop → Settings → Resources → Advanced. Bump **Memory to ≥ 8 GB** and **Disk image size to ≥ 60 GB**. Default 2 GB RAM will OOM-kill Ollama mid-query.
+
+### 3.2 Git (required)
+
+Install **Git for Windows** from <https://git-scm.com/download/win>. Default settings are fine. Verify:
+
+```powershell
+git --version              # expect: git version 2.40+
+```
+
+### 3.3 NVIDIA GPU stack (recommended — skip if CPU-only)
+
+If you have an NVIDIA GPU, install **all three** of the following, in order. Skip if you do not have an NVIDIA GPU; the stack will run CPU-only with `llama3.2`.
+
+#### 3.3.1 NVIDIA driver
+
+1. Open the **NVIDIA App** (or download from <https://www.nvidia.com/en-us/geforce/drivers/>).
+2. Install the **latest Game Ready Driver** (or Studio Driver — either works). Minimum version: **551.xx** (CUDA 12.4) for RTX 50-series.
+3. Reboot.
+4. Verify:
+
+```powershell
+nvidia-smi
+```
+
+Expected output (yours will differ in card name / VRAM):
+
+```
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 551.xx       Driver Version: 551.xx       CUDA Version: 12.4    |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name             | Bus-Id    | Memory-Usage    | GPU-Util  |
+|   0  NVIDIA GeForce RTX 5080  ...  | 16384MiB total                        |
++-------------------------------+----------------------+----------------------+
+```
+
+If `nvidia-smi` is not recognised, the driver did not install — re-run the installer, choose **Custom (Advanced)** and tick all components.
+
+#### 3.3.2 WSL 2 backend (already enabled with Docker Desktop)
+
+If you enabled WSL 2 during Docker Desktop install, this is done. Otherwise:
+
+```powershell
+wsl --install              # installs Ubuntu by default, requires reboot
+wsl --update               # ensure the latest kernel
+wsl --version              # expect: WSL version 2.x
+```
+
+#### 3.3.3 NVIDIA Container Toolkit (auto via Docker Desktop)
+
+On **Windows with Docker Desktop + WSL 2 + NVIDIA driver ≥ 551**, the Container Toolkit is bundled. You do **not** install it separately. The driver inside WSL is provided by `nvidia-smi.exe` on the host.
+
+Verify GPU is visible to Docker:
+
+```powershell
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+If this command shows your GPU, you are ready for the GPU compose overlay. If you get `could not select device driver "" with capabilities: [[gpu]]`, see [§4 Troubleshooting GPU setup](#4-verify-your-gpu-setup-nvidia) below.
+
+### 3.4 Python 3.11 (optional)
+
+You do **not** need Python locally — everything runs in Docker. Install Python 3.11 only if you want to:
+
+- Run the Jupyter notebook in `notebooks/rag_poc.ipynb` directly on host.
+- Run pytest outside the api container.
+- Debug `src/document_processor/` modules with breakpoints in your IDE.
+
+Get it from <https://www.python.org/downloads/release/python-3119/> (3.11.9 or any 3.11.x). Tick **"Add python.exe to PATH"** during install.
+
+```powershell
+python --version           # expect: Python 3.11.x
+```
+
+---
+
+## 4. Verify your GPU setup (NVIDIA)
+
+This step is critical — a wrong setup means your queries take 45–180 seconds each instead of 5–15 seconds. Skip if CPU-only.
+
+```powershell
+# 1. Driver works on host
+nvidia-smi
+
+# 2. GPU is visible to a Docker container (this is what Ollama uses)
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+Both commands must print a GPU table. If only step 1 works:
+
+- Confirm **Docker Desktop → Settings → General → Use the WSL 2 based engine** is ticked.
+- Confirm **Docker Desktop → Settings → Resources → WSL Integration → Enable integration with my default WSL distro** is ticked.
+- Restart Docker Desktop (Quit Docker Desktop from system tray, relaunch).
+- Update Docker Desktop to the latest version. NVIDIA support landed in 4.30.
+
+If step 2 still fails with `could not select device driver`:
+
+- Open PowerShell **as Administrator** and run `wsl --shutdown`, then relaunch Docker Desktop.
+- Reinstall the NVIDIA driver, this time **rebooting before launching Docker Desktop**.
+
+---
+
+## 5. Clone and configure
+
+```powershell
+# 1. Pick a working directory and clone
+cd C:\Users\$env:USERNAME\Desktop
+git clone https://github.com/taylor-b-tran/edu-rag.git
+cd edu-rag
+
+# 2. Switch to the integration branch (or develop for the current release line)
+git checkout develop
+
+# 3. Copy the example environment file
+Copy-Item .env.example .env
+```
+
+Edit `.env` if you need non-default ports — most teammates leave it as-is. Defaults:
+
+| Variable | Default | When to change |
+|---|---|---|
+| `APP_PORT` | `8501` | Streamlit UI port. Change if 8501 is in use |
+| `API_PORT` | `5000` | Flask API port |
+| `POSTGRES_PORT` | `5432` | Change if you have local Postgres running |
+| `CHROMA_PORT` | `8000` | Change if 8000 is in use (Jupyter often grabs this) |
+| `OLLAMA_PORT` | `11434` | Rarely conflicts |
+| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | Set to `llama3.2` on GPUs < 12 GB VRAM (or let the wrapper script do it) |
+| `POSTGRES_PASSWORD` | `edurag_dev_password` | Dev-only password. Do not commit changes |
+
+> **Never commit `.env`** — it is gitignored. If you add secrets (e.g. `OPENAI_API_KEY` for optional GPT fallback), they stay local.
+
+---
+
+## 6. First-time startup
+
+There are two ways to start the stack.
+
+### Option A — Auto-wrapper (recommended, GPU-aware)
+
+The wrapper inspects your GPU via `nvidia-smi`, picks an Ollama model that fits the VRAM, writes `DEFAULT_OLLAMA_MODEL` into `.env`, brings the stack up with the right Compose overlay, and pulls the model.
+
+```powershell
+pwsh scripts/start_stack.ps1
+```
+
+The decision rule:
+
+| Detected VRAM | Compose overlay | Selected model |
+|---|---|---|
+| ≥ 12 GB | `docker-compose.gpu.yml` | `qwen3:14b` |
+| 0 < VRAM < 12 GB | `docker-compose.gpu.yml` | `llama3.2` |
+| No NVIDIA GPU | base Compose only (CPU mode) | `llama3.2` |
+
+Override knobs (see `scripts/start_stack.ps1 -Help`):
+
+- `-VramThresholdGb 16` — raise the cutoff for `qwen3:14b`.
+- `-HighVramModel mixtral:8x7b` — use a different big model.
+- `-LowVramModel phi3:mini` — use a different small model.
+- `-SkipPull` — skip the model download (you will pull it manually later).
+
+### Option B — Manual compose (when you want explicit control)
+
+```powershell
+# CPU-only (safe everywhere)
+docker compose up -d --build
+
+# NVIDIA GPU (requires §3.3 done)
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+The first run downloads ~6 GB of Docker images and builds the api+streamlit image. Expect **5–15 minutes** depending on network. Subsequent runs reuse the cache and are ~30 seconds.
+
+Then verify all five containers are healthy:
+
+```powershell
+docker compose ps
+```
+
+Expected output (all five rows must show `Up ... (healthy)` or just `Up`):
+
+```
+NAME                 STATUS                       PORTS
+edurag-api-1         Up 1 minute (healthy)        0.0.0.0:5000->5000/tcp
+edurag-chromadb-1    Up 1 minute                  0.0.0.0:8000->8000/tcp
+edurag-ollama-1      Up 1 minute                  0.0.0.0:11434->11434/tcp
+edurag-postgres-1    Up 1 minute (healthy)        0.0.0.0:5432->5432/tcp
+edurag-streamlit-1   Up 1 minute (healthy)        0.0.0.0:8501->8501/tcp
+```
+
+If anything is `Restarting` or `Exited`, jump to [§12 Troubleshooting](#12-troubleshooting).
+
+---
+
+## 7. Pull the LLM model
+
+If you used Option A (auto-wrapper), this is already done — skip to §8. If you used Option B (manual compose), pull the model yourself.
+
+```powershell
+# Pick ONE based on your GPU:
+
+# RTX 5080 / 4080 / 3090 (12+ GB VRAM) or CPU-only with patience:
+docker compose exec ollama ollama pull qwen3:14b
+
+# RTX 5060 / 4060 / 3060 (< 12 GB VRAM):
+docker compose exec ollama ollama pull llama3.2
+```
+
+Download takes 3–10 minutes depending on connection. Confirm:
+
+```powershell
+docker compose exec ollama ollama list
+```
+
+Then update `.env` so `DEFAULT_OLLAMA_MODEL` matches what you pulled. After editing `.env`, restart the api:
+
+```powershell
+docker compose restart api
+```
+
+**Verify the model loads onto GPU** (skip if CPU-only):
+
+```powershell
+docker compose exec ollama ollama ps
+```
+
+You want `PROCESSOR=100% GPU`. Anything showing `% CPU` means GPU passthrough is broken — go back to [§4](#4-verify-your-gpu-setup-nvidia).
+
+---
+
+## 8. Seed the course corpus
+
+The stack starts empty. To get grounded answers about CSIT321, ingest the seed corpus once:
+
+```powershell
+docker compose exec api python -m src.document_processor.ingest_corpus
+```
+
+Expected output ends with:
+
+```
+Upserted: 18 chunks into 'csit321_documents'
+Collection total: 90
+```
+
+This loads 18 hand-prepared CSIT321 lecture chunks (Weeks 1–7) into ChromaDB using `sentence-transformers/all-MiniLM-L6-v2` (384-dim embeddings). The collection stays alive in the `chromadb_data` Docker volume between restarts.
+
+> **You only need to run this once per fresh ChromaDB volume**. After `docker compose down -v` (which drops the volume), re-run it.
+
+---
+
+## 9. Verify the stack works
+
+### 9.1 Health checks
+
+```powershell
+curl http://localhost:5000/api/health        # API — expect status=ok, warmup.status=ok or running
+curl http://localhost:8000/api/v2/heartbeat  # ChromaDB
+curl http://localhost:11434/api/tags          # Ollama — lists pulled models
+curl http://localhost:8501/_stcore/health     # Streamlit
+```
+
+All four should return 200. The `/api/health` response includes a `warmup` block — once it shows `"status": "ok"` (within ~10 s of API startup), the model is hot in VRAM and your first query will not pay cold-start latency.
+
+### 9.2 End-to-end smoke test (browser)
+
+1. Open <http://localhost:8501> in any modern browser.
+2. Sign in as **`student@uow.edu.au`** / **`student123`** (see [§10](#10-demo-credentials)).
+3. In the chat box, ask: **"What is Retrieval-Augmented Generation?"**
+4. Expected: an answer that cites `Week1_RAG_Introduction.pdf p.1` (or similar), `Confidence: High`, latency 5–15 s on GPU.
+
+If the answer comes back as a generic "I am Paedia, I help with…" boilerplate, you are getting the fixture fallback — ChromaDB or Ollama is not reachable. See [§12.4](#124-getting-fixture-fallback-instead-of-live-answers).
+
+### 9.3 End-to-end upload flow (browser)
+
+1. Sign out, sign in as **`lecturer@uow.edu.au`** / **`lecturer123`**.
+2. Navigate to **Document Manager** in the sidebar.
+3. Course selector: pick **CSIT321 – Project**.
+4. Drop in any small PDF (try a 1–3 page handout to keep indexing fast).
+5. Watch the status: `queued → processing → indexed`. Indexing a small PDF takes 5–15 s.
+6. Switch to **Q&A Chat**, ask a question that depends on the file's content. Citation should point at your uploaded filename.
+
+If you do not see the upload appear, see [§12.5](#125-upload-flow-broken).
+
+---
+
+## 10. Demo credentials
+
+These users live in `fixtures/sample_responses.json`. Auth is in-memory for Sprint 5 — Postgres-backed users land in Sprint 6.
+
+| Email | Password | Role | Enrolled courses |
+|---|---|---|---|
+| `student@uow.edu.au` | `student123` | Student | CSIT214, CSIT321 |
+| `lecturer@uow.edu.au` | `lecturer123` | Lecturer | CSIT214, CSIT321 |
+| `admin@uow.edu.au` | `admin123` | Admin | All (bypasses enrollment check) |
+
+**Wrong password returns 401.** **Logout invalidates the token** — subsequent API calls return 401 until you log back in.
+
+---
+
+## 11. Daily operations
+
+### Start (everything cached)
+
+```powershell
+docker compose up -d                                                    # CPU mode
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d    # GPU mode
+```
+
+### Stop (keep data)
+
+```powershell
+docker compose down
+```
+
+Your uploaded documents, indexed vectors, demo session history all survive.
+
+### Stop and wipe (full reset)
+
+```powershell
+docker compose down -v
+```
+
+This drops the `postgres_data`, `chromadb_data`, `ollama_data`, and `uploads_data` volumes. You will need to re-pull the Ollama model and re-seed the corpus.
+
+### View live logs
+
+```powershell
+docker compose logs -f api streamlit          # follow both
+docker compose logs --tail=100 api             # last 100 lines of api
+docker compose logs ollama | Select-String error
+```
+
+### Restart a single service
+
+```powershell
+docker compose restart api                     # picks up code changes in src/
+docker compose restart streamlit               # picks up changes in apps/streamlit
+```
+
+> **No need to rebuild for code changes**: source is volume-mounted, so editing `src/` or `apps/` and running `docker compose restart api` (or `streamlit`) reloads it. Only run `docker compose build` after editing `requirements.txt` or `docker/Dockerfile.demo`.
+
+### Rebuild after dependency change
+
+```powershell
+docker compose build api streamlit
+docker compose up -d
+```
+
+### Run tests inside the api container
+
+```powershell
+docker compose exec api pytest test -q                    # full suite (112 tests)
+docker compose exec api pytest test/test_api.py -q        # API tests only
+docker compose exec api pytest -k "test_query_returns" -q  # filtered
+```
+
+### Warm the LLM manually (cold container, before recording)
+
+```powershell
+curl -X POST http://localhost:5000/api/warmup `
+  -H "Authorization: Bearer <admin or lecturer JWT>"
+```
+
+The API auto-warms on startup, but `/api/warmup` is available if VRAM gets evicted (Ollama unloads idle models after `OLLAMA_KEEP_ALIVE=5m`).
+
+### Re-ingest the seed corpus (after dropping volumes or pulling new seed files)
+
+```powershell
+docker compose exec api python -m src.document_processor.ingest_corpus
+```
+
+### Open a shell inside a container
+
+```powershell
+docker compose exec api bash                  # api container
+docker compose exec postgres psql -U edurag   # Postgres CLI
+docker compose exec ollama bash               # Ollama container
+```
+
+---
+
+## 12. Troubleshooting
+
+### 12.1 `docker compose up` says "address already in use"
+
+A local process is holding one of the ports (5000, 5432, 8000, 8501, 11434).
+
+```powershell
+# Find what owns the port
+Get-NetTCPConnection -LocalPort 5432 | Select-Object OwningProcess
+Get-Process -Id <PID>
+```
+
+Either stop that process, or change the port mapping in `.env` (e.g. `POSTGRES_PORT=15432`).
+
+### 12.2 Container name collision
+
+```
+Error: Container "edurag-chromadb-1" already exists
+```
+
+Old Sprint 3 containers from before the project name change are still on the machine:
+
+```powershell
+docker rm -f edurag-chromadb edurag-ollama-cpu edurag-postgres
+docker compose up -d
+```
+
+### 12.3 Ollama returns `[Ollama not running]` in the chat
+
+The model is not pulled, or the Ollama container is unhealthy.
+
+```powershell
+docker compose ps ollama                       # status?
+docker compose exec ollama ollama list         # is the model present?
+docker compose logs ollama --tail=50           # any errors?
+```
+
+Common fix:
+
+```powershell
+docker compose exec ollama ollama pull qwen3:14b   # or llama3.2
+docker compose restart api
+```
+
+### 12.4 Getting fixture fallback instead of live answers
+
+The chat returns a generic-sounding answer with `model_used: "fixture"` in the network tab. ChromaDB or Ollama is unreachable at API startup.
+
+```powershell
+# Check what backend the API selected
+curl http://localhost:5000/api/health
+# Look for: "mode": "chromadb", "rag_available": true
+
+# If mode=fixture, force the API to retry
+docker compose restart api
+# Then make any query — the API initialises the RAG pipeline lazily on first /api/query
+
+# Still failing? Re-seed the corpus
+docker compose exec api python -m src.document_processor.ingest_corpus
+```
+
+### 12.5 Upload flow broken
+
+Lecturer uploads a PDF but it does not appear in the student's document list.
+
+1. Confirm the lecturer selected a course they are enrolled in (CSIT321 or CSIT214 — see [§10](#10-demo-credentials)).
+2. Confirm the upload returned 202:
+   ```powershell
+   docker compose logs api --tail=50 | Select-String upload
+   ```
+3. Confirm indexing completed:
+   ```powershell
+   curl http://localhost:5000/api/documents?course_id=CSIT321 `
+     -H "Authorization: Bearer <lecturer JWT>"
+   ```
+   Look for the file with `"status": "indexed"`. If stuck on `processing` for > 60 s, check `docker compose logs api --tail=200 | Select-String "Error in background indexing"`.
+4. As student, confirm visibility:
+   ```powershell
+   curl http://localhost:5000/api/documents?course_id=CSIT321 `
+     -H "Authorization: Bearer <student JWT>"
+   ```
+
+### 12.6 First query takes 45 s
+
+The model is cold-loading into VRAM. This should NOT happen with revision 3 — `APIState.__post_init__` triggers a background warm-up on API startup. Check:
+
+```powershell
+curl http://localhost:5000/api/health
+# Expect warmup.status=ok (and warmup.generated=true)
+```
+
+If `warmup.status` is not `ok`, the warm-up failed. Re-warm manually:
+
+```powershell
+docker compose restart api ollama
+# Wait 60 s, then:
+curl http://localhost:5000/api/health
+```
+
+To bypass warm-up (useful for CPU-only smoke runs), set `EDURAG_OLLAMA_WARMUP=false` in `.env` and restart api.
+
+### 12.7 ChromaDB version mismatch on startup
+
+```
+ValueError: You are using a deprecated configuration of Chroma
+```
+
+Old volume from a previous Chroma image version.
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+docker compose exec api python -m src.document_processor.ingest_corpus
+```
+
+### 12.8 GPU shows 100% CPU under `ollama ps`
+
+The GPU compose overlay is not applied.
+
+```powershell
+# Confirm both compose files are loaded
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml config | Select-String -Pattern "gpu" -Context 2
+
+# Re-up with the overlay
+docker compose down
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose exec ollama nvidia-smi   # GPU must be visible inside the container
+```
+
+If `nvidia-smi` inside the container fails, see [§4](#4-verify-your-gpu-setup-nvidia).
+
+### 12.9 "Account is suspended" in CI
+
+This is a GitHub-side temporary block on `taylor-b-tran` — happens occasionally during high-traffic moments. Re-run the failed jobs after a few minutes:
+
+```powershell
+gh run rerun <run-id> --failed
+```
+
+### 12.10 Streamlit page is blank or shows raw HTML
+
+Hard-refresh the browser (Ctrl+Shift+R). Streamlit's hot-reload sometimes leaves stale cached JS after a code change. If the page is still broken:
+
+```powershell
+docker compose restart streamlit
+```
+
+### 12.11 PowerShell can't run `start_stack.ps1`
+
+```
+File ... cannot be loaded because running scripts is disabled on this system.
+```
+
+Run **once** in an Administrator PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Then re-run the script.
+
+---
+
+## 13. Architecture overview
 
 ```
 Student / Lecturer / Admin
           │
           ▼
-  ┌─────────────────┐
-  │  Streamlit UI   │  (Sprint 3: wireframes + state model; Sprint 4: connected)
-  └────────┬────────┘
-           │  HTTP
-           ▼
-  ┌─────────────────┐      ┌──────────────────────┐
-  │  Web/API Layer  │─────▶│  Document Processor  │
-  │  Flask (src/api)│      │  chunker · embedder  │
-  └────────┬────────┘      └──────────┬───────────┘
-           │                          │ embeddings
-     ┌─────┴──────┐           ┌───────▼──────────┐
-     │ PostgreSQL │           │    ChromaDB       │
-     │ users      │           │  vector store     │
-     │ documents  │           │  course-scoped    │
-     │ sessions   │           └───────┬───────────┘
-     │ audit log  │                   │ retrieved chunks
-     └────────────┘           ┌───────▼───────────┐
-                              │  Ollama (local)   │
-                              │  qwen3:14b        │
-                              │  grounded answer  │
-                              └───────────────────┘
+   ┌──────────────────┐
+   │   Streamlit UI   │   apps/streamlit/main.py
+   │   (port 8501)    │   Light-theme overrides, native Enter-login component
+   └─────────┬────────┘
+             │  HTTP + JWT
+             ▼
+   ┌─────────────────────┐      ┌─────────────────────────┐
+   │   Flask REST API    │─────▶│   Document Processor    │
+   │   src/api/          │      │   chunker · embedder    │
+   │   (port 5000)       │      │   src/document_processor│
+   └────┬────────┬───────┘      └────────────┬────────────┘
+        │        │                           │ 384-dim embeddings
+        │  background warm-up                │
+        │        │                ┌──────────▼──────────┐
+        │        ▼                │      ChromaDB        │
+        │  ┌─────────────┐        │   (port 8000)       │
+        │  │   Ollama    │        │  course_id-scoped   │
+        │  │ qwen3:14b   │        │  vector store       │
+        │  │ (port 11434)│        └──────────┬──────────┘
+        │  └─────────────┘                   │ top-k chunks
+        │                          ┌─────────▼─────────┐
+        │                          │  Ollama generate  │
+        │                          │  with citations   │
+        │                          └───────────────────┘
+        │
+        ▼
+   ┌─────────────────┐
+   │   PostgreSQL    │   db/migrations/
+   │   (port 5432)   │   uploaded_documents, indexing_jobs (Sprint 5 rev 2)
+   │   users, sessions, audit log (Sprint 6)
+   └─────────────────┘
+```
+
+**Data flow on query** (`POST /api/query`):
+
+1. Auth: JWT validated against `APIState.access_tokens`.
+2. Enrollment: `APIState.is_enrolled(user, course_id)` — UUID/code normalization via `resolve_course()`.
+3. Embedding: query string → `all-MiniLM-L6-v2` → 384-dim vector.
+4. Retrieval: `VectorRetriever.search(query, course_id, top_k=5)` against ChromaDB with metadata filter `where={"course_id": {"$eq": course_id}}`.
+5. Confidence: average similarity of retrieved chunks → Low/Medium/High.
+6. Prompt: chunks + question + system instruction → `qwen3:14b` via Ollama.
+7. Response: answer text + source_references (file + page + similarity) + confidence + latency.
+
+**Data flow on upload** (`POST /api/upload`):
+
+1. Auth + RBAC: lecturer/admin only.
+2. Per-course enrollment check.
+3. File written to `<repo>/data/uploads/<filename>` (Docker: `/workspace/data/uploads/`).
+4. `APIState.queue_upload()` inserts rows into PostgreSQL `uploaded_documents` + `indexing_jobs`.
+5. Background daemon thread:
+   - chunker → 1024-char chunks
+   - embedder → 384-dim vectors
+   - ChromaDB `upsert` with course_id metadata
+   - PostgreSQL `update_job(status=completed)` + `update_document_status(status=indexed)`.
+
+---
+
+## 14. Repository layout
+
+```
+edu-rag/
+├── apps/
+│   ├── streamlit/                # Streamlit UI prototype
+│   │   ├── main.py               # entry point (1400+ lines, includes all pages)
+│   │   ├── api_client.py         # HTTP client to Flask API
+│   │   └── components/login_form/  # native Streamlit Enter-login component
+│   └── integration/
+│       ├── backend/api.py        # Flask entry point
+│       ├── start.sh / stop.sh    # legacy start scripts
+│       └── logs/                 # gitignored
+├── src/
+│   ├── api/
+│   │   ├── app.py                # Flask app factory
+│   │   ├── state.py              # APIState: hot cache, PG hydration, warmup trigger
+│   │   ├── db.py                 # PostgreSQL persistence (Sprint 5 rev 2)
+│   │   ├── warmup.py             # Background Ollama warm-up (Sprint 5 rev 3)
+│   │   └── routes/               # auth, query, documents, sessions, health
+│   ├── document_processor/
+│   │   ├── chunker.py            # PDF/PPTX/DOCX → chunks
+│   │   ├── ingest_corpus.py      # seed corpus loader
+│   │   ├── offline_embedder.py   # FNV-1a fallback when sentence-transformers missing
+│   │   ├── rag_pipeline.py       # VectorRetriever + LLMResponseGeneration
+│   │   └── seed_documents.py     # in-repo CSIT321 chunks
+│   └── vector_retriever/embedder.py
+├── db/
+│   ├── migrations/               # PostgreSQL schema (users, courses, sessions, audit log)
+│   └── seed/                     # development seed data
+├── docs/
+│   ├── api/api_spec.yaml         # OpenAPI 3.0
+│   ├── governance/               # privacy policy, ethics review
+│   ├── sprint5_handover.md       # ← QA snapshot — read this for current state
+│   ├── sprint5_runtime_notes.md  # operational deep-dive (complements this README)
+│   ├── sprint5_implementation_summary.md
+│   ├── sprint5_status_table.md
+│   ├── a3_demo_script.md
+│   ├── rag_benchmark_sprint5.md
+│   ├── rag_limitations.md
+│   └── system_design/            # system design v2
+├── fixtures/sample_responses.json    # demo users, demo responses
+├── notebooks/rag_poc.ipynb           # original RAG PoC
+├── scripts/
+│   ├── start_stack.ps1 / .sh     # GPU-aware wrapper (Option A)
+│   └── sprint5_integration_gate.py   # CI demo-readiness gate
+├── test/                          # pytest: 112 tests (rev 3)
+├── docker/Dockerfile.demo
+├── docker-compose.yml             # base stack (CPU-safe)
+├── docker-compose.gpu.yml         # GPU overlay (NVIDIA only)
+├── requirements.txt               # runtime deps + pytest (rev 3)
+├── requirements-dev.txt           # CI-only deps (-r requirements.txt + pytest)
+├── .env.example                   # copy to .env
+└── README.md                      # this file
 ```
 
 ---
 
-## Current Status
+## 15. Tech stack reference
 
-| Sprint | Status | Key Outcomes |
-|---|---|---|
-| Sprint 1–2 | Complete | Architecture decisions, module interface design, Assessment 2 documentation |
-| Sprint 3 | Complete | Working RAG PoC notebook, Docker stack, PostgreSQL schema, API specification, prompt strategy, retrieval benchmark, privacy/ethics review, UI wireframes, test query corpus |
-| Sprint 4 | Complete | Flask API with JWT auth, role-based access control, course-scoped query enforcement, Streamlit UI connected to live API, document upload/indexing flow, PPTX/DOCX parser validation |
-| Sprint 5 | Near-final (revision 3, 27 May 2026) | CI/CD pipeline (GitHub Actions), Docker demo-readiness workflow, live RAG wiring (ChromaDB + Ollama qwen3:14b on GPU), live document upload→indexing→retrieval, upload metadata persisted to PostgreSQL, automatic Ollama warm-up at API startup, live admin dashboard metrics, A3 evidence pack — see [`docs/sprint5_handover.md`](docs/sprint5_handover.md) |
-
-### What is working now
-
-- **Docker Compose stack** — Streamlit UI, Flask API, PostgreSQL, ChromaDB, and Ollama run through the Sprint 5 demo service contract; `docker compose up -d --build` starts all five services
-- **GitHub Actions CI** — runs on every PR to `develop`/`main`: Python compile, full pytest suite, JSON artifact validation, and Compose config check
-- **Docker demo-readiness workflow** — manual `workflow_dispatch` that starts the stack and smoke-tests all five services (PostgreSQL `pg_isready`, ChromaDB heartbeat, Ollama `/api/tags`, Flask `/api/health`, Streamlit `/_stcore/health`)
-- PostgreSQL schema applied with development seed data (users, courses, documents, sessions, audit events)
-- RAG PoC notebook executes the full ingestion-to-answer pipeline against a real PDF
-- `sentence-transformers/all-MiniLM-L6-v2` embeddings stored in ChromaDB with `course_id` metadata
-- Prompt strategy and RAG configuration benchmark frozen (chunk size 1024, top-k 5, fallback threshold 0.65)
-- Full OpenAPI 3.0 specification covering auth, query, upload, indexing, sessions, and admin routes
-- **Flask REST API** (`src/api/`) with Blueprint-based routing: auth, query, documents, sessions, health
-- **JWT authentication** enforced on all protected endpoints; wrong-password login returns 401
-- **Role-based access control**: lecturer/admin only for upload/delete; students blocked with 403
-- **Course-scoped query enforcement**: students cannot query courses they are not enrolled in
-- **Streamlit UI** connected to live Flask API via `apps/integration/start.sh`
-- **Document upload flow** wired end-to-end: UI → `api_client.upload_document()` → Flask → background chunker → embedder → ChromaDB → student retrieval (Sprint 5 rev 2, 26 May)
-- **Upload metadata + indexing jobs persisted to PostgreSQL** via `src/api/db.py`; `APIState` hydrates from Postgres on startup so uploads survive `docker compose restart api` (Sprint 5 rev 2, 26 May)
-- **Automatic Ollama warm-up** at API startup (`src/api/warmup.py`) — no more 45 s cold-start on the first demo query; `/api/health.warmup` exposes status and `/api/warmup` re-warms on demand (Sprint 5 rev 3, 27 May)
-- **Live admin dashboard metrics** — Streamlit admin page reads `/api/admin/stats` for KPI tiles and `fixtures/sample_responses.json::demo_users` (joined with `/api/sessions` for per-user query counts) for the User Management table (Sprint 5 rev 3, 27 May)
-- PPTX and DOCX parser paths validated with extended test suite (**112 tests passing** as of Sprint 5 rev 3)
-
-### Current report and planning artifacts
-
-- Assessment 2 report: `docs/reports/Assessment_2_Group19.docx`
-- Sprint 4 summary (canonical): `docs/sprint4_summary.md`
-- Sprint 5 kickoff and demo-readiness plan: `docs/sprint_5_kickoff.md`
-- Sprint 4 31-query fixture-mode benchmark: `docs/rag_config_benchmark_31q.json` (6 PASS / 6 PARTIAL / 19 FAIL — fixture-backed, not live retrieval)
+| Layer | Choice | Version | Why |
+|---|---|---|---|
+| Language | Python | 3.11 | Compatible with Docker base image, pinned for CI |
+| UI | Streamlit | 1.51.0 | Fast iteration; native Python; no separate frontend build |
+| API | Flask + Blueprints | 3.1.2 | Lightweight; team-familiar; easy testing |
+| Text extraction | PyMuPDF (`fitz`) | 1.27.2.2 | Fast, reliable PDF text; better than pdfminer for layouts |
+| Chunking | LangChain `RecursiveCharacterTextSplitter` | 1.1.0 | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 5.4.1 | 384-dim, fully local, ~22 MB model |
+| Vector store | ChromaDB | 1.5.8 | Metadata filtering, simple HTTP API, Docker-ready |
+| Relational DB | PostgreSQL | 16-alpine | Standard; auth/sessions/audit; psycopg3 with `dict_row` |
+| Local LLM | Ollama + `qwen3:14b` (16 GB GPU) or `llama3.2` (8 GB or CPU) | Latest | Self-hosted; no external API; GPU-optional |
+| Containerisation | Docker Compose | v2 | CPU + GPU overlay variants |
+| Testing | Pytest + labelled query corpus | 8.3.3 | Unit, integration, retrieval evaluation; 112 tests pass on rev 3 |
+| CI | GitHub Actions | — | Python tests + fixture validation + Compose validation + Sprint 5 integration gate |
 
 ---
 
-## Tech Stack
+## 16. Contributing
 
-| Layer | Choice | Notes |
+### Branching workflow
+
+```
+feature/task-branch  →  develop  →  main
+       ↑                    ↑
+       └─ PR with CI green  └─ PR after develop has cumulative changes
+```
+
+- All changes merge through **pull requests into `develop`**. Direct pushes to `main` or `develop` are not permitted.
+- Sprint-specific branches use `feature/sN-...` or `fix/sN-...` (e.g. `fix/s5-final-fix-wave`).
+- PR template: short summary + test plan + link to relevant Sprint task (e.g. S5-T11).
+- See [`SPRINT_BRANCH_WORKFLOW.md`](SPRINT_BRANCH_WORKFLOW.md) for the full convention.
+
+### Local-development workflow
+
+```powershell
+# 1. Make sure your branch is up to date
+git checkout develop
+git pull
+git checkout -b feature/s6-mytask
+
+# 2. Run tests after each non-trivial change
+docker compose exec api pytest test -q
+
+# 3. Commit small, focused changes
+git add <specific files>
+git commit -m "feat(s6): one-line summary"
+
+# 4. Push and create PR via GitHub UI or gh
+git push -u origin feature/s6-mytask
+gh pr create --base develop --title "..." --body "..."
+
+# 5. Wait for CI green before requesting review
+gh pr checks <pr-number>
+```
+
+### Code conventions
+
+- **Python**: 4-space indent, type hints where they help, no f-string in log messages (use `%s` placeholders for lazy formatting).
+- **No global mutable state in routes** — go through `APIState`.
+- **Tests**: every new route gets a happy-path test and at least one auth/permission test.
+- **Commits**: small and focused. The Sprint 5 final fix wave (PR #47) split into three commits by concern (rev 2 / rev 3 / docs) for reviewability.
+
+### CI gates before merge
+
+| Check | What it does | How to debug locally |
 |---|---|---|
-| Language | Python | Across all modules |
-| UI prototype | Streamlit | Student-facing Q&A + admin dashboard |
-| API layer | Flask + Blueprints | `src/api/` — JWT auth, role-scoped routes, live RAG via ChromaDB + Ollama, Postgres-persisted upload metadata, background Ollama warm-up |
-| Text extraction | PyMuPDF (`fitz`) | PDF-first; PPTX/DOCX in progress |
-| Text splitting | LangChain `RecursiveCharacterTextSplitter` | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 384-dimensional, fully local |
-| Vector database | ChromaDB | Metadata-filtered by `course_id` |
-| Relational database | PostgreSQL | Users, roles, docs, sessions, audit log |
-| Local LLM | Ollama + `qwen3:14b` | GPU-optional; no external API required |
-| Containerisation | Docker Compose | CPU + GPU overlay variants |
-| Testing | Pytest + labelled query corpus | Unit, integration, and retrieval evaluation assets |
+| Python tests and fixture validation | `pytest -q` + JSON schema check + Sprint 5 integration gate | `docker compose exec api pytest test -q` |
+| Docker Compose validation | `docker compose config` on both base + GPU overlay | `docker compose config --quiet`; `docker compose -f docker-compose.yml -f docker-compose.gpu.yml config --quiet` |
+| Demo stack smoke test | Spins up full stack on the runner, hits all health endpoints | Compose up locally and hit each `/health` route by hand |
+
+If CI fails on something unrelated to your change (account suspension, disk-full runner), it is OK to `gh run rerun --failed` once.
 
 ---
 
-## Team
+## 17. Team
 
 | Name | Module ownership |
 |---|---|
 | Thanh Binh Tran | Team Lead — RAG pipeline, prompt strategy, retrieval benchmark, system integration |
-| Tai Huynh | Module 4 — API specification, privacy policy, ethics review, Sprint 4 kickoff |
-| Tung Phuong Anh Huynh | Testing — test query corpus, corpus manifest, evaluation methodology |
+| Tai Huynh | Module 4 — API specification, privacy policy, ethics review, Sprint 4 kickoff, runtime notes, A3 demo script |
+| Tung Phuong Anh Huynh | Testing — test query corpus, corpus manifest, evaluation methodology, QA checklist |
 | Kahavidanage Namaratne | Data — ERD, DFD, risk register, storage sizing, PostgreSQL schema |
-| Thi Hong Ngoc Nguyen | Document processing — retrieval edge cases, RAG configuration contribution |
-| Anmoldeep Singh | UI — Streamlit wireframes, design system, UI state model |
+| Thi Hong Ngoc Nguyen | Document processing — retrieval edge cases, RAG configuration contribution, RAG limitations doc |
+| Anmoldeep Singh | UI — Streamlit wireframes, design system, UI state model, contrast fixes |
 
 ---
 
-## Project Context
+## 18. Project context
 
 | Item | Value |
 |---|---|
 | Subject | CSIT321 Annual Session 2026 — Project 37 |
 | Campus | University of Wollongong, Liverpool Campus (SWS) |
-| Group | Group 19 |
+| Group | Group 19 — Aletheia's Zetetes |
 | Supervisor | Prof. Jun Yan |
+| Sprint cadence | 4 × 2-week sprints (Sprint 3 was the architecture sprint; Sprint 4 wired the API + UI; Sprint 5 wires live RAG end-to-end; Sprint 6 is post-A3) |
 
-This is an assessed final-year project but the engineering work — system design, API specification, retrieval tuning, privacy modelling, and sprint delivery — reflects professional software development practice rather than tutorial exercises.
-
----
-
-## Quick Start
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Build and start the local demo stack:
-
-```bash
-docker compose up -d --build
-```
-
-For an NVIDIA GPU environment:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
-```
-
-Pull the default LLM:
-
-```bash
-docker compose exec ollama ollama pull qwen3:14b
-```
-
-Open the local demo UI:
-
-```
-http://localhost:8501
-```
-
-Install Python dependencies (if running the notebook outside Docker):
-
-```bash
-pip install -r requirements.txt
-```
-
-Open the RAG proof-of-concept notebook:
-
-```
-notebooks/rag_poc.ipynb
-```
-
-See [`README_docker.md`](README_docker.md) for service connection values, health checks, and known Docker scope notes.
+This is an assessed final-year project but the engineering work — system design, API specification, retrieval tuning, privacy modelling, sprint delivery, and QA evidence — reflects professional software development practice rather than tutorial exercises.
 
 ---
 
-## Sprint 3 RAG Defaults
+## Further reading
 
-| Setting | Value | Rationale |
-|---|---|---|
-| Chunk size | 1024 characters | Best in-scope / out-of-scope distance separation in the Sprint 3 benchmark |
-| Chunk overlap | 0 characters | Overlap did not improve coverage on the benchmark PDF |
-| Retrieval top-k | 5 | Sufficient context for the LLM without overloading the prompt |
-| Fallback threshold | cosine distance 0.65 | Separates weakly-grounded queries from supported ones |
-| Course isolation | `course_id` metadata filter | Non-negotiable; prevents cross-course retrieval leakage |
+When this README is not enough:
 
-These are Sprint 3 integration defaults. Sprint 4 reran the full 31-question
-labelled corpus against the fixture-backed Flask API; that result is stored in
-`docs/rag_config_benchmark_31q.json`. The defaults remain unchanged until
-Sprint 5 reruns the same corpus against live ChromaDB retrieval.
-
----
-
-## Repository Layout
-
-```
-.
-├── apps/streamlit/          # Streamlit UI prototype
-├── db/
-│   ├── migrations/          # PostgreSQL schema
-│   └── seed/                # Development seed data
-├── docs/
-│   ├── api/                 # OpenAPI 3.0 spec (api_spec.yaml)
-│   ├── governance/          # Privacy policy, ethics review
-│   ├── meetings/            # Sprint checkpoint notes, Sprint 4 kickoff
-│   ├── system_design/       # System design document v2
-│   ├── ui/                  # Wireframes, design system, UI state
-│   ├── ollama_model_selection.md
-│   ├── prompt_strategy.md
-│   └── rag_config.md
-├── materials/               # Sample course PDF for the PoC
-├── notebooks/               # rag_poc.ipynb — executed RAG pipeline
-├── src/
-│   ├── api/                 # Flask REST API
-│   │   ├── app.py           # App factory
-│   │   ├── state.py         # APIState — hot cache, Postgres hydration, warm-up trigger
-│   │   ├── db.py            # Postgres persistence for uploaded_documents + indexing_jobs (Sprint 5 rev 2)
-│   │   ├── warmup.py        # Background Ollama warm-up (Sprint 5 rev 3)
-│   │   └── routes/          # auth, query, documents, sessions, health (incl. /api/warmup, /api/admin/stats)
-│   ├── document_processor/  # chunker.py (PDF, PPTX, DOCX)
-│   └── vector_retriever/    # embedder.py
-├── test/                    # Pytest: API auth, chunker, PPTX/DOCX integration
-├── tests/                   # Pytest assets and test query corpus
-├── docker-compose.yml
-├── docker-compose.gpu.yml
-└── SPRINT_BRANCH_WORKFLOW.md
-```
-
----
-
-## Git Workflow
-
-Branches follow: `task branch → develop → main`
-
-All changes merge through pull requests into `develop`. Direct pushes to `main` or `develop` are not permitted. See [`SPRINT_BRANCH_WORKFLOW.md`](SPRINT_BRANCH_WORKFLOW.md) for the full team convention.
-
----
-
-## Known Limitations
-
-- **Auth + chat sessions are in-memory** — login users come from `fixtures/sample_responses.json`; session/message history is stored on `APIState` and resets on Flask restart. PostgreSQL schema for users/sessions is staged for Sprint 6.
-- **31-question benchmark is fixture-mode only** — the 6 PASS / 6 PARTIAL / 19 FAIL result reflects fixture matching, not actual retrieval quality. Sprint 5 added a live 5-query benchmark on real ChromaDB+Ollama (`docs/rag_benchmark_sprint5_results.json`); the 31-question live re-run is a Sprint 6 item.
-- **Demo GPU is 8 GB VRAM (RTX 5060)** — `qwen3:14b` runs but partial CPU offload limits throughput. A separate higher-VRAM host is planned for the optional 14B benchmark.
-- **No public deployment** — the system is designed for local demo only. Cloud hosting requires resolving secrets, data privacy, and cost boundaries before any public deployment.
+- **Operational deep-dive**: [`docs/sprint5_runtime_notes.md`](docs/sprint5_runtime_notes.md) — env vars, common issues, direct-run fallback.
+- **Current QA state**: [`docs/sprint5_handover.md`](docs/sprint5_handover.md) — every finding, every resolution, every video QA pass.
+- **What is implemented vs fixture vs planned**: [`docs/sprint5_implementation_summary.md`](docs/sprint5_implementation_summary.md).
+- **A3 demo script** (with narration): [`docs/a3_demo_script.md`](docs/a3_demo_script.md).
+- **Docker bundle reference**: [`README_docker.md`](README_docker.md) — service contract for the Compose stack.
+- **API contract**: [`docs/api/api_spec.yaml`](docs/api/api_spec.yaml) — OpenAPI 3.0.
 
 ---
 
