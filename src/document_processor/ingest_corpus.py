@@ -60,9 +60,6 @@ def get_or_create_collection(client):
     )
 
 def ingest(force_reload: bool = False) -> dict:
-    print(f"\n{'='*62}")
-    print("  EduRAG – Seeded Corpus Ingestion  (S5-T17)")
-    print(f"{'='*62}")
 
     client = get_chroma_client()
 
