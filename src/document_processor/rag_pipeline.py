@@ -174,7 +174,7 @@ class LLMResponseGeneration:
                       "options": {"temperature": OLLAMA_TEMPERATURE,
                                   "top_p": OLLAMA_TOP_P,
                                   "num_predict": OLLAMA_NUM_PREDICT}},
-                timeout=120)
+                timeout=240)
             resp.raise_for_status()
             return resp.json().get("response","").strip(), True
         except requests.exceptions.ConnectionError:
@@ -185,6 +185,16 @@ class LLMResponseGeneration:
             )
             return (
                 "[Ollama not running] Start with: ollama serve && ollama pull llama3.2\n\n"
+                "Retrieved context (retrieval succeeded):\n" + context_lines
+            ), False
+        except requests.exceptions.Timeout:
+            context_lines = (
+                "\n".join(f"\u2022 {c.citation_label()}: {c.text[:200]}\u2026" for c in chunks)
+                if chunks else "  (no chunks retrieved)"
+            )
+            return (
+                "[Ollama response timed out. On CPU-only machines a full answer can take up to "
+                "~180s (see README.md Hardware Requirements) \u2014 please try again.]\n\n"
                 "Retrieved context (retrieval succeeded):\n" + context_lines
             ), False
         except Exception as exc:
