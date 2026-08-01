@@ -204,3 +204,24 @@ The highest-priority Sprint 4 handoff items are:
 | Tai privacy policy | `Team_Contributions/Tai Huynh/docs/privacy_policy.md` |
 | Tai ethics review | `Team_Contributions/Tai Huynh/docs/ethics_review_sprint3.md` |
 | Tai Sprint 4 kickoff | `Team_Contributions/Tai Huynh/docs/sprint_4_kickoff.md` |
+
+## 15. Sprint 5/6 Architecture Reconciliation (added 26 Jul 2026, Sprint 6 T05/T06)
+
+No new architectural change has landed in Sprint 6 itself as of this writing — T07 (model fine-tuning) and T09 (vector DB optimisation) have not yet been merged. This section instead reconciles the existing diagrams and this document against the code as it actually runs today, per the Sprint 6 grading-readiness review.
+
+### 15.1 Query flow — corrected
+
+`docs/architecture/seq_api_query.png` (Sprint 4) documented the fixture-backed query path and explicitly flagged an open "Sprint 5 Gap" toward live retrieval. That gap was closed in Sprint 5 but the diagram was never updated. The corrected flow is documented in `docs/architecture/seq_api_query_sprint5.md` and `docs/architecture/diagrams/seq_api_query_sprint5.svg`: real ChromaDB retrieval (course-scoped, top_k=5, 0.65 similarity threshold) and Ollama generation replace `query_fixture()`, and a new ambiguous-question short-circuit (HTTP 422) runs before retrieval.
+
+### 15.2 Data model — correction to §11
+
+Section 11 above states "PostgreSQL stores users, roles, courses, memberships, documents, indexing jobs, sessions, messages, refresh tokens, and audit logs." **This is not accurate for the system as currently implemented.** Only 2 of those 9 designed tables have a real runtime equivalent:
+
+- `uploaded_documents` and `indexing_jobs` (`src/api/db.py`, added Sprint 5 for QA-DATA-001) are real, live Postgres tables — but with a different, simpler, non-FK-constrained schema than the `documents`/`indexing_jobs` tables designed in `db/migrations/001_initial_schema.sql`.
+- `users`, `courses`, `course_memberships`, `conversation_sessions`, `conversation_messages`, `refresh_tokens`, and `audit_logs` remain fixture-backed or in-memory (`src/api/state.py`). The migration file that defines them exists but no current code path queries them.
+
+Full detail, table-by-table, is in `docs/architecture/erd_reconciliation_sprint5.md` and `docs/architecture/diagrams/erd_reconciliation_sprint5.svg`.
+
+### 15.3 Why this is reported now rather than silently fixed
+
+Rewiring the 7 unused tables to Postgres is a real engineering task, not a documentation fix, and is out of scope for the current 2-week A4 window. Consistent with this project's evidence standard elsewhere (QA checklists, sprint status tables), the correct action is to report the gap accurately rather than let the design docs continue to claim more than the system does. The A4 report and RTM (`docs/rtm_a4.md`) should cite this section rather than repeat the original Section 11 claim unqualified.

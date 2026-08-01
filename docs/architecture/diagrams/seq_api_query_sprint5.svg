@@ -1,0 +1,102 @@
+<svg viewBox="0 0 1180 900" xmlns="http://www.w3.org/2000/svg" font-family="Calibri, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#1B2A4A"/>
+    </marker>
+    <marker id="arrowGold" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#9A6B00"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="900" fill="white"/>
+  <text x="20" y="26" font-size="18" font-weight="bold" fill="#1B2A4A">POST /api/query — actual Sprint 5 flow (supersedes seq_api_query.png, Sprint 4 fixture-only)</text>
+  <text x="20" y="46" font-size="12" fill="#555">Source: src/api/routes/query.py, src/document_processor/rag_pipeline.py — verified against code 26 Jul 2026</text>
+
+  <!-- Lifelines -->
+  <g font-size="13" font-weight="bold" fill="#1B2A4A">
+    <text x="60" y="80" text-anchor="middle">Streamlit</text>
+    <text x="260" y="80" text-anchor="middle">Flask /api/query</text>
+    <text x="480" y="80" text-anchor="middle">APIState</text>
+    <text x="680" y="80" text-anchor="middle">VectorRetriever</text>
+    <text x="880" y="80" text-anchor="middle">ChromaDB</text>
+    <text x="1080" y="80" text-anchor="middle">Ollama</text>
+  </g>
+  <g stroke="#BFC7D1" stroke-width="1.5">
+    <line x1="60" y1="90" x2="60" y2="870"/>
+    <line x1="260" y1="90" x2="260" y2="870"/>
+    <line x1="480" y1="90" x2="480" y2="870"/>
+    <line x1="680" y1="90" x2="680" y2="870"/>
+    <line x1="880" y1="90" x2="880" y2="870"/>
+    <line x1="1080" y1="90" x2="1080" y2="870"/>
+  </g>
+
+  <!-- messages -->
+  <g font-size="11.5" fill="#1A1A1A">
+    <line x1="60" y1="110" x2="260" y2="110" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="65" y="105">1. POST query, course_id, session_id, Bearer token</text>
+
+    <line x1="260" y1="140" x2="260" y2="140" stroke="#1B2A4A"/>
+    <text x="265" y="135">2. Rate-limit check (10 req/60s per IP) — 429 if exceeded</text>
+
+    <line x1="260" y1="165" x2="480" y2="165" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="265" y="160">3. validate_bearer(token)</text>
+    <line x1="480" y1="185" x2="260" y2="185" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="360" y="180" text-anchor="middle">user (fixture-backed, demo_users) or None → 401</text>
+
+    <rect x="230" y="200" width="640" height="34" fill="#FBF3DE" stroke="#D4A843"/>
+    <text x="240" y="222" font-weight="bold" fill="#9A6B00">4. NEW in Sprint 5 — _is_ambiguous(question): &lt;3 words or vague pattern → HTTP 422, short-circuit (no retrieval call)</text>
+
+    <line x1="260" y1="255" x2="480" y2="255" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="265" y="250">5. is_enrolled(user, course_id) — false → 403</text>
+
+    <line x1="260" y1="285" x2="480" y2="285" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="265" y="280">6. get_generator().generate(question, course_id)</text>
+
+    <line x1="480" y1="315" x2="680" y2="315" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="485" y="310">7. retriever.search(query, course_id, top_k=5)</text>
+
+    <line x1="680" y1="345" x2="880" y2="345" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="685" y="340">8. embed query (all-MiniLM-L6-v2) + cosine search, filter by course_id metadata</text>
+
+    <line x1="880" y1="375" x2="680" y2="375" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="700" y="370" text-anchor="middle">top-k chunks + similarity scores</text>
+
+    <rect x="650" y="390" width="220" height="30" fill="#EDF0F5" stroke="#1B2A4A"/>
+    <text x="660" y="410" font-size="11">9. keep chunks above 0.65 threshold</text>
+
+    <line x1="680" y1="440" x2="1080" y2="440" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="685" y="435">10. build grounded prompt from retained chunks; call Ollama.generate()</text>
+
+    <rect x="1000" y="455" width="160" height="30" fill="#FBF3DE" stroke="#D4A843"/>
+    <text x="1010" y="475" font-size="10.5">warm-up (rev 3): model pre-loaded at API startup, avoids ~45s cold start</text>
+
+    <line x1="1080" y1="500" x2="680" y2="500" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="880" y="495" text-anchor="middle">11. raw answer text</text>
+
+    <rect x="500" y="515" width="360" height="46" fill="#EDF0F5" stroke="#1B2A4A"/>
+    <text x="510" y="533" font-size="11">12. if no chunk passed threshold: prepend FALLBACK_LABEL</text>
+    <text x="510" y="550" font-size="11">    "Based on general knowledge — not verified against course materials"</text>
+
+    <line x1="680" y1="580" x2="480" y2="580" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="580" y="575" text-anchor="middle">13. answer, source_refs, confidence, model_used, is_fallback</text>
+
+    <line x1="480" y1="605" x2="480" y2="605" stroke="#1B2A4A"/>
+    <rect x="360" y="615" width="240" height="30" fill="#FBF3DE" stroke="#D4A843"/>
+    <text x="370" y="635" font-size="11" fill="#9A6B00">14. record_session_message() — in-memory, NOT the</text>
+
+    <line x1="480" y1="660" x2="260" y2="660" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="365" y="655" text-anchor="middle">15. result dict</text>
+
+    <line x1="260" y1="690" x2="60" y2="690" stroke="#1B2A4A" marker-end="url(#arrow)"/>
+    <text x="65" y="685">16. 200 JSON: answer, source_references, confidence, session_id, backend_mode, latency_ms</text>
+  </g>
+
+  <rect x="20" y="720" width="1140" height="150" fill="#F4F6F9" stroke="#BFC7D1"/>
+  <text x="35" y="742" font-size="13" font-weight="bold" fill="#1B2A4A">Reconciliation notes vs. the Sprint 4 diagram (seq_api_query.png) it replaces</text>
+  <text x="35" y="764" font-size="11.5" fill="#1A1A1A">• Step 5 (query_fixture fuzzy-match) is GONE. Query now goes through real ChromaDB retrieval + Ollama generation — this is the Sprint 5 milestone.</text>
+  <text x="35" y="784" font-size="11.5" fill="#1A1A1A">• Step 4 (ambiguous-question short-circuit, HTTP 422) is NEW — did not exist in Sprint 4/A2 design (PR #40).</text>
+  <text x="35" y="804" font-size="11.5" fill="#1A1A1A">• Step 14: session/message recording is still in-memory via APIState, NOT the formal `conversation_sessions`/`conversation_messages` Postgres tables</text>
+  <text x="55" y="822" font-size="11.5" fill="#1A1A1A">from db/migrations/001_initial_schema.sql — see erd_reconciliation_sprint5.md for the full schema gap.</text>
+  <text x="35" y="844" font-size="11.5" fill="#1A1A1A">• Auth (step 3) is still fixture-backed (`fixtures/sample_responses.json::demo_users`), not the formal `users` table — unchanged since Sprint 4.</text>
+  <text x="35" y="862" font-size="10.5" fill="#777" font-style="italic">Verified against code 26 Jul 2026. No Sprint 6 code changes (T07/T09) had landed at time of writing — this reconciles Sprint 5, not new Sprint 6 work.</text>
+</svg>
