@@ -69,8 +69,15 @@ def _bg_index_document(file_path: Path, course_id: str, document_id: str, job_id
 
         state.update_job(job_id, progress_percent=70)
 
+        # Batch-encode all chunks in one model.encode() call instead of one
+        # call per chunk — cuts embedding time for multi-chunk uploads by
+        # amortising tokenisation/forward-pass overhead across the batch
+        # (T09, Sprint 6).
+        chunk_texts = [ch["text"] for ch in chunks]
+        batch_embeddings = model.encode(chunk_texts, normalize_embeddings=True)
+
         ids, texts, embeddings, metadatas = [], [], [], []
-        for idx, ch in enumerate(chunks):
+        for idx, (ch, emb) in enumerate(zip(chunks, batch_embeddings)):
             chunk_text = ch["text"]
             meta = ch["metadata"]
 
@@ -78,7 +85,6 @@ def _bg_index_document(file_path: Path, course_id: str, document_id: str, job_id
             topic = meta.get("topic") or "Uploaded Material"
             week = meta.get("week") or "General"
 
-            emb = model.encode(chunk_text, normalize_embeddings=True)
             if hasattr(emb, "tolist"):
                 emb = emb.tolist()
 

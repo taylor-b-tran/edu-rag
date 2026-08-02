@@ -85,9 +85,21 @@ def ingest(force_reload: bool = False) -> dict:
     ids, texts, embeddings, metadatas, errors = [], [], [], [], []
     t0 = time.time()
 
-    for doc in SEED_DOCUMENTS:
-        try:
-            emb = model.encode(doc["text"], normalize_embeddings=True)
+    # Batch-encode all seed documents in a single model.encode() call instead of
+    # one call per document. SentenceTransformer amortises tokenisation and
+    # forward-pass overhead across the batch, which is significantly faster
+    # than a per-document loop for a corpus this size (T09, Sprint 6).
+    doc_texts = [doc["text"] for doc in SEED_DOCUMENTS]
+    try:
+        batch_embeddings = model.encode(doc_texts, normalize_embeddings=True)
+    except Exception as exc:
+        batch_embeddings = None
+        for doc in SEED_DOCUMENTS:
+            errors.append({"doc_id": doc["doc_id"], "error": str(exc)})
+            print(f"  [ERR] {doc['doc_id']}: {exc}")
+
+    if batch_embeddings is not None:
+        for doc, emb in zip(SEED_DOCUMENTS, batch_embeddings):
             if hasattr(emb, "tolist"):
                 emb = emb.tolist()
             ids.append(doc["doc_id"])
@@ -101,9 +113,6 @@ def ingest(force_reload: bool = False) -> dict:
                 "week"       : doc["week"],
             })
             print(f"  [OK] {doc['doc_id']}")
-        except Exception as exc:
-            errors.append({"doc_id": doc["doc_id"], "error": str(exc)})
-            print(f"  [ERR] {doc['doc_id']}: {exc}")
 
     if ids:
         collection.upsert(
