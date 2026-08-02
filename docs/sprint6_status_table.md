@@ -1,54 +1,54 @@
 # Sprint 6 Status Table
 
-Owner: Tai Huynh (T15) — this file was overdue (due 27 Jul) and is created now, 1 Aug, backfilled against actual work done so far.
-Last updated: 1 Aug 2026. Deadline still assumed ~8 Aug — **confirm with Prof. Jun Yan / Moodle.**
+Owner: Tai Huynh (T15)
+Last updated: 2 Aug 2026 (T09, T29 done). Deadline still assumed ~8 Aug — **confirm with Prof. Jun Yan / Moodle.**
 
 > Status key: **Done** = artifact exists and verifiable · **Overdue** = past its due date, not started · **Due soon** = due within 3 days, not started · **Not started** · **Blocked** = waiting on another task.
 
-## Done (6/34)
+## Done (14/34)
 
-| ID | Task | Evidence |
-|---|---|---|
-| T01 | Sprint 6 kickoff meeting | Confirmed by user, 27 Jul |
-| T02 | Confirm spring-session meeting with Prof. Jun Yan | Confirmed by user, 28 Jul |
-| T03 | Draft RTM skeleton | `docs/rtm_a4.md` |
-| T04 | Fill RTM status per requirement | `docs/rtm_a4.md`/`.docx` — 33 FR + 8 NFR, 3 stale statuses corrected |
-| T05 | Review/update ERD + sequence diagrams | `docs/architecture/seq_api_query_sprint5.md`/`.svg`, `erd_reconciliation_sprint5.md`/`.svg` — found and documented real drift |
-| T06 | Update System Design Document | Section 15 added to `system_design_document_v2_source.md` and `EduRAG_System_Design_Document_v2.docx` |
+| ID | Owner | Task | Evidence |
+|---|---|---|---|
+| T01 | Thanh | Sprint 6 kickoff meeting | Confirmed 27 Jul |
+| T02 | Thanh | Confirm spring-session meeting with Prof. Jun Yan | Confirmed 28 Jul |
+| T03 | Andre | Draft RTM skeleton | `docs/rtm_a4.md` (folded into T04) |
+| T04 | Andre + Thanh | Fill RTM status per requirement | `docs/rtm_a4.md`/`.docx`, PR #50 |
+| T05 | Namaratne | Review/update ERD + sequence diagrams | `docs/architecture/*_sprint5.md/.svg`, PR #50 |
+| T06 | Namaratne | Update System Design Document | Section 15 added, PR #50 |
+| T07 | Ngoc | Model fine-tuning investigation | PR #49 — evidence-cited/few-shot prompt strategies |
+| T08 | Ngoc | Benchmark before/after fine-tuning | PR #49 — `docs/finetuning_benchmark_sprint6.md/.json` |
+| T15 | Tai | Create this file | PR #50 |
+| T25 | Thanh | Base compose runs GPU-free | PR #50 — `.env.example` fix, verified via Docker |
+| T26 | Tung | Cold grader dry run #1 | PR #48 — `docs/dry_run_1_cold_grader.md`, found DR1-01/02 |
+| T27 | Thanh + Tung | Fix all T26 errors | PR #50 — same commit as T25, both DR1-01/02 fixed and re-verified |
+| T09 | Thanh | Vector DB chunking/embedding optimisation | `docs/t09_vector_db_optimisation.md` — batch encoding in seed ingest + live upload path, verified via real upload/query/cleanup |
+| T29 | Thanh | One-command health-check script | `scripts/check_demo_ready.py` — tested both PASS and FAIL paths live |
 
-## Overdue — was due before 1 Aug, not started (5)
+## Overdue — not started (2)
 
 | ID | Owner | Task | Was due | Risk |
 |---|---|---|---|---|
-| T15 | Tai | This file | 27 Jul | Low now — created today |
-| T25 | Thanh | Base compose runs GPU-free | 30 Jul | **High** — untested, and this is the #1 grading risk |
-| T26 | Tung | Cold grader dry run #1 | 30 Jul | **High** — blocks T27 |
-| T18a | Namaratne + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **High** — blocks T18b/c/d, and marketing package is not public-ready without it |
-| T18b | Tai | Compute comparison numbers | 31 Jul | Blocked by T18a |
+| T18a | Namaratne + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **High** — blocks T18b/c/d; needs a human to actually run + record the session, cannot be automated |
+| T18b | Tai | Compute comparison numbers from T18a | 31 Jul | Blocked by T18a |
 
-## Due within 2 days (1–3 Aug), not started (7)
+## Due within 2 days (2–3 Aug), not started (3)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T27 | Thanh + Tung | Fix all T26 errors | 2 Aug (blocked — T26 hasn't run yet) |
-| T18c | Namaratne | Edit + publish comparison video | 2 Aug (blocked by T18a/b) |
-| T07 | Ngoc | Model fine-tuning investigation | 3 Aug |
-| T09 | Thanh | Vector DB chunking/embedding optimisation | 3 Aug |
+| T18c | Namaratne | Edit + publish comparison video | 2 Aug (blocked — T18a hasn't run yet) |
 | T11 | Anmoldeep | UI polish for tech expo | 3 Aug |
-| T29 | Thanh | One-command health-check script | 3 Aug |
 | T18d | Tai | Finalise public one-pager | 3 Aug (blocked by T18b/c) |
 
-## Due 4–6 Aug, not started (11)
+## Due 4–6 Aug, not started (10)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T08 | Ngoc | Benchmark before/after fine-tuning | 4 Aug |
-| T10 | Thanh | Benchmark speed before/after | 4 Aug |
+| T10 | Thanh | Benchmark speed before/after (T09) | 4 Aug |
 | T12 | Anmoldeep | Before/after UI screenshots | 4 Aug |
 | T30 | Tai | "For the Marker" README section | 4 Aug |
 | T13 | Tung | Regression QA on all Sprint 6 changes | 5 Aug |
 | T14 | Tung | Collect spring-session meeting evidence | 5 Aug |
-| T24 | Thanh | Confirm CI green on final commit | 5 Aug — **GitHub Actions has not run since 27 May; nothing in this conversation's work has been committed/pushed yet either** |
+| T24 | Thanh | Confirm CI green on final commit | 5 Aug — **currently green on develop @ d9665a8, but re-check right before code freeze since more will land first** |
 | T16 | Tai | Compile `docs/a4_evidence_index.md` | 6 Aug |
 | T17 | Tai | Branding consistency check | 6 Aug |
 | T28 | Tung | Verify submission zip contents | 6 Aug |
@@ -64,6 +64,7 @@ Last updated: 1 Aug 2026. Deadline still assumed ~8 Aug — **confirm with Prof.
 | T22 | Tung | Independently verify zip + README | 7 Aug |
 | T23 | All | Rehearsal | 8 Aug |
 
-## Additional flag not on the original task list
+## Notes
 
-Every file produced in this Sprint 6 work session (`docs/rtm_a4.*`, `docs/architecture/*_sprint5.*`, the updated System Design Document, the Marketing Strategy docs) is a local, **uncommitted** change — `git status` shows them all as untracked/modified, nothing pushed. These need a commit + PR before T24 (CI check) or T21 (packaging) can be meaningfully done.
+- `develop` is at `d9665a8` (PR #50 merged 1 Aug); both `CI` and `Docker Demo Readiness` are green on this commit.
+- **T18a/b/c/d is now the single biggest risk** — it's the only remaining CRITICAL workstream where no code/doc progress can substitute for a human actually running the live comparison and recording it. Everything else remaining is either routine engineering (T09-T14, T16-T17, T28-T31) or writing (T19-T20) that can be parallelised across the team.
