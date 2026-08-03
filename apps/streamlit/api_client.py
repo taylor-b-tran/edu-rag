@@ -43,7 +43,11 @@ class APIConfig:
     """Configuration for the Flask WebApplication API connection."""
     base_url: str = os.getenv("PAEDIA_API_URL", "http://localhost:5000")
     timeout: int = int(os.getenv("PAEDIA_API_TIMEOUT", "10"))
-    query_timeout: int = int(os.getenv("PAEDIA_QUERY_TIMEOUT", "180"))
+    # Must stay above the backend's own Ollama generation timeout (240s,
+    # src/document_processor/rag_pipeline.py) plus retrieval/Flask overhead,
+    # otherwise the frontend gives up before the backend's graceful fallback
+    # ever gets a chance to return (T11).
+    query_timeout: int = int(os.getenv("PAEDIA_QUERY_TIMEOUT", "260"))
     max_retries: int = int(os.getenv("PAEDIA_API_RETRIES", "2"))
     use_fixtures: bool = os.getenv("PAEDIA_USE_FIXTURES", "false").lower() == "true"
 

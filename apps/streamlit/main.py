@@ -790,8 +790,11 @@ def render_sidebar():
 
 # ─── CHAT PAGE (T09+T10+T11: full overhaul) ───────────────────────
 
-def _send_message(text: str):
-    """Append a user message + AI response with full metadata."""
+def _submit_query(text: str):
+    """Append the user's message and defer the (possibly slow) generation
+    call to the next rerun, so the question renders as a chat bubble right
+    away instead of staying hidden behind a frozen loading line for however
+    long Ollama takes (up to ~200s on CPU-only hardware, see T25)."""
     now = datetime.now()
     st.session_state.messages.append({
         "role": "user",
@@ -799,6 +802,23 @@ def _send_message(text: str):
         "timestamp": now.strftime("%I:%M %p"),
         "timestamp_full": now.isoformat(),
     })
+    session = get_active_session()
+    if session:
+        session["message_count"] = len(st.session_state.messages)
+    st.session_state.pending_send = True
+    st.session_state.query_state = text
+
+
+def _send_message(text: str, append_user: bool = True):
+    """Append a user message (optional) + AI response with full metadata."""
+    if append_user:
+        now = datetime.now()
+        st.session_state.messages.append({
+            "role": "user",
+            "content": text,
+            "timestamp": now.strftime("%I:%M %p"),
+            "timestamp_full": now.isoformat(),
+        })
 
     # Update session title from first query
     session = get_active_session()
@@ -907,7 +927,7 @@ def render_chat_page():
             for i, prompt in enumerate(prompts):
                 with cols[i]:
                     if st.button(prompt, key=f"suggest_{i}", use_container_width=True):
-                        _send_message(prompt)
+                        _submit_query(prompt)
                         st.rerun()
         else:
             for msg in st.session_state.messages:
@@ -1008,7 +1028,7 @@ def render_chat_page():
             for i, prompt in enumerate(prompts):
                 with cols[i]:
                     if st.button(f"💡 {prompt}", key=f"followup_{i}", use_container_width=True):
-                        _send_message(prompt)
+                        _submit_query(prompt)
                         st.rerun()
 
     # ── Input bar ──
@@ -1017,21 +1037,25 @@ def render_chat_page():
     user_input = st.chat_input("Ask a question about your course materials...")
 
     if user_input and user_input.strip():
-        # Show query state animation (T11)
-        state_placeholder = st.empty()
-        stages = [
-            "🔍 Embedding your question...",
-            "📚 Searching course documents...",
-            "🧠 Generating response...",
-        ]
-        for stage in stages:
-            state_placeholder.markdown(
-                f'<div class="query-state"><div class="dot"></div> {stage}</div>',
-                unsafe_allow_html=True,
-            )
-            time.sleep(0.3)
+        _submit_query(user_input.strip())
+        st.rerun()
 
-        _send_message(user_input.strip())
+    # Generation happens here, one rerun after the user's message was
+    # appended above, so the question is already visible as a chat bubble
+    # instead of hiding behind the welcome screen for the whole wait (T11).
+    if st.session_state.pending_send:
+        st.session_state.pending_send = False
+        pending_query = st.session_state.query_state
+        st.session_state.query_state = None
+
+        state_placeholder = st.empty()
+        state_placeholder.markdown(
+            '<div class="query-state"><div class="dot"></div> '
+            '🧠 Generating response... (can take up to a couple of minutes '
+            'on CPU-only hardware)</div>',
+            unsafe_allow_html=True,
+        )
+        _send_message(pending_query, append_user=False)
         state_placeholder.empty()
         st.rerun()
 
@@ -1105,27 +1129,7 @@ def render_history_page():
 
 def render_uploads_page():
     st.markdown("### 📁 My Uploads")
-
-    uploaded_files = st.file_uploader(
-        "Upload course materials",
-        type=["pdf", "pptx", "docx", "txt", "md"],
-        accept_multiple_files=True,
-        help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here",
-    )
-
-    if "processed_uploads" not in st.session_state:
-        st.session_state.processed_uploads = set()
-
-    if uploaded_files:
-        for f in uploaded_files:
-            file_key = f"{f.name}_{len(f.getvalue())}"
-            if file_key not in st.session_state.processed_uploads:
-                _run_real_upload_and_indexing(f, st.session_state.course_id)
-                st.session_state.processed_uploads.add(file_key)
-                st.rerun()
-
-    st.divider()
-    st.markdown("**Uploaded Documents**")
+    st.caption("Read-only — ask your lecturer to add course materials.")
     _render_document_table(student_view=True)
 
 
@@ -1368,8 +1372,10 @@ def render_admin_page():
         cols[3].markdown(f"<span style='color: #475569;'>{u['queries']}</span>", unsafe_allow_html=True)
         cols[4].markdown(f"<span class='status-badge badge-indexed'>{u['status']}</span>", unsafe_allow_html=True)
         c_edit, c_del = cols[5].columns(2)
-        c_edit.button("Edit", key=f"edit_{u['email']}")
-        c_del.button("Del", key=f"delusr_{u['email']}")
+        c_edit.button("Edit", key=f"edit_{u['email']}", disabled=True,
+                      help="Disabled in Sprint 5 — user editing not yet wired to API")
+        c_del.button("Del", key=f"delusr_{u['email']}", disabled=True,
+                     help="Disabled in Sprint 5 — user deletion not yet wired to API")
 
     st.divider()
     st.markdown("#### System Settings")

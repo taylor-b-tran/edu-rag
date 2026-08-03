@@ -8,6 +8,14 @@ secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1E293B"
 font = "sans serif"
 
+# Matches the custom navy sidebar CSS in main.py (section[data-testid="stSidebar"]).
+# Without this, Streamlit defaults these to "" and logs console warnings on every
+# load ("Invalid color passed for widgetBackgroundColor in theme.sidebar").
+[theme.sidebar]
+backgroundColor = "#0F1B33"
+widgetBackgroundColor = "#1B2A4A"
+widgetBorderColor = "#1B2A4A"
+
 [server]
 headless = true
 enableCORS = false
