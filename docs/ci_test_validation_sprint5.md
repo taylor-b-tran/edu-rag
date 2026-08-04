@@ -246,7 +246,7 @@ Run with: `python -m pytest -v --tb=short` from repo root.
 ---- test session starts ----
 platform win32 -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0 -- C:\Python314\python.exe
 cachedir: .pytest_cache
-rootdir: /home/claude/edu-rag-fixed
+rootdir: C:\studyAssets\CSIT321 - Project\edu-rag
 configfile: pytest.ini
 testpaths: test
 plugins: anyio-4.13.0, cov-7.1.0, langsmith-0.8.5
