@@ -1,18 +1,21 @@
 # Auto-select the Ollama model based on detected GPU VRAM, then bring up
 # the full Paedia / EduRAG Docker stack on Windows / PowerShell.
 #
-# Decision rule
-#   VRAM >= VramThresholdGb (default 12)  -> HighVramModel  (qwen3:14b)
-#   VRAM <  VramThresholdGb OR no GPU     -> LowVramModel   (llama3.2)
+# Three-tier decision rule
+#   No GPU                              -> LowVramModel  (llama3.2, 3B)  — CPU-only compose
+#   0 < VRAM < VramThresholdGb (12)     -> MidVramModel  (qwen2.5:7b)    — GPU overlay
+#   VRAM >= VramThresholdGb             -> HighVramModel (qwen3:14b)     — GPU overlay
 #
-# The 8-12 GB band falls into LowVramModel because qwen3:14b's ~10 GB
-# working set partially offloads to RAM on smaller GPUs and loses the
-# speedup the model is chosen for. See docs/sprint5_implementation_summary.md
-# §5 for the rationale.
+# MidVramModel targets 8 GB-class cards: qwen2.5:7b (Q4_K_M, ~4.7 GB) fits
+# fully in VRAM with headroom to spare, unlike qwen3:14b whose ~10 GB working
+# set partially offloads to RAM below 12 GB and loses the speedup it's picked
+# for. See docs/sprint5_implementation_summary.md §5 for the qwen3:14b
+# threshold rationale.
 
 [CmdletBinding()]
 param(
     [string]$HighVramModel   = "qwen3:14b",
+    [string]$MidVramModel    = "qwen2.5:7b",
     [string]$LowVramModel    = "llama3.2",
     [int]   $VramThresholdGb = 12,
     [switch]$SkipPull
@@ -68,15 +71,15 @@ $vramGb = Get-VramGb
 
 if ($vramGb -ge $VramThresholdGb) {
     $chosen        = $HighVramModel
-    $reason        = "VRAM $vramGb GB >= $VramThresholdGb GB threshold"
+    $reason        = "VRAM $vramGb GB >= $VramThresholdGb GB threshold (high tier)"
     $useGpuOverlay = $true
 } elseif ($vramGb -gt 0) {
-    $chosen        = $LowVramModel
-    $reason        = "VRAM $vramGb GB < $VramThresholdGb GB threshold (partial offload would defeat speedup)"
+    $chosen        = $MidVramModel
+    $reason        = "VRAM $vramGb GB < $VramThresholdGb GB threshold (mid tier — fits fully in VRAM, no offload)"
     $useGpuOverlay = $true
 } else {
     $chosen        = $LowVramModel
-    $reason        = "no NVIDIA GPU detected (CPU-only path)"
+    $reason        = "no NVIDIA GPU detected (low tier, CPU-only path)"
     $useGpuOverlay = $false
 }
 
