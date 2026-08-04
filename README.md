@@ -28,6 +28,7 @@ This README is the **single entry point** for new team members. Read top-to-bott
 16. [Contributing](#16-contributing)
 17. [Team](#17-team)
 18. [Project context](#18-project-context)
+19. [For the Marker](#19-for-the-marker)
 
 ---
 
@@ -889,6 +890,62 @@ If CI fails on something unrelated to your change (account suspension, disk-full
 | Sprint cadence | 4 × 2-week sprints (Sprint 3 was the architecture sprint; Sprint 4 wired the API + UI; Sprint 5 wires live RAG end-to-end; Sprint 6 is post-A3) |
 
 This is an assessed final-year project but the engineering work — system design, API specification, retrieval tuning, privacy modelling, sprint delivery, and QA evidence — reflects professional software development practice rather than tutorial exercises.
+
+---
+
+## 19. For the Marker
+
+This section is a fast path for grading. It assumes you've already done the setup in [§1–§9](#1-what-you-are-about-to-run) and the stack is running. If not, start there — this section does not repeat setup steps.
+
+### 19.1 60-second orientation
+
+- **Product:** Paedia — a course Q&A assistant. A lecturer uploads course material; a student asks a question; the answer is generated only from that material, with page-level citations.
+- **What's real vs. simulated:** document upload, chunking, embedding, retrieval, and LLM generation are all live (ChromaDB + Ollama, no mocking). Authentication and course/session records are **fixture-backed**, not a real database — see [§19.4](#194-known-limitations).
+- **Where to look first:** [`docs/rtm_a4.md`](docs/rtm_a4.md) maps every A2 requirement to its current status and evidence file. If you only read one document, read that one.
+
+### 19.2 Fastest path to a live demo
+
+```powershell
+docker compose up -d --build
+docker compose exec api python -m src.document_processor.ingest_corpus   # once, if not already seeded
+python scripts/check_demo_ready.py                                       # confirms all 5 services are healthy
+```
+
+Then in a browser:
+
+1. Open <http://localhost:8501>, sign in as `student@uow.edu.au` / `student123` (full list in [§10](#10-demo-credentials)).
+2. Ask: *"What is Retrieval-Augmented Generation?"* — expect an answer citing `Week1_RAG_Introduction.pdf`, confidence label, and model name shown in the response footer.
+3. Sign out, sign in as `lecturer@uow.edu.au` / `lecturer123`, open **Document Manager**, upload a short PDF, watch it go `queued → processing → indexed`.
+4. Ask a question that depends on that file — the citation should point at your filename.
+
+If any of this doesn't work, [§12 Troubleshooting](#12-troubleshooting) covers the common failure modes.
+
+### 19.3 What to check, mapped to requirements
+
+| Area | Where to verify | Evidence |
+|---|---|---|
+| Functional requirements (all 33, individually) | Live demo per [§19.2](#192-fastest-path-to-a-live-demo) | [`docs/rtm_a4.md`](docs/rtm_a4.md) |
+| Non-functional requirements | — | [`docs/rtm_a4.md`](docs/rtm_a4.md) (NFR-001 to NFR-008) |
+| System architecture, as actually implemented | — | [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md), [`docs/architecture/seq_api_query_sprint5.md`](docs/architecture/seq_api_query_sprint5.md) |
+| Retrieval/generation performance | — | [`docs/t10_embedding_benchmark.md`](docs/t10_embedding_benchmark.md), [`docs/finetuning_benchmark_sprint6.md`](docs/finetuning_benchmark_sprint6.md) |
+| Runs without a GPU (grading-machine safety) | `docker compose up -d` with no GPU overlay | [`docs/t25_gpu_free_verification.md`](docs/t25_gpu_free_verification.md) |
+| Fresh-machine setup actually works | — | [`docs/dry_run_1_cold_grader.md`](docs/dry_run_1_cold_grader.md) |
+| Full end-to-end sanity pass (all 3 roles, upload pipeline, what's real vs. fixture) | — | [`docs/vv_full_app_report_2026-08-03.md`](docs/vv_full_app_report_2026-08-03.md) |
+| Automated tests | `docker compose exec api pytest` | 118 tests, see [§11](#11-daily-operations) |
+
+### 19.4 Known limitations
+
+Stated here rather than left for you to discover:
+
+- **Auth, courses, and chat sessions are fixture/in-memory, not a real database.** Only document upload metadata (`uploaded_documents`, `indexing_jobs`) is actually persisted to PostgreSQL. The other 7 tables in `db/migrations/001_initial_schema.sql` were designed but never wired up. Full detail: [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md).
+- **Retrieval accuracy has not been formally benchmarked** against a labelled query set (precision/recall). What's benchmarked is generation quality and speed, not retrieval correctness — see `rtm_a4.md` FR-028.
+- **Admin dashboard is read-only** — user management actions are disabled in this build, not wired to a backend.
+
+None of these block the core demo flow (upload → index → ask → grounded answer with citations), which is fully live end to end.
+
+### 19.5 Everything else
+
+Full task-by-task Sprint 6 status (what shipped, when, by whom): [`docs/sprint6_status_table.md`](docs/sprint6_status_table.md).
 
 ---
 
