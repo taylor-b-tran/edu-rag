@@ -63,11 +63,19 @@ End-to-end demo flow:
 | **OS** | Windows 11 23H2 | Windows 11 24H2 | Tested on Windows 11 Pro 26200. Linux/macOS work but this guide is PowerShell-first |
 | **CPU** | 4 cores | 8 cores | Inference is mostly GPU, but PDF chunking + embeddings use CPU |
 | **RAM** | 16 GB | 32 GB | Ollama needs ~10 GB for `qwen3:14b` working set, leave 6 GB for other services |
-| **Disk** | 25 GB free | 40 GB free | `qwen3:14b` ~9 GB, `llama3.2` ~2 GB, Docker images ~6 GB, ChromaDB+Postgres ~1 GB, source ~500 MB, model cache ~5 GB |
-| **GPU** | None (CPU-only works, slow) | NVIDIA RTX with **≥ 12 GB VRAM** | RTX 5060 (8 GB) works but partially offloads; RTX 5080 (16 GB) is the dev host. Without GPU, a single `qwen3:14b` query takes 60–180 s |
+| **Disk** | 25 GB free | 40 GB free | `qwen3:14b` ~9 GB, `qwen2.5:7b` ~4.7 GB, `llama3.2` ~2 GB, Docker images ~6 GB, ChromaDB+Postgres ~1 GB, source ~500 MB, model cache ~5 GB |
+| **GPU** | None (CPU-only works, slow) | NVIDIA RTX with **≥ 12 GB VRAM** | Three supported tiers — see below. RTX 5080 (16 GB) is the dev host |
 | **Network** | Once for image pulls + model download | — | After first setup the stack runs fully offline |
 
-> **Why ≥ 12 GB VRAM matters for `qwen3:14b`:** The 14-billion-parameter model's KV cache + weights need ~10 GB at runtime. An 8 GB GPU partially offloads layers to CPU and loses the latency advantage. The `scripts/start_stack.ps1` wrapper auto-selects `llama3.2` (2 GB) on GPUs in the 0–12 GB band so you do not pay this hidden cost.
+**Three supported tiers**, auto-detected by `scripts/start_stack.ps1` — you do not need to pick one manually:
+
+| Tier | Hardware | Model | Measured speed |
+|---|---|---|---|
+| Low | No GPU (CPU-only) | `llama3.2` (3B) | 60–180 s/query |
+| Mid | NVIDIA GPU, < 12 GB VRAM (e.g. RTX 5060 8 GB) | `qwen2.5:7b` (7.6B) | ~1–2 s/query, ~71 tok/s |
+| High | NVIDIA GPU, ≥ 12 GB VRAM (e.g. RTX 5080) | `qwen3:14b` (14B) | ~10 s/query |
+
+> **Why the tiers split at 12 GB:** `qwen3:14b`'s ~10 GB KV cache + weights need that much VRAM to stay fully resident. Below 12 GB it partially offloads layers to CPU and loses the latency advantage it's picked for — worse than just running a smaller model that fits entirely in VRAM. `qwen2.5:7b` (~4.7 GB) is sized to fit comfortably in 8 GB-class cards with headroom for context, which is why it's the mid-tier pick rather than a scaled-down `qwen3`.
 
 ---
 
@@ -217,7 +225,7 @@ Edit `.env` if you need non-default ports — most teammates leave it as-is. Def
 | `POSTGRES_PORT` | `5432` | Change if you have local Postgres running |
 | `CHROMA_PORT` | `8000` | Change if 8000 is in use (Jupyter often grabs this) |
 | `OLLAMA_PORT` | `11434` | Rarely conflicts |
-| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | The wrapper script in §6.1 will **overwrite** this automatically based on your GPU. Only set this by hand if you are running §6.2 manual compose AND your GPU is < 12 GB VRAM — change to `llama3.2`, otherwise the 14 B model partially offloads to RAM and silently loses the speedup |
+| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | The wrapper script in §6.1 will **overwrite** this automatically based on your GPU tier. Only set this by hand if you are running §6.2 manual compose — use `qwen2.5:7b` on an 8 GB-class GPU or `llama3.2` with no GPU, otherwise `qwen3:14b` partially offloads to RAM and silently loses the speedup |
 | `POSTGRES_PASSWORD` | `edurag_dev_password` | Dev-only password. Do not commit changes |
 
 > **Never commit `.env`** — it is gitignored. If you add secrets (e.g. `OPENAI_API_KEY` for optional GPT fallback), they stay local.
@@ -243,9 +251,9 @@ This is the only path that **automatically detects your GPU** and picks the righ
 
    | Detected VRAM | Compose overlay | Selected model | Why |
    |---|---|---|---|
-   | **≥ 12 GB** | `docker-compose.gpu.yml` | `qwen3:14b` | Full 14 B model fits in VRAM; ~10 s/query |
-   | **0 < VRAM < 12 GB** | `docker-compose.gpu.yml` | `llama3.2` | Avoids partial CPU offload that would defeat the speedup of running the bigger model |
-   | **No NVIDIA GPU** | base Compose only (CPU mode) | `llama3.2` | ~60–180 s/query — slow but functional |
+   | **≥ 12 GB** (high tier) | `docker-compose.gpu.yml` | `qwen3:14b` | Full 14 B model fits in VRAM; ~10 s/query |
+   | **0 < VRAM < 12 GB** (mid tier) | `docker-compose.gpu.yml` | `qwen2.5:7b` | Fits fully in VRAM (~4.7 GB) with headroom — no CPU offload; ~1–2 s/query |
+   | **No NVIDIA GPU** (low tier) | base Compose only (CPU mode) | `llama3.2` | ~60–180 s/query — slow but functional |
 3. **Writes `DEFAULT_OLLAMA_MODEL=<chosen>` into `.env`** (creates `.env` from `.env.example` if missing; **overwrites** any existing value of that key). After this step, plain `docker compose up -d` will use the right model without re-running the wrapper.
 4. **Brings the stack up:** `docker compose <compose-args> up -d --build`.
 5. **Waits up to 60 s** for Ollama to answer `http://localhost:11434/api/tags`.
@@ -255,8 +263,9 @@ This is the only path that **automatically detects your GPU** and picks the righ
 
 ```powershell
 pwsh scripts/start_stack.ps1 `
-  -VramThresholdGb 16 `             # raise cutoff (e.g., still pick llama3.2 on 12-15 GB)
+  -VramThresholdGb 16 `             # raise cutoff (e.g., still pick qwen2.5:7b on 12-15 GB)
   -HighVramModel "mixtral:8x7b" `   # use a different big model
+  -MidVramModel "gemma2:9b" `       # use a different mid-tier model
   -LowVramModel "phi3:mini" `       # use a different small model
   -SkipPull                         # skip the ollama pull at the end
 ```
@@ -284,7 +293,7 @@ Use this if you are debugging the stack itself, or you have specific requirement
 
 **Important:** manual compose **does not detect anything**. It uses `DEFAULT_OLLAMA_MODEL` from your `.env` as-is. If you have an 8 GB GPU and you forgot to edit `.env`, you will silently get `qwen3:14b` partially-offloaded and queries will be slow. Either:
 
-- Edit `.env` to set `DEFAULT_OLLAMA_MODEL=llama3.2` before bringing the stack up, OR
+- Edit `.env` to set `DEFAULT_OLLAMA_MODEL=qwen2.5:7b` (8 GB-class GPU) or `llama3.2` (no GPU) before bringing the stack up, OR
 - Run `pwsh scripts/start_stack.ps1` once first (just for the detection), then drop back to manual.
 
 ```powershell
@@ -323,12 +332,15 @@ If anything is `Restarting` or `Exited`, jump to [§12 Troubleshooting](#12-trou
 If you used §6.1 (auto-wrapper), this is already done — skip to §8. If you used §6.2 (manual compose), pull the model yourself.
 
 ```powershell
-# Pick ONE based on your GPU:
+# Pick ONE based on your tier (see §2):
 
-# RTX 5080 / 4080 / 3090 (12+ GB VRAM) or CPU-only with patience:
+# High tier — RTX 5080 / 4080 / 3090 (>= 12 GB VRAM):
 docker compose exec ollama ollama pull qwen3:14b
 
-# RTX 5060 / 4060 / 3060 (< 12 GB VRAM):
+# Mid tier — RTX 5060 / 4060 / 3060 (< 12 GB VRAM):
+docker compose exec ollama ollama pull qwen2.5:7b
+
+# Low tier — no GPU:
 docker compose exec ollama ollama pull llama3.2
 ```
 

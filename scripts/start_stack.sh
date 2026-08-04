@@ -2,17 +2,19 @@
 # Auto-select the Ollama model based on detected GPU VRAM, then bring up the
 # full Paedia / EduRAG Docker stack.
 #
-# Decision rule
-#   VRAM >= VRAM_THRESHOLD_GB (default 12)  -> HIGH_VRAM_MODEL  (qwen3:14b)
-#   VRAM <  VRAM_THRESHOLD_GB OR no GPU     -> LOW_VRAM_MODEL   (llama3.2)
+# Three-tier decision rule
+#   No GPU                              -> LOW_VRAM_MODEL  (llama3.2, 3B)  — CPU-only compose
+#   0 < VRAM < VRAM_THRESHOLD_GB (12)   -> MID_VRAM_MODEL  (qwen2.5:7b)    — GPU overlay
+#   VRAM >= VRAM_THRESHOLD_GB           -> HIGH_VRAM_MODEL (qwen3:14b)     — GPU overlay
 #
-# The 8-12 GB band falls into LOW_VRAM_MODEL because qwen3:14b's ~10 GB
-# working set partially offloads to RAM on smaller GPUs and loses the
-# speedup the model is chosen for. See docs/sprint5_implementation_summary.md
-# §5 for the rationale.
+# MID_VRAM_MODEL targets 8 GB-class cards: qwen2.5:7b (Q4_K_M, ~4.7 GB) fits
+# fully in VRAM with headroom to spare, unlike qwen3:14b whose ~10 GB working
+# set partially offloads to RAM below 12 GB and loses the speedup it's picked
+# for. See docs/sprint5_implementation_summary.md §5 for the qwen3:14b
+# threshold rationale.
 #
-# Overrides via env: HIGH_VRAM_MODEL, LOW_VRAM_MODEL, VRAM_THRESHOLD_GB,
-# SKIP_PULL=1 (don't pull after compose up).
+# Overrides via env: HIGH_VRAM_MODEL, MID_VRAM_MODEL, LOW_VRAM_MODEL,
+# VRAM_THRESHOLD_GB, SKIP_PULL=1 (don't pull after compose up).
 
 set -euo pipefail
 
@@ -22,6 +24,7 @@ ENV_FILE="$REPO_ROOT/.env"
 ENV_EXAMPLE="$REPO_ROOT/.env.example"
 
 HIGH_VRAM_MODEL="${HIGH_VRAM_MODEL:-qwen3:14b}"
+MID_VRAM_MODEL="${MID_VRAM_MODEL:-qwen2.5:7b}"
 LOW_VRAM_MODEL="${LOW_VRAM_MODEL:-llama3.2}"
 VRAM_THRESHOLD_GB="${VRAM_THRESHOLD_GB:-12}"
 SKIP_PULL="${SKIP_PULL:-0}"
@@ -62,15 +65,15 @@ vram_gb=$(detect_vram_gb)
 
 if (( vram_gb >= VRAM_THRESHOLD_GB )); then
   chosen="$HIGH_VRAM_MODEL"
-  reason="VRAM ${vram_gb} GB >= ${VRAM_THRESHOLD_GB} GB threshold"
+  reason="VRAM ${vram_gb} GB >= ${VRAM_THRESHOLD_GB} GB threshold (high tier)"
   use_gpu_overlay=1
 elif (( vram_gb > 0 )); then
-  chosen="$LOW_VRAM_MODEL"
-  reason="VRAM ${vram_gb} GB < ${VRAM_THRESHOLD_GB} GB threshold (partial offload would defeat speedup)"
+  chosen="$MID_VRAM_MODEL"
+  reason="VRAM ${vram_gb} GB < ${VRAM_THRESHOLD_GB} GB threshold (mid tier — fits fully in VRAM, no offload)"
   use_gpu_overlay=1
 else
   chosen="$LOW_VRAM_MODEL"
-  reason="no NVIDIA GPU detected (CPU-only path)"
+  reason="no NVIDIA GPU detected (low tier, CPU-only path)"
   use_gpu_overlay=0
 fi
 
