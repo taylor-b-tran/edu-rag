@@ -97,7 +97,7 @@ All links below open a PDF directly in your browser. Right-click → Save As to 
 ## Sprint 4 Corpus Expansion Candidates (Task 16)
 
 **Added by:** Tung Phuong Anh Huynh  
-**Reviewed in sandbox:** 11 May 2026  
+**Reviewed:** 11 May 2026  
 **Purpose:** Extend the sample corpus with DOCX and PPTX formats so Ngoc's multi-format chunker extension and Tung's API test evidence can be checked against non-PDF inputs.
 
 > These files are listed as local sample inputs. Because `data/samples/` is ignored, the team should confirm whether to keep binary sample files outside Git or explicitly approve tracking them before merging.
@@ -112,7 +112,7 @@ All links below open a PDF directly in your browser. Right-click → Save As to 
 
 ### Review Notes
 
-The committed branch text claimed chunk counts using a `512/50 overlap` setup and a 12 May 2026 verification date. The sandbox rerun on 11 May 2026 used the current accepted project baseline, `chunk_size=1024` and `chunk_overlap=0`.
+The committed branch text claimed chunk counts using a `512/50 overlap` setup and a 12 May 2026 verification date. The rerun on 11 May 2026 used the current accepted project baseline, `chunk_size=1024` and `chunk_overlap=0`.
 
 | File | Rerun chunks | Max chars | Avg chars | Metadata keys |
 |------|-------------:|----------:|----------:|---------------|

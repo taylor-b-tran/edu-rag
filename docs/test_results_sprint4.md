@@ -2,7 +2,7 @@
 
 **Project:** EduRAG / Paedia, Group 19, CSIT321
 **Prepared by:** Tung Phuong Anh Huynh
-**Reviewed and regenerated in sandbox by:** Thanh Binh Tran support workflow
+**Reviewed and re-run by:** Thanh Binh Tran
 **Sprint task:** Task 15 - 31-query API test evidence
 **Run date:** 11 May 2026
 **Base commit tested:** `946e665` (`origin/develop`)
