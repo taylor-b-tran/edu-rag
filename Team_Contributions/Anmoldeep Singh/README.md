@@ -7,3 +7,8 @@ This package is an ownership index. Canonical Sprint 3 deliverables live in root
 - Task 9 -> `docs/ui/ui_state.md`
 - Task 10 -> `docs/ui/design_system.md`
 - Task 25-28 support -> `docs/ui/acceptance_criteria.md`
+
+## Sprint 4-6 Deliverables
+
+- T11/T12 UI polish for tech expo, before/after screenshots -> `docs/t11_t12_ui_polish.md`
+- Explored a CSS refresh for the same UI polish task; evaluated but not merged after a reproducibility issue surfaced in testing

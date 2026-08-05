@@ -1,7 +1,7 @@
 # Sprint 6 Status Table
 
 Owner: Tai Huynh (T15)
-Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA pass also completed). Deadline still assumed ~8 Aug — **confirm with Prof. Jun Yan / Moodle.**
+Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA pass also completed; slide deck and demo script finalised for the workshop). **Presentation confirmed: Week 15 workshop, 5 Aug, 1:30 PM, 6-minute presentation + 2-minute Q&A, whole team must attend.** Written-submission deadline (zip/README) not yet separately confirmed — check whether it's the same date or later via Moodle / Prof. Jun Yan.
 
 > Status key: **Done** = artifact exists and verifiable · **Draft** = real artifact exists but needs owner review before final · **Overdue** = past its due date, not started · **Not started** · **Blocked** = waiting on another task.
 
@@ -13,8 +13,8 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 | T02 | Thanh | Confirm spring-session meeting with Prof. Jun Yan | Confirmed 28 Jul |
 | T03 | Andre | Draft RTM skeleton | `docs/rtm_a4.md` (folded into T04) |
 | T04 | Andre + Thanh | Fill RTM status per requirement | `docs/rtm_a4.md`/`.docx`, PR #50 |
-| T05 | Namaratne | Review/update ERD + sequence diagrams | `docs/architecture/*_sprint5.md/.svg`, PR #50 |
-| T06 | Namaratne | Update System Design Document | Section 15 added, PR #50 |
+| T05 | Andre | Review/update ERD + sequence diagrams | `docs/architecture/*_sprint5.md/.svg`, PR #50 |
+| T06 | Andre | Update System Design Document | Section 15 added, PR #50 |
 | T07 | Ngoc | Model fine-tuning investigation | PR #49 — evidence-cited/few-shot prompt strategies |
 | T08 | Ngoc | Benchmark before/after fine-tuning | PR #49 — `docs/finetuning_benchmark_sprint6.md/.json` |
 | T15 | Tai | Create this file | PR #50 |
@@ -31,17 +31,17 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 | T31 | Thanh | Cold grader dry run #2 (final) | `docs/dry_run_2_cold_grader.md` — fresh clone, isolated Compose project, CPU-only path confirmed working from zero |
 | T16 | Thanh (picked up from Tai) | Compile `docs/a4_evidence_index.md` | `docs/a4_evidence_index.md` |
 | T17 | Thanh (picked up from Tai) | Branding consistency check | Checked product/team/group naming across README, RTM, status docs — consistent, no fixes needed |
-| T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-6f25f75.zip` — built via `git archive` (207 files, 14.7MB, no `.env`/`.git`/dev clutter), extraction verified |
+| T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-51c103a.zip` — built via `git archive`, trimmed of internal-only docs via `.gitattributes` (136 files, 6.25MB), extraction and link integrity verified |
 | T19 | **Draft** — Thanh (picked up from Andre) | Write A4 report draft | `docs/a4_report_draft.md` — needs Andre's review before final |
-| T20 | **Draft** — Thanh (picked up from Andre) | Prepare A4 slides | `docs/a4_slides_outline.md` — outline/content draft, needs Andre to build the actual deck |
+| T20 | Thanh (picked up from Andre) | Prepare A4 slides | Real 12-slide deck built, timed to the actual 6-minute workshop slot (kept locally, not pushed to the repo); Andre still welcome to tweak content before presenting |
 
 ## In progress — recording done, post-production pending (3)
 
 | ID | Owner | Task | Was due | Risk |
 |---|---|---|---|---|
-| T18a | Namaratne + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **Recording confirmed done (4 Aug)** — footage exists, not yet processed |
+| T18a | Andre + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **Recording confirmed done (4 Aug)** — footage exists, not yet processed |
 | T18b | Tai | Compute comparison numbers from T18a | 31 Jul | Can start now that T18a footage exists |
-| T18c | Namaratne | Edit + publish comparison video | 2 Aug | Can start now that T18a footage exists |
+| T18c | Andre | Edit + publish comparison video | 2 Aug | Can start now that T18a footage exists |
 
 ## Due within 2 days (2–3 Aug), not started (1)
 
@@ -68,6 +68,8 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 
 - `develop` is at `6f25f75` (PR #54 merged 4 Aug — GPU 3-tier auto-select, beyond the original 34-task list); `CI` green, 118/118 tests passing.
 - A full system QA pass (CI/CD, backend endpoints across all 3 roles, frontend, no console errors) was run 5 Aug alongside the remaining tasks — see `docs/vv_full_app_report_2026-08-03.md` and `docs/dry_run_2_cold_grader.md` for the write-ups.
-- T11, T12, T16, T17, T19, T20, T30, and T31 were all unstarted past their due dates with no sign the original owners had picked them up, so Thanh did them directly to avoid slipping this close to the deadline. T19/T20 are marked **Draft** since a report/slides written by someone other than the assigned owner still needs that owner's review before it's final.
-- **T18a (the live comparison recording) is done as of 4 Aug.** What's left on that workstream (T18b numbers, T18c edit/publish, T18d one-pager) is post-production, not a live-capture risk — can run in parallel now.
-- Everything remaining is Tung's QA/verification tasks (T13, T14, T22, T28) plus the team rehearsal (T23).
+- T11, T12, T16, T17, T19, T20, T30, and T31 were all unstarted past their due dates with no sign the original owners had picked them up, so Thanh did them directly to avoid slipping this close to the deadline. T19 (report) is still marked **Draft** — needs Andre's review before final. T20 (slides) now has an actual deck built, not just an outline; Andre is still welcome to review the content.
+- **T18a (the live comparison recording) is done as of 4 Aug.** What's left on that workstream (T18b numbers, T18c edit/publish, T18d one-pager) is post-production, not a live-capture risk — can run in parallel now. Note: this is a separate marketing/comparison video, not the workshop presentation itself.
+- Everything remaining is Tung's QA/verification tasks (T13, T14, T22, T28) plus the team rehearsal (T23) — and now, presenting today at 1:30 PM.
+- System approved by Professor Jun Yan in an official meeting this morning (9:30 AM, 5 Aug). The presentation itself isn't reviewed by the supervisor — that's the subject coordinator's call, not Prof. Jun Yan's.
+- `Team_Contributions/` updated to cover Sprint 4-6 for all members (previously only had Sprint 3 entries), attributed per original sprint-plan ownership rather than who ended up executing late tasks. The `Namaratne` folder was renamed to `Andre` — same person, current preferred name.
