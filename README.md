@@ -424,7 +424,7 @@ If you do not see the upload appear, see [§12.5](#125-upload-flow-broken).
 
 ## 10. Demo credentials
 
-These users live in `fixtures/sample_responses.json`. Auth is in-memory for Sprint 5 — Postgres-backed users land in Sprint 6.
+These users live in `fixtures/sample_responses.json`. Auth is in-memory — see [§19.4](#194-known-limitations) for why, and what is actually Postgres-backed.
 
 | Email | Password | Role | Enrolled courses |
 |---|---|---|---|
@@ -714,9 +714,9 @@ Student / Lecturer / Admin
         │
         ▼
    ┌─────────────────┐
-   │   PostgreSQL    │   db/migrations/
-   │   (port 5432)   │   uploaded_documents, indexing_jobs (Sprint 5 rev 2)
-   │   users, sessions, audit log (Sprint 6)
+   │   PostgreSQL    │   uploaded_documents, indexing_jobs — the only
+   │   (port 5432)   │   tables actually wired up (see §19.4). Users,
+   │                 │   courses, and sessions are still fixture/in-memory.
    └─────────────────┘
 ```
 
@@ -941,7 +941,7 @@ If any of this doesn't work, [§12 Troubleshooting](#12-troubleshooting) covers 
 | System architecture, as actually implemented | — | [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md), [`docs/architecture/seq_api_query_sprint5.md`](docs/architecture/seq_api_query_sprint5.md) |
 | Retrieval/generation performance | — | [`docs/t10_embedding_benchmark.md`](docs/t10_embedding_benchmark.md), [`docs/finetuning_benchmark_sprint6.md`](docs/finetuning_benchmark_sprint6.md) |
 | Runs without a GPU (grading-machine safety) | `docker compose up -d` with no GPU overlay | [`docs/t25_gpu_free_verification.md`](docs/t25_gpu_free_verification.md) |
-| Fresh-machine setup actually works | — | [`docs/dry_run_1_cold_grader.md`](docs/dry_run_1_cold_grader.md) |
+| Fresh-machine setup actually works | — | [`docs/dry_run_2_cold_grader.md`](docs/dry_run_2_cold_grader.md) |
 | Full end-to-end sanity pass (all 3 roles, upload pipeline, what's real vs. fixture) | — | [`docs/vv_full_app_report_2026-08-03.md`](docs/vv_full_app_report_2026-08-03.md) |
 | Automated tests | `docker compose exec api pytest` | 118 tests, see [§11](#11-daily-operations) |
 
@@ -955,20 +955,13 @@ Stated here rather than left for you to discover:
 
 None of these block the core demo flow (upload → index → ask → grounded answer with citations), which is fully live end to end.
 
-### 19.5 Everything else
-
-Full task-by-task Sprint 6 status (what shipped, when, by whom): [`docs/sprint6_status_table.md`](docs/sprint6_status_table.md).
-
 ---
 
 ## Further reading
 
 When this README is not enough:
 
-- **Operational deep-dive**: [`docs/sprint5_runtime_notes.md`](docs/sprint5_runtime_notes.md) — env vars, common issues, direct-run fallback.
-- **Current QA state**: [`docs/sprint5_handover.md`](docs/sprint5_handover.md) — every finding, every resolution, every video QA pass.
-- **What is implemented vs fixture vs planned**: [`docs/sprint5_implementation_summary.md`](docs/sprint5_implementation_summary.md).
-- **A3 demo script** (with narration): [`docs/a3_demo_script.md`](docs/a3_demo_script.md).
+- **Full evidence index**: [`docs/a4_evidence_index.md`](docs/a4_evidence_index.md) — every artifact backing the A4 submission, grouped by topic.
 - **Docker bundle reference**: [`README_docker.md`](README_docker.md) — service contract for the Compose stack.
 - **API contract**: [`docs/api/api_spec.yaml`](docs/api/api_spec.yaml) — OpenAPI 3.0.
 
