@@ -32,7 +32,7 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 | T16 | Thanh (picked up from Tai) | Compile `docs/a4_evidence_index.md` | `docs/a4_evidence_index.md` |
 | T17 | Thanh (picked up from Tai) | Branding consistency check | Checked product/team/group naming across README, RTM, status docs — consistent, no fixes needed |
 | T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-51c103a.zip` — built via `git archive`, trimmed of internal-only docs via `.gitattributes` (136 files, 6.25MB), extraction and link integrity verified |
-| T19 | **Draft** — Thanh (picked up from Andre) | Write A4 report draft | `docs/a4_report_draft.md` — needs Andre's review before final |
+| T19 | Thanh (picked up from Andre) | Write A4 report | `docs/a4_report.docx` — final, checked against the A4 marking rubric (added a Methodology section, design rationale, and a dedicated Interface Design section); Andre still welcome to review |
 | T20 | Thanh (picked up from Andre) | Prepare A4 slides | Real 12-slide deck built, timed to the actual 6-minute workshop slot (kept locally, not pushed to the repo); Andre still welcome to tweak content before presenting |
 
 ## In progress — recording done, post-production pending (3)

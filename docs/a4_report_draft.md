@@ -1,7 +1,7 @@
-# Assessment 4 — Prototype Presentation (Draft)
+# Assessment 4 — Prototype Presentation (working notes)
 
 **Project:** EduRAG / Paedia — Group 19, Aletheia's Zetetes, CSIT321 Project 37
-**Status:** draft for Andre/team to review before submission.
+**Status:** superseded by the final report — `docs/a4_report.docx`. Kept here as plain-text working notes; the docx is the version to submit.
 
 ---
 
