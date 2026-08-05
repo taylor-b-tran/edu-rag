@@ -7,7 +7,7 @@ One-stop map of every artifact backing the A4 (Prototype Presentation) submissio
 | Evidence | What it shows |
 |---|---|
 | [`docs/rtm_a4.md`](rtm_a4.md) / [`.docx`](rtm_a4.docx) | Requirements Traceability Matrix — all 33 functional requirements + 8 new NFRs, mapped to current status (Implemented / Partial / Not Started) with evidence pointers |
-| [`docs/sprint6_status_table.md`](sprint6_status_table.md) | Task-by-task Sprint 6 progress (19/34 done), owners, evidence per task |
+| [`docs/sprint6_status_table.md`](sprint6_status_table.md) | Task-by-task Sprint 6 progress (25/34 done), owners, evidence per task |
 | [`README.md`](../README.md) §19 "For the Marker" | Fast orientation path for grading — what's real, what's fixture, how to verify in under 5 minutes |
 
 ## 2. Architecture & system design
@@ -32,6 +32,7 @@ One-stop map of every artifact backing the A4 (Prototype Presentation) submissio
 | Evidence | What it shows |
 |---|---|
 | [`docs/dry_run_1_cold_grader.md`](dry_run_1_cold_grader.md) | First fresh-machine dry run, 2 bugs found and fixed |
+| [`docs/dry_run_2_cold_grader.md`](dry_run_2_cold_grader.md) | Final fresh-machine dry run — isolated Compose project, CPU-only path confirmed working from zero |
 | [`docs/vv_full_app_report_2026-08-03.md`](vv_full_app_report_2026-08-03.md) | Full V&V pass — all 3 roles, upload pipeline end-to-end, what's real vs. fixture-backed |
 | [`docs/t09_vector_db_optimisation.md`](t09_vector_db_optimisation.md) | Batch-encoding fix verification (real upload/query/cleanup) |
 | [`docs/t11_t12_ui_polish.md`](t11_t12_ui_polish.md) | UI fixes found via live testing (frozen-looking generation, timeout mismatch) + before/after screenshots |
@@ -49,7 +50,8 @@ One-stop map of every artifact backing the A4 (Prototype Presentation) submissio
 
 | Evidence | What it shows |
 |---|---|
-| [`docs/a4_demo_video_script.md`](a4_demo_video_script.md) | Full script + timeline for the A4 walkthrough video (all 3 roles) |
+| `docs/a4_slides.pptx` (kept locally, not pushed) | Workshop presentation deck, timed to the real 6-minute slot |
+| [`docs/a4_demo_video_script.md`](a4_demo_video_script.md) | Live demo segment script (all 3 roles), timed to slot inside the presentation |
 | `scripts/check_demo_ready.py` | One-command health check before any live demo |
 
 ## 7. Code

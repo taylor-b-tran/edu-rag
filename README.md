@@ -885,7 +885,7 @@ If CI fails on something unrelated to your change (account suspension, disk-full
 | Thanh Binh Tran | Team Lead — RAG pipeline, prompt strategy, retrieval benchmark, system integration |
 | Tai Huynh | Module 4 — API specification, privacy policy, ethics review, Sprint 4 kickoff, runtime notes, A3 demo script |
 | Tung Phuong Anh Huynh | Testing — test query corpus, corpus manifest, evaluation methodology, QA checklist |
-| Kahavidanage Namaratne | Data — ERD, DFD, risk register, storage sizing, PostgreSQL schema |
+| Andre (Kahavidanage Namaratne) | Data & requirements — ERD, DFD, risk register, storage sizing, PostgreSQL schema, requirements traceability matrix |
 | Thi Hong Ngoc Nguyen | Document processing — retrieval edge cases, RAG configuration contribution, RAG limitations doc |
 | Anmoldeep Singh | UI — Streamlit wireframes, design system, UI state model, contrast fixes |
 
