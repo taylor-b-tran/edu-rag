@@ -1,7 +1,7 @@
 # Full-App V&V Report — 3 Aug 2026
 
-Scope: full application (not just this session's Sprint 6 changes), as requested —
-backend data pipeline, RBAC/role UI, and regression safety.
+Scope: full application, not just the recent Sprint 6 changes — backend data
+pipeline, RBAC/role UI, and regression safety.
 
 ## 1. Backend upload -> storage -> processing pipeline: VERIFIED END-TO-END
 

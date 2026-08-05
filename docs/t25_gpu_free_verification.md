@@ -56,7 +56,7 @@ While this fix was in progress, `origin/develop` advanced via PR #48 (Tung — T
 Clean, isolated CPU-only latency is consistently in the 208–219s range — within the new 240s timeout but above the README's advertised 60–180s range and close to the ceiling. This machine ran base compose on CPU only (GPU was available but not passed through, matching a true no-GPU grader). If the actual grading machine is slower, or the demo asks a longer/more complex question, a timeout is still plausible. Recommendation for the team:
 
 - For the **A4 demo recording**, use a GPU host (or the `docker-compose.gpu.yml` overlay) rather than relying on this CPU path — the CPU path is now *correct*, not necessarily *fast*.
-- **Do not run other Ollama-heavy processes (e.g. the full pytest suite) at the same time as a live demo query** — this session's own false 273s reading is a real example of how contention alone can push a borderline-timeout config over the edge.
+- **Do not run other Ollama-heavy processes (e.g. the full pytest suite) at the same time as a live demo query** — the false 273s reading above is a real example of how contention alone can push a borderline-timeout config over the edge.
 - If T09 (vector DB/embedding optimisation) is explored further, or `num_predict` is tuned down again, re-measure this number — do not assume the fix here means CPU latency is solved, only that it no longer silently fails.
 
 ## Sign-off
