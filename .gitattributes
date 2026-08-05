@@ -9,10 +9,18 @@ docs/a4_slides_outline.md export-ignore
 docs/sprint6_status_table.md export-ignore
 docs/sprint5_status_table.md export-ignore
 docs/dry_run_1_cold_grader.md export-ignore
-docs/meetings/ export-ignore
+docs/meetings/Sprint4_EduRAG_Group19.docx export-ignore
+docs/meetings/sprint3_internal_demo.docx export-ignore
+docs/meetings/sprint3_internal_demo.md export-ignore
+docs/meetings/sprint3_sponsor_review.docx export-ignore
+docs/meetings/sprint4_sponsor_review.docx export-ignore
+docs/meetings/sprint_4_kickoff.md export-ignore
 SPRINT_BRANCH_WORKFLOW.md export-ignore
-Team_Contributions/ export-ignore
 data/sample_manifest.md export-ignore
+
+# Required by the A4 marking rubric ("Attached Documents... Contribution
+# table") — must ship in the zip, not excluded like the rest of internal docs.
+docs/sprint7_plan.md export-ignore
 
 # Sprint 3/4/5 internal working docs, out of scope for A4
 docs/sprint4_summary.md export-ignore

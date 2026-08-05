@@ -6,6 +6,7 @@ One-stop map of every artifact backing the A4 (Prototype Presentation) submissio
 
 | Evidence | What it shows |
 |---|---|
+| [`docs/a4_report.docx`](a4_report.docx) | The A4 report — introduction, development methodology, progress vs. A2, system design rationale, interface design, architecture, verification, known limitations, and conclusion |
 | [`docs/rtm_a4.md`](rtm_a4.md) / [`.docx`](rtm_a4.docx) | Requirements Traceability Matrix — all 33 functional requirements + 8 new NFRs, mapped to current status (Implemented / Partial / Not Started) with evidence pointers |
 | [`docs/sprint6_status_table.md`](sprint6_status_table.md) | Task-by-task Sprint 6 progress (25/34 done), owners, evidence per task |
 | [`README.md`](../README.md) §19 "For the Marker" | Fast orientation path for grading — what's real, what's fixture, how to verify in under 5 minutes |
