@@ -22,7 +22,7 @@ feature/tung-sprint6
  
 Cross-checked against the Sprint 6 evidence docs present in this regression verification:
  
-| Aprint 6 Change | Owner | Evidence doc | Status |
+| Sprint 6 Change | Owner | Evidence doc | Status |
 |---|---|---|---|
 | Vector DB chunking/embedding optimisation (T09) | Thanh | `docs/t09_vector_db_optimisation.md` | Verified |
 | Embedding benchmark (T10) | Thanh | `docs/t10_embedding_benchmark.md` | Verified |
@@ -52,7 +52,7 @@ The objectives of this verification are:
 
 ---
 
-## 3. Run Environment
+## 2. Run Environment
 
 The regression verification was executed locally on the EduRAG project using the Sprint 6 branch.
 The following environment details were recorded during execution.
@@ -78,18 +78,12 @@ The following environment details were recorded during execution.
 | Tests Executed | 118 |
 | Failed Tests | 0 |
 | Runtime | 71.71 seconds |
-| Overall Result | PASS ||
+| Overall Result | PASS |
 
-```
-Pytest successsfully detected the project environment:
-- platform win32
-- python 3.14.3
-- pytest-9.0.3
-- collected 118 items
-```
+Pytest successully detected the project environment. The environment successfully loaded the project test configuration. No test collection errors occurred.
 
 ---
-## 4. Regression Preconditions
+## 3. Regression Preconditions
 
 Before executing the regression suite, the following checks were completed.
 
@@ -104,21 +98,23 @@ Before executing the regression suite, the following checks were completed.
 
 ---
 
-## 5. Regression Test Execution & Result
+## 4. Regression Test Execution & Result
 
-Regression Testing was executed using:
+Regression testing was executed using:
 
 ```
 python -m pytest -v --tb=short
 ```
 
-Pytest successfully collected all available automated tests.
+Pytest successfully collected all available automated regression tests.
+
+Collected tests:
 
 ```
-118 passed, 2 warnings in 71.71s
+collected 118 items
 ```
 
-The following regression were executed.
+The following test suites were executed.
 
 | Test file | Tests | Purpose | Result |
 |-----------|-------|---------|--------|
@@ -128,11 +124,19 @@ The following regression were executed.
 | `test/test_sprint5_integration_gate.py` | 4 | Sprint 5 regression gate | PASSED |
 | **Total** | **118** | - | **0 failed** |
 
-No test suites were skipped. Execution completed successfully
+All available tests completed successfully. No test suites were skipped. 
+
+**The final pytest execution result was:**
+
+```
+118 passed, 2 warnings in 71.71s
+```
+
+The regression suite completed successfully with **zero** failed tests; **zero** execution errors; and complete execution of all detected regrssion tests. 
 
 ---
 
-## 6. Warning Analysis
+## 5. Warning Analysis
 
 Two warinings were produced during execution. These warnings were reviewed and classified as non-blocking.
 
@@ -150,7 +154,7 @@ Therefore, the regression result remains valid.
 
 ---
 
-## 7. Comparison vs Sprint 5
+## 6. Comparison vs Sprint 5
 
 | Verification Item | Result |
 |-------------------|--------|
@@ -160,11 +164,11 @@ Therefore, the regression result remains valid.
 | Sprint 6 tests addedd successfully | PASS |
 | No new failures detected | PASS |
 
-Based on these evidence: previous regression coverage remains functional; Sprint 6 changes did not introduce failures; system regression status is stable.
+Based on these evidence: previous regression coverage remains functional; Sprint 6 changes did not introduce failures; and system regression status is stable.
 
 ---
 
-## 8. Sign-off
+## 7. Sign-off
 
 - [x] Re-run confirmed inside Docker (`docker compose exec api pytest`) or against final
       CI run (T24)
