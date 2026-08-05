@@ -834,7 +834,7 @@ feature/task-branch  →  develop  →  main
 - All changes merge through **pull requests into `develop`**. Direct pushes to `main` or `develop` are not permitted.
 - Sprint-specific branches use `feature/sN-...` or `fix/sN-...` (e.g. `fix/s5-final-fix-wave`).
 - PR template: short summary + test plan + link to relevant Sprint task (e.g. S5-T11).
-- See [`SPRINT_BRANCH_WORKFLOW.md`](SPRINT_BRANCH_WORKFLOW.md) for the full convention.
+- Full convention documented in `SPRINT_BRANCH_WORKFLOW.md` (internal team doc, not included in the grading package).
 
 ### Local-development workflow
 
