@@ -1,11 +1,11 @@
 # Sprint 6 Status Table
 
 Owner: Tai Huynh (T15)
-Last updated: 3 Aug 2026 (T10, T11, T12, T24 done). Deadline still assumed ~8 Aug — **confirm with Prof. Jun Yan / Moodle.**
+Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA pass also completed). Deadline still assumed ~8 Aug — **confirm with Prof. Jun Yan / Moodle.**
 
-> Status key: **Done** = artifact exists and verifiable · **Overdue** = past its due date, not started · **Due soon** = due within 3 days, not started · **Not started** · **Blocked** = waiting on another task.
+> Status key: **Done** = artifact exists and verifiable · **Draft** = real artifact exists but needs owner review before final · **Overdue** = past its due date, not started · **Not started** · **Blocked** = waiting on another task.
 
-## Done (18/34)
+## Done (25/34)
 
 | ID | Owner | Task | Evidence |
 |---|---|---|---|
@@ -27,45 +27,47 @@ Last updated: 3 Aug 2026 (T10, T11, T12, T24 done). Deadline still assumed ~8 Au
 | T24 | Thanh | Confirm CI green on final commit | Confirmed green on develop @ 952ddb4 (PR #51) — re-check again right before code freeze |
 | T11 | Thanh (picked up from Anmoldeep, unstarted at due date) | UI polish for tech expo | `docs/t11_t12_ui_polish.md` — fixed frozen-looking generation state + frontend/backend timeout mismatch, found via live testing |
 | T12 | Thanh (picked up from Anmoldeep, unstarted at due date) | Before/after UI screenshots | `docs/t11_t12_ui_polish.md` — captured during T11 verification |
+| T30 | Thanh (picked up from Tai) | "For the Marker" README section | README.md §19, PR #53 |
+| T31 | Thanh | Cold grader dry run #2 (final) | `docs/dry_run_2_cold_grader.md` — fresh clone, isolated Compose project, CPU-only path confirmed working from zero |
+| T16 | Thanh (picked up from Tai) | Compile `docs/a4_evidence_index.md` | `docs/a4_evidence_index.md` |
+| T17 | Thanh (picked up from Tai) | Branding consistency check | Checked product/team/group naming across README, RTM, status docs — consistent, no fixes needed |
+| T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-6f25f75.zip` — built via `git archive` (207 files, 14.7MB, no `.env`/`.git`/dev clutter), extraction verified |
+| T19 | **Draft** — Thanh (picked up from Andre) | Write A4 report draft | `docs/a4_report_draft.md` — needs Andre's review before final |
+| T20 | **Draft** — Thanh (picked up from Andre) | Prepare A4 slides | `docs/a4_slides_outline.md` — outline/content draft, needs Andre to build the actual deck |
 
-## Overdue — not started (2)
+## In progress — recording done, post-production pending (3)
 
 | ID | Owner | Task | Was due | Risk |
 |---|---|---|---|---|
-| T18a | Namaratne + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **High** — blocks T18b/c/d; needs a human to actually run + record the session, cannot be automated |
-| T18b | Tai | Compute comparison numbers from T18a | 31 Jul | Blocked by T18a |
+| T18a | Namaratne + Tai | Live Paedia vs. generic-LLM comparison + recording | 30 Jul | **Recording confirmed done (4 Aug)** — footage exists, not yet processed |
+| T18b | Tai | Compute comparison numbers from T18a | 31 Jul | Can start now that T18a footage exists |
+| T18c | Namaratne | Edit + publish comparison video | 2 Aug | Can start now that T18a footage exists |
 
-## Due within 2 days (2–3 Aug), not started (2)
+## Due within 2 days (2–3 Aug), not started (1)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T18c | Namaratne | Edit + publish comparison video | 2 Aug (blocked — T18a hasn't run yet) |
 | T18d | Tai | Finalise public one-pager | 3 Aug (blocked by T18b/c) |
 
-## Due 4–6 Aug, not started (7)
+## Due 5 Aug, not started (2)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T30 | Tai | "For the Marker" README section | 4 Aug |
 | T13 | Tung | Regression QA on all Sprint 6 changes | 5 Aug |
 | T14 | Tung | Collect spring-session meeting evidence | 5 Aug |
-| T16 | Tai | Compile `docs/a4_evidence_index.md` | 6 Aug |
-| T17 | Tai | Branding consistency check | 6 Aug |
-| T28 | Tung | Verify submission zip contents | 6 Aug |
-| T31 | Thanh | Cold grader dry run #2 (final) | 6 Aug |
 
-## Due 7–8 Aug, not started (5)
+## Due 6–8 Aug, not started (3)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T19 | Andre | Write A4 report draft | 7 Aug |
-| T20 | Andre | Prepare A4 slides | 7 Aug |
-| T21 | Thanh | Package code + README | 7 Aug |
+| T28 | Tung | Verify submission zip contents | 6 Aug |
 | T22 | Tung | Independently verify zip + README | 7 Aug |
-| T23 | All | Rehearsal | 8 Aug |
+| T23 | All | Rehearsal | 8 Aug — needs the whole team live, can't be done solo |
 
 ## Notes
 
-- `develop` is at `952ddb4` (PR #51 merged 2 Aug); `CI` is green on this commit. `Docker Demo Readiness` last ran green on `d9665a8` (PR #50) — it only triggers on docker/compose/env-file changes, and none have landed since.
-- T11 and T12 were still unstarted past their due dates (3 Aug, 4 Aug) with no sign Anmoldeep had picked them up, so Thanh did them directly rather than risk them slipping further this close to the deadline.
-- **T18a/b/c/d is now the single biggest risk** — it's the only remaining CRITICAL workstream where no code/doc progress can substitute for a human actually running the live comparison and recording it. Everything else remaining is either routine engineering (T13-T14, T16-T17, T28, T31) or writing (T19-T20) that can be parallelised across the team.
+- `develop` is at `6f25f75` (PR #54 merged 4 Aug — GPU 3-tier auto-select, beyond the original 34-task list); `CI` green, 118/118 tests passing.
+- A full system QA pass (CI/CD, backend endpoints across all 3 roles, frontend, no console errors) was run 5 Aug alongside the remaining tasks — see `docs/vv_full_app_report_2026-08-03.md` and `docs/dry_run_2_cold_grader.md` for the write-ups.
+- T11, T12, T16, T17, T19, T20, T30, and T31 were all unstarted past their due dates with no sign the original owners had picked them up, so Thanh did them directly to avoid slipping this close to the deadline. T19/T20 are marked **Draft** since a report/slides written by someone other than the assigned owner still needs that owner's review before it's final.
+- **T18a (the live comparison recording) is done as of 4 Aug.** What's left on that workstream (T18b numbers, T18c edit/publish, T18d one-pager) is post-production, not a live-capture risk — can run in parallel now.
+- Everything remaining is Tung's QA/verification tasks (T13, T14, T22, T28) plus the team rehearsal (T23).

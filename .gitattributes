@@ -1,0 +1,57 @@
+# Files excluded from `git archive` (the A4 submission zip). They stay in
+# the repo and git history — this only trims what a marker has to wade
+# through in the submitted package.
+
+# Internal team process / drafts, not part of the graded prototype
+docs/a4_demo_video_script.md export-ignore
+docs/a4_report_draft.md export-ignore
+docs/a4_slides_outline.md export-ignore
+docs/sprint6_status_table.md export-ignore
+docs/sprint5_status_table.md export-ignore
+docs/dry_run_1_cold_grader.md export-ignore
+docs/meetings/ export-ignore
+SPRINT_BRANCH_WORKFLOW.md export-ignore
+Team_Contributions/ export-ignore
+data/sample_manifest.md export-ignore
+
+# Sprint 3/4/5 internal working docs, out of scope for A4
+docs/sprint4_summary.md export-ignore
+docs/sprint5_handover.md export-ignore
+docs/sprint5_implementation_summary.md export-ignore
+docs/sprint5_runtime_notes.md export-ignore
+docs/sprint5_sponsor_review.md export-ignore
+docs/sprint_5_kickoff.md export-ignore
+docs/sprint5_tai_guideline.md export-ignore
+docs/qa_checklist_sprint5.md export-ignore
+docs/qa_sections_4_5_results.md export-ignore
+docs/ci_test_validation_sprint5.md export-ignore
+docs/cd_test_validation_sprint5.md export-ignore
+docs/demo_bug_report_sprint5.md export-ignore
+docs/rag_benchmark_sprint5.md export-ignore
+docs/rag_benchmark_sprint5_results.json export-ignore
+docs/embedding_benchmarks.md export-ignore
+docs/ollama_model_selection.md export-ignore
+docs/parser_evaluation.md export-ignore
+docs/prompt_strategy.md export-ignore
+docs/prompt_variant_results_2026-04-22.json export-ignore
+docs/rag_config.md export-ignore
+docs/rag_config_benchmark_2026-04-22.json export-ignore
+docs/rag_config_benchmark_31q.json export-ignore
+docs/risk_register.md export-ignore
+docs/architecture/risk_register_sprint3.md export-ignore
+docs/architecture/storage_sizing.md export-ignore
+docs/test_results_sprint4.md export-ignore
+docs/architecture/dfd_v2_changes.md export-ignore
+docs/architecture/erd_v2_changes.md export-ignore
+docs/hardware_check_2026-04-21.json export-ignore
+docs/api/api_spec_validation.md export-ignore
+docs/api/archive/ export-ignore
+docs/a3_draft.docx export-ignore
+docs/a3_draft_source.md export-ignore
+docs/a3_evidence_index.md export-ignore
+docs/a3_demo_script.md export-ignore
+docs/a3_interface_demo/ export-ignore
+
+# Third-party reference PDF used only as a chunker stress-test sample —
+# copyright, not ours to redistribute in a public submission
+materials/ export-ignore
