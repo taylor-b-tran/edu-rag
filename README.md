@@ -216,6 +216,8 @@ git checkout develop
 Copy-Item .env.example .env
 ```
 
+**Grading from the submitted zip instead of a git clone?** Skip steps 1-2, you already have the code — extract the zip and run step 3 (`Copy-Item .env.example .env`) from that folder.
+
 Edit `.env` if you need non-default ports — most teammates leave it as-is. Defaults:
 
 | Variable | Default | When to change |
