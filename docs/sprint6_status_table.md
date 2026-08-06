@@ -1,11 +1,11 @@
 # Sprint 6 Status Table
 
 Owner: Tai Huynh (T15)
-Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA pass also completed; slide deck and demo script finalised for the workshop). **Presentation confirmed: Week 15 workshop, 5 Aug, 1:30 PM, 6-minute presentation + 2-minute Q&A, whole team must attend.** Written-submission deadline (zip/README) not yet separately confirmed — check whether it's the same date or later via Moodle / Prof. Jun Yan.
+Last updated: 6 Aug 2026 (T13, T14, T22, T28 all landed — 29/34 done). Presentation held 5 Aug as scheduled. Written-submission deadline (zip/README) not yet separately confirmed — check whether it's the same date or later via Moodle / Prof. Jun Yan.
 
 > Status key: **Done** = artifact exists and verifiable · **Draft** = real artifact exists but needs owner review before final · **Overdue** = past its due date, not started · **Not started** · **Blocked** = waiting on another task.
 
-## Done (25/34)
+## Done (29/34)
 
 | ID | Owner | Task | Evidence |
 |---|---|---|---|
@@ -31,9 +31,13 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 | T31 | Thanh | Cold grader dry run #2 (final) | `docs/dry_run_2_cold_grader.md` — fresh clone, isolated Compose project, CPU-only path confirmed working from zero |
 | T16 | Thanh (picked up from Tai) | Compile `docs/a4_evidence_index.md` | `docs/a4_evidence_index.md` |
 | T17 | Thanh (picked up from Tai) | Branding consistency check | Checked product/team/group naming across README, RTM, status docs — consistent, no fixes needed |
-| T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-51c103a.zip` — built via `git archive`, trimmed of internal-only docs via `.gitattributes` (136 files, 6.25MB), extraction and link integrity verified |
+| T21 | Thanh | Package code + README | `submission/edurag-paedia-a4-<commit>.zip` — built via `git archive`, trimmed of internal-only docs via `.gitattributes`, rebuilt on every content change; extraction, contents, and link integrity re-verified each time |
 | T19 | Thanh (picked up from Andre) | Write A4 report | `docs/a4_report.docx` — final, checked against the A4 marking rubric (added a Methodology section, design rationale, and a dedicated Interface Design section); Andre still welcome to review |
 | T20 | Thanh (picked up from Andre) | Prepare A4 slides | Real 12-slide deck built, timed to the actual 6-minute workshop slot (kept locally, not pushed to the repo); Andre still welcome to tweak content before presenting |
+| T13 | Tung | Regression QA on all Sprint 6 changes | PR #59/#60 — `docs/regression_qa_sprint6.md`, 118/118 tests, no regressions vs. Sprint 5 |
+| T14 | Tung | Collect spring-session meeting evidence | PR #57 — `docs/meetings/sprint5_sponsor_review.docx`, `sprint6_sponsor_review.docx` |
+| T22 | Thanh (Tung hadn't started with the deadline close) | Independently verify zip + README | `docs/t22_t28_zip_verification.md` — ran the stack from the zip alone (no git), 118/118 tests, live query matched README's promised result |
+| T28 | Thanh (Tung hadn't started with the deadline close) | Verify submission zip contents | `docs/t22_t28_zip_verification.md` — no secrets/`.env`/`.git`, all required deliverables present, no broken README links |
 
 ## In progress — recording done, post-production pending (3)
 
@@ -49,19 +53,10 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 |---|---|---|---|
 | T18d | Tai | Finalise public one-pager | 3 Aug (blocked by T18b/c) |
 
-## Due 5 Aug, not started (2)
+## Remaining (1)
 
 | ID | Owner | Task | Due |
 |---|---|---|---|
-| T13 | Tung | Regression QA on all Sprint 6 changes | 5 Aug |
-| T14 | Tung | Collect spring-session meeting evidence | 5 Aug |
-
-## Due 6–8 Aug, not started (3)
-
-| ID | Owner | Task | Due |
-|---|---|---|---|
-| T28 | Tung | Verify submission zip contents | 6 Aug |
-| T22 | Tung | Independently verify zip + README | 7 Aug |
 | T23 | All | Rehearsal | 8 Aug — needs the whole team live, can't be done solo |
 
 ## Notes
@@ -70,6 +65,7 @@ Last updated: 5 Aug 2026 (T16, T17, T19, T20, T21, T31 done — full system QA p
 - A full system QA pass (CI/CD, backend endpoints across all 3 roles, frontend, no console errors) was run 5 Aug alongside the remaining tasks — see `docs/vv_full_app_report_2026-08-03.md` and `docs/dry_run_2_cold_grader.md` for the write-ups.
 - T11, T12, T16, T17, T19, T20, T30, and T31 were all unstarted past their due dates with no sign the original owners had picked them up, so Thanh did them directly to avoid slipping this close to the deadline. T19 (report) is still marked **Draft** — needs Andre's review before final. T20 (slides) now has an actual deck built, not just an outline; Andre is still welcome to review the content.
 - **T18a (the live comparison recording) is done as of 4 Aug.** What's left on that workstream (T18b numbers, T18c edit/publish, T18d one-pager) is post-production, not a live-capture risk — can run in parallel now. Note: this is a separate marketing/comparison video, not the workshop presentation itself.
-- Everything remaining is Tung's QA/verification tasks (T13, T14, T22, T28) plus the team rehearsal (T23) — and now, presenting today at 1:30 PM.
-- System approved by Professor Jun Yan in an official meeting this morning (9:30 AM, 5 Aug). The presentation itself isn't reviewed by the supervisor — that's the subject coordinator's call, not Prof. Jun Yan's.
+- Presentation held 5 Aug, 1:30 PM as scheduled. System approved by Professor Jun Yan in an official meeting that morning (9:30 AM). The presentation itself isn't reviewed by the supervisor — that's the subject coordinator's call, not Prof. Jun Yan's.
 - `Team_Contributions/` updated to cover Sprint 4-6 for all members (previously only had Sprint 3 entries), attributed per original sprint-plan ownership rather than who ended up executing late tasks. The `Namaratne` folder was renamed to `Andre` — same person, current preferred name.
+- Tung landed T13 and T14 on 5-6 Aug. T22/T28 (zip/README verification) hadn't started with the deadline close, so Thanh ran both directly against the built zip — see `docs/t22_t28_zip_verification.md`. No blockers found; one real fixture inconsistency noted (login's `enrolled_courses` uses UUIDs, retrieval everywhere else uses string course codes) — doesn't affect the documented demo path, and gets resolved by Sprint 7's courses/enrollments work.
+- Only T18b/c/d (marketing video post-production) and T23 (team rehearsal) remain.
