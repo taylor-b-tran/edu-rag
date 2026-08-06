@@ -80,7 +80,7 @@ The following environment details were recorded during execution.
 | Runtime | 71.71 seconds |
 | Overall Result | PASS |
 
-Pytest successully detected the project environment. The environment successfully loaded the project test configuration. No test collection errors occurred.
+Pytest successfully detected the project environment. The environment successfully loaded the project test configuration. No test collection errors occurred.
 
 ---
 ## 3. Regression Preconditions
@@ -132,13 +132,13 @@ All available tests completed successfully. No test suites were skipped.
 118 passed, 2 warnings in 71.71s
 ```
 
-The regression suite completed successfully with **zero** failed tests; **zero** execution errors; and complete execution of all detected regrssion tests. 
+The regression suite completed successfully with **zero** failed tests; **zero** execution errors; and complete execution of all detected regression tests.
 
 ---
 
 ## 5. Warning Analysis
 
-Two warinings were produced during execution. These warnings were reviewed and classified as non-blocking.
+Two warnings were produced during execution. These warnings were reviewed and classified as non-blocking.
 
 | Warning Category | Impact |
 |----------------------|------------|
@@ -161,7 +161,7 @@ Therefore, the regression result remains valid.
 | Sprint 5 regression tests available | PASS |
 | `test/test_sprint5_integration_gate.py` executed successfully | PASS |
 | Existing regression test coverage maintained | PASS |
-| Sprint 6 tests addedd successfully | PASS |
+| Sprint 6 tests added successfully | PASS |
 | No new failures detected | PASS |
 
 Based on these evidence: previous regression coverage remains functional; Sprint 6 changes did not introduce failures; and system regression status is stable.
