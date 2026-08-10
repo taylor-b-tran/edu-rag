@@ -1,0 +1,134 @@
+[
+  {
+    "id": "R01",
+    "question": "What does RAG stand for and how does it reduce hallucination?",
+    "relevant_chunk_ids": ["csit321-w1-rag-intro"],
+    "topic": "RAG Fundamentals"
+  },
+  {
+    "id": "R02",
+    "question": "What are the three core components of a RAG pipeline?",
+    "relevant_chunk_ids": ["csit321-w1-rag-components"],
+    "topic": "RAG Fundamentals"
+  },
+  {
+    "id": "R03",
+    "question": "What embedding model does EduRAG use and how many dimensions does it produce?",
+    "relevant_chunk_ids": ["csit321-w2-embeddings"],
+    "topic": "Vector Embeddings"
+  },
+  {
+    "id": "R04",
+    "question": "What chunk size and overlap does EduRAG use by default and why?",
+    "relevant_chunk_ids": ["csit321-w2-chunking"],
+    "topic": "Vector Embeddings"
+  },
+  {
+    "id": "R05",
+    "question": "What metadata fields does ChromaDB store for each chunk in EduRAG?",
+    "relevant_chunk_ids": ["csit321-w3-chromadb"],
+    "topic": "ChromaDB"
+  },
+  {
+    "id": "R06",
+    "question": "How do you filter a ChromaDB query so it only returns results from one course?",
+    "relevant_chunk_ids": ["csit321-w3-chromadb-api"],
+    "topic": "ChromaDB"
+  },
+  {
+    "id": "R07",
+    "question": "What are the main Flask API routes in EduRAG?",
+    "relevant_chunk_ids": ["csit321-w4-flask"],
+    "topic": "Flask API"
+  },
+  {
+    "id": "R08",
+    "question": "How does EduRAG implement authentication and role-based access control?",
+    "relevant_chunk_ids": ["csit321-w4-jwt-rbac"],
+    "topic": "Flask API"
+  },
+  {
+    "id": "R09",
+    "question": "Does EduRAG use a monolith or microservices architecture, and why?",
+    "relevant_chunk_ids": ["csit321-w4-architecture"],
+    "topic": "Flask API"
+  },
+  {
+    "id": "R10",
+    "question": "Why does EduRAG use Ollama instead of the OpenAI API during development?",
+    "relevant_chunk_ids": ["csit321-w5-ollama"],
+    "topic": "Ollama & LLM Generation"
+  },
+  {
+    "id": "R11",
+    "question": "What four sections make up EduRAG's prompt template?",
+    "relevant_chunk_ids": ["csit321-w5-prompt-engineering"],
+    "topic": "Ollama & LLM Generation"
+  },
+  {
+    "id": "R12",
+    "question": "What is EduRAG's target query response time and what are the two main latency contributors?",
+    "relevant_chunk_ids": ["csit321-w5-latency"],
+    "topic": "Ollama & LLM Generation"
+  },
+  {
+    "id": "R13",
+    "question": "What do Precision@K and Recall@K measure in RAG evaluation, and what targets does EduRAG use?",
+    "relevant_chunk_ids": ["csit321-w6-evaluation"],
+    "topic": "RAG Evaluation"
+  },
+  {
+    "id": "R14",
+    "question": "What happens when no retrieved chunk passes the similarity threshold?",
+    "relevant_chunk_ids": ["csit321-w6-fallback"],
+    "topic": "RAG Evaluation"
+  },
+  {
+    "id": "R15",
+    "question": "How does EduRAG mitigate prompt injection from untrusted input?",
+    "relevant_chunk_ids": ["csit321-w7-security"],
+    "topic": "Security & Deployment"
+  },
+  {
+    "id": "R16",
+    "question": "What services run in EduRAG's Docker Compose stack?",
+    "relevant_chunk_ids": ["csit321-w7-docker"],
+    "topic": "Security & Deployment"
+  },
+  {
+    "id": "R17",
+    "question": "Why does EduRAG use PostgreSQL alongside ChromaDB instead of just one database?",
+    "relevant_chunk_ids": ["csit321-w7-database"],
+    "topic": "Security & Deployment"
+  },
+  {
+    "id": "R18",
+    "question": "Give a high-level overview of how EduRAG answers a student's question end to end.",
+    "relevant_chunk_ids": ["csit321-overview-system"],
+    "topic": "System Overview"
+  },
+  {
+    "id": "R19",
+    "question": "What vector database and embedding model does EduRAG use together for retrieval?",
+    "relevant_chunk_ids": ["csit321-w2-embeddings", "csit321-w3-chromadb"],
+    "topic": "Vector Embeddings / ChromaDB"
+  },
+  {
+    "id": "R20",
+    "question": "How does EduRAG handle both user authentication and API routing?",
+    "relevant_chunk_ids": ["csit321-w4-flask", "csit321-w4-jwt-rbac"],
+    "topic": "Flask API"
+  },
+  {
+    "id": "R21",
+    "question": "What's the weather forecast for Sydney tomorrow?",
+    "relevant_chunk_ids": [],
+    "topic": "off_topic"
+  },
+  {
+    "id": "R22",
+    "question": "Can you recommend a good chocolate cake recipe?",
+    "relevant_chunk_ids": [],
+    "topic": "off_topic"
+  }
+]
