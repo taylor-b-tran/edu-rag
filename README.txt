@@ -1,6 +1,6 @@
 PAEDIA (EduRAG) — MARKER QUICK-START
 CSIT321 Project 37 — Group 19, Aletheia's Zetetes
-======================================================
+------------------------------------------------------
 
 This is a plain-text quick reference for testing the prototype.
 The full README.md in zip file has everything in detail —
