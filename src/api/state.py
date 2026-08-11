@@ -138,6 +138,38 @@ class APIState:
         return None
 
     def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
+        if self._db_available:
+            try:
+                pg_user = self._authenticate_via_postgres(email, password)
+                if pg_user is not None:
+                    return pg_user
+            except Exception as exc:
+                logger.warning(
+                    "Postgres auth lookup failed for %s (%s: %s); falling back to fixtures.",
+                    email, type(exc).__name__, exc,
+                )
+        return self._authenticate_via_fixture(email, password)
+
+    def _authenticate_via_postgres(self, email: str, password: str) -> dict[str, Any] | None:
+        import bcrypt
+
+        from src.api import db
+
+        record = db.get_user_by_email(email)
+        if record is None:
+            return None
+        if not bcrypt.checkpw(password.encode("utf-8"), record["password_hash"].encode("utf-8")):
+            return None
+        db.touch_last_login(record["user_id"])
+        return {
+            "user_id": record["user_id"],
+            "username": record["username"],
+            "email": record["email"],
+            "role": record["role"],
+            "enrolled_courses": db.get_enrolled_course_codes(record["user_id"]),
+        }
+
+    def _authenticate_via_fixture(self, email: str, password: str) -> dict[str, Any] | None:
         user = self.find_demo_user(email)
         if not user:
             return None
@@ -145,6 +177,29 @@ class APIState:
         if stored and stored != password:
             return None
         return user
+
+    def find_user_any_source(self, email: str) -> dict[str, Any] | None:
+        """Look up a user for token refresh — no password check, tries
+        Postgres first (same reasoning as authenticate_user) then fixtures.
+        """
+        if self._db_available:
+            try:
+                from src.api import db
+                record = db.get_user_by_email(email)
+                if record is not None:
+                    return {
+                        "user_id": record["user_id"],
+                        "username": record["username"],
+                        "email": record["email"],
+                        "role": record["role"],
+                        "enrolled_courses": db.get_enrolled_course_codes(record["user_id"]),
+                    }
+            except Exception as exc:
+                logger.warning(
+                    "Postgres lookup failed for %s during refresh (%s: %s); falling back to fixtures.",
+                    email, type(exc).__name__, exc,
+                )
+        return self.find_demo_user(email)
 
     def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
         if user.get("role") == "admin":

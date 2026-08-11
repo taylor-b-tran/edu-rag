@@ -6,6 +6,7 @@ import os
 from contextlib import contextmanager
 from typing import Any, Iterator
 
+import bcrypt
 import psycopg
 from psycopg.rows import dict_row
 
@@ -66,13 +67,115 @@ CREATE INDEX IF NOT EXISTS indexing_jobs_document_idx
     ON indexing_jobs (document_id);
 """
 
+# Sprint 7 (T02): the auth tables from db/migrations/001_initial_schema.sql,
+# applied here rather than by a migration runner (none exists yet). Only the
+# non-colliding tables — users/courses/course_memberships — are included.
+# documents/indexing_jobs from that file are deliberately left out: they'd
+# collide with the simpler, already-live uploaded_documents/indexing_jobs
+# shape above.
+AUTH_SCHEMA = """
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    role TEXT NOT NULL CHECK (role IN ('student', 'lecturer', 'admin')),
+    password_hash VARCHAR(60) NOT NULL,
+    last_login_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_code VARCHAR(32) NOT NULL UNIQUE,
+    course_name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS course_memberships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    membership_role TEXT NOT NULL CHECK (membership_role IN ('student', 'lecturer')),
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, course_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_course_memberships_user_id ON course_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_course_memberships_course_id ON course_memberships(course_id);
+"""
+
+# Same three demo accounts the fixture file has always used, now with a
+# distinct real bcrypt hash per password instead of one shared placeholder.
+_DEMO_USERS = [
+    ("admin_demo", "admin@uow.edu.au", "admin", "admin123"),
+    ("lecturer_demo", "lecturer@uow.edu.au", "lecturer", "lecturer123"),
+    ("student_demo", "student@uow.edu.au", "student", "student123"),
+]
+_DEMO_COURSES = [
+    ("CSIT321", "Project"),
+    ("CSIT214", "Database Systems"),
+]
+
+
+def _seed_demo_auth_data() -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            for username, email, role, password in _DEMO_USERS:
+                password_hash = bcrypt.hashpw(
+                    password.encode("utf-8"), bcrypt.gensalt()
+                ).decode("utf-8")
+                cur.execute(
+                    """
+                    INSERT INTO users (username, email, role, password_hash)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (email) DO NOTHING
+                    """,
+                    (username, email, role, password_hash),
+                )
+            for course_code, course_name in _DEMO_COURSES:
+                cur.execute(
+                    """
+                    INSERT INTO courses (course_code, course_name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (course_code) DO NOTHING
+                    """,
+                    (course_code, course_name),
+                )
+            # Student and lecturer are enrolled in both demo courses, matching
+            # fixtures/sample_responses.json so behaviour doesn't change
+            # depending on which backend actually answered the login.
+            cur.execute(
+                """
+                INSERT INTO course_memberships (user_id, course_id, membership_role)
+                SELECT u.id, c.id, u.role
+                  FROM users u
+                  CROSS JOIN courses c
+                 WHERE u.role IN ('student', 'lecturer')
+                ON CONFLICT (user_id, course_id) DO NOTHING
+                """
+            )
+
 
 def init_schema() -> None:
     try:
         with connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(SCHEMA)
-        logger.info("Postgres schema initialised (uploaded_documents, indexing_jobs).")
+                cur.execute(AUTH_SCHEMA)
+        _seed_demo_auth_data()
+        logger.info(
+            "Postgres schema initialised (uploaded_documents, indexing_jobs, "
+            "users, courses, course_memberships)."
+        )
     except Exception as exc:
         logger.warning(
             "Postgres schema init failed (%s: %s). API will fall back to in-memory state.",
@@ -235,3 +338,58 @@ def load_all_jobs() -> dict[str, dict[str, Any]]:
             row["created_at"] = row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
         jobs[row["job_id"]] = row
     return jobs
+
+
+# ─── Auth (Sprint 7, T02) ────────────────────────────────────────────────
+
+def get_user_by_email(email: str) -> dict[str, Any] | None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, username, email, role, password_hash
+                  FROM users
+                 WHERE email = %s
+                """,
+                (email,),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "user_id": str(row["id"]),
+        "username": row["username"],
+        "email": row["email"],
+        "role": row["role"],
+        "password_hash": row["password_hash"],
+    }
+
+
+def get_enrolled_course_codes(user_id: str) -> list[str]:
+    """Course codes (e.g. "CSIT321"), not Postgres UUIDs — the rest of the
+    system (resolve_course, course-scoped retrieval) already keys off codes
+    from the fixture course list, so returning codes here keeps that path
+    unchanged regardless of whether the login came from Postgres or fixtures.
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.course_code
+                  FROM course_memberships cm
+                  JOIN courses c ON c.id = cm.course_id
+                 WHERE cm.user_id = %s
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+    return [row["course_code"] for row in rows]
+
+
+def touch_last_login(user_id: str) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET last_login_at = NOW() WHERE id = %s",
+                (user_id,),
+            )

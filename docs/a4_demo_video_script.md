@@ -1,57 +1,59 @@
-# A4 Demo Video — Script & Shot List
+# A4 Submission Video — Script & Shot List
 
-**Target length:** 5:30–6:00
-**Goal:** walk through the working prototype across all 3 roles (Student, Lecturer, Admin), showing real retrieval + generation, not slides.
-**Narration language:** English (matches product/course audience).
+This is the script for the demo video, whether it ends up recorded ahead of time as the actual video submitted for A4, or run live from the browser during the workshop if that's the format on the day. Same beats, same timing either way — **2:45**, sitting inside the "Live demo" slide of `a4_slides.pptx`. The full talking script for the rest of the presentation is in `a4_presenter_script.md`.
+
+Not pushed to the repo — kept local for the team to work from.
 
 ---
 
-## Pre-recording checklist (do this every time, in order)
+## Before recording (or before walking into the room)
 
-Skipping this caused a real ~4-minute stall during testing today — GPU passthrough degrades over long container uptimes and silently falls back to CPU.
+Skipping this caused a real ~4-minute stall during testing — GPU passthrough degrades over long container uptimes and quietly falls back to CPU.
 
 ```powershell
 # 1. Force Ollama to re-negotiate GPU (fixes silent CPU fallback)
 docker compose restart ollama
 
-# 2. Confirm everything is actually healthy before hitting record
+# 2. Confirm everything is actually healthy
 python scripts/check_demo_ready.py
 
-# 3. Warm the model once so the FIRST on-camera query isn't slow
+# 3. Warm the model once so the first question isn't slow
 curl -s -X POST http://localhost:11434/api/generate -d "{\"model\":\"qwen2.5:7b\",\"prompt\":\"hi\",\"stream\":false}" > $null
 
-# 4. Make sure the seed corpus + course content are in a known state
+# 4. Make sure the seed corpus is in a known state
 docker compose exec api python -m src.document_processor.ingest_corpus --force
 ```
 
-Also: record at a normal desktop window size (not a narrow/split window — text wraps badly below ~1200px), close other GPU-heavy apps (games, other browser tabs doing video), and record on whichever machine actually has the GPU tier you want to show off (mid or high tier — CPU-only will make every query feel like dead air on camera).
+Use a normal desktop window size — text wraps badly below ~1200px. Close other GPU-heavy apps. Record or present from whichever machine has the GPU tier that gives fast answers; on CPU-only, every question turns into dead air.
 
 ---
 
-## Script
+## The two moments that matter
 
-| Time | Screen / Action | Narration |
+Everything else is scaffolding. If only two things land, they should be:
+
+1. A student asks a real question and gets an answer with a citation attached.
+2. A lecturer uploads something new and it's immediately queryable — no rebuild, no restart.
+
+Session History and My Uploads are cut to make room for those two beats.
+
+| Time | Action | What to say |
 |---|---|---|
-| 0:00–0:20 | Title card or login screen, Paedia logo visible | "This is Paedia — an AI course assistant that answers student questions using only the lecturer's own course material, with a citation for every answer. Here's the working prototype end to end." |
-| 0:20–0:35 | Sign in as `student@uow.edu.au` | "Starting as a student." *(type email/password on camera, don't paste — feels more real)* |
-| 0:35–1:25 | Q&A Chat: ask **"What is Retrieval-Augmented Generation and how does it differ from standard LLMs?"** | "I'll ask a real question. This isn't a demo script — it's a live call to ChromaDB for retrieval and a local LLM for generation." *(let the answer render on screen, then:)* "Notice it's not just an answer — every claim is tagged back to a source: file, page, and similarity score. If Paedia can't find a confident match, it says so instead of guessing." |
-| 1:25–1:55 | Click **Session History** | "Every conversation is saved per course, so students can pick up where they left off." *(hover a past session, click Continue on one)* |
-| 1:55–2:10 | Click **My Uploads** | "Students can see what material is loaded for their course — read-only, since only lecturers manage content." |
-| 2:10–2:20 | Sign out | "Now switching roles." |
-| 2:20–2:35 | Sign in as `lecturer@uow.edu.au` | |
-| 2:35–3:35 | **Document Manager** → upload a real PDF | "As a lecturer, I can upload new material directly." *(drag a short PDF in, narrate while it processes)* "It's chunked, embedded, and indexed into the vector store live — watch the status go from queued to processing to indexed." |
-| 3:35–4:05 | Back to Q&A Chat, ask a question that depends on the just-uploaded file | "Now I'll ask something only in the file I just uploaded." *(show the citation pointing at the new filename)* "The system picked it up immediately — no rebuild, no restart." |
-| 4:05–4:15 | Sign out | |
-| 4:15–4:30 | Sign in as `admin@uow.edu.au` | |
-| 4:30–5:00 | **Admin Dashboard** | "Admins get a system-wide view — users, courses, and usage metrics across the platform." |
-| 5:00–5:40 | Closing — back to a clean chat screen or logo | "Three roles, one grounded answer engine: retrieval you can verify, running on infrastructure the team controls end to end. That's Paedia." |
+| 0:00–0:10 | Sign in as `student@uow.edu.au` | "Starting as a student." |
+| 0:10–1:05 | Ask **"What is Retrieval-Augmented Generation and how does it differ from standard LLMs?"** | "This is a live call to ChromaDB for retrieval and a local LLM for generation, not a canned response." *(let the answer render, then point at the citation)* "Every claim is tagged back to a source — file, page, similarity score. If nothing in the course material clears the confidence threshold, it says so instead of guessing." |
+| 1:05–1:20 | Sign out, sign in as `lecturer@uow.edu.au` | "Switching roles." |
+| 1:20–2:10 | Upload a short PDF in Document Manager, then ask a question that depends on it | "As a lecturer I can add material directly — it's chunked, embedded, and indexed live." *(ask the question, point at the citation on the new filename)* "Picked up immediately." |
+| 2:10–2:25 | Sign out, sign in as `admin@uow.edu.au` | "And finally, admin." |
+| 2:25–2:45 | Admin Dashboard | "System-wide view across users, courses, and usage — that's all three roles." |
+
+**Running short on time:** drop the admin beat first, then trim the lecturer narration. Keep the citation moment on both remaining beats no matter what — that's the point of the whole video.
 
 ---
 
-## Notes for whoever records
+## Recording notes
 
-- **Type questions live**, don't paste — looks more authentic and gives the retrieval a natural beat to land on.
-- If a query response takes more than ~5s on camera, pause narration rather than talking over dead air — cut the silence in editing instead.
-- Use a **different course document** for the upload demo than what's already seeded, so the citation obviously traces to something just added on camera (a short 1–3 page PDF indexes fastest).
-- Keep the confidence bar / citation chips fully visible in frame — that's the single most important visual proof point for the whole video.
-- If recording on a CPU-only machine, cut the pre-roll checklist's Ollama-warm step and expect to edit out the wait — do **not** try to demo the wait itself as "the experience," it undersells the product.
+- Type the question live rather than pasting it — it gives retrieval a natural beat to land on and looks less staged.
+- If a response takes more than ~5 seconds, pause instead of talking over dead air — cut the gap out in editing.
+- Use a course document that isn't already in the seed corpus for the upload beat, so the citation obviously points at something just added on camera.
+- Keep the citation and confidence chips fully visible in frame — that's the single most important thing for someone watching to actually see.
+- On CPU-only hardware, don't try to demo the wait as part of the experience — narrate through it briefly and let editing shorten it, or cut that machine from consideration entirely.
