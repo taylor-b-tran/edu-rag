@@ -48,9 +48,6 @@ def create_course():
     _, err = _require_admin()
     if err:
         return err
-    db_err = _require_db()
-    if db_err:
-        return db_err
 
     body = request.get_json(silent=True) or {}
     course_code = (body.get("course_code") or "").strip()
@@ -58,6 +55,10 @@ def create_course():
     description = body.get("description")
     if not course_code or not course_name:
         return jsonify({"error": "course_code and course_name are required"}), 400
+
+    db_err = _require_db()
+    if db_err:
+        return db_err
 
     from src.api import db
     course = db.create_course(course_code, course_name, description)
@@ -124,10 +125,6 @@ def add_member(course_code: str):
     _, err = _require_admin()
     if err:
         return err
-    db_err = _require_db()
-    if db_err:
-        return db_err
-
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     membership_role = body.get("membership_role") or body.get("role") or "student"
@@ -137,6 +134,10 @@ def add_member(course_code: str):
         return jsonify({
             "error": f"membership_role must be one of {sorted(_VALID_MEMBERSHIP_ROLES)}",
         }), 400
+
+    db_err = _require_db()
+    if db_err:
+        return db_err
 
     from src.api import db
     if db.get_course_by_code(course_code) is None:

@@ -367,4 +367,4 @@ def test_add_course_member_rejects_invalid_role():
         headers=_auth(token),
     )
 
-    assert response.status_code in (400, 503)
+    assert response.status_code == 400
