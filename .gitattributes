@@ -60,6 +60,14 @@ docs/a3_evidence_index.md export-ignore
 docs/a3_demo_script.md export-ignore
 docs/a3_interface_demo/ export-ignore
 
+# Not required by A4 (functionality/interaction, interface design, system
+# architecture, branding — not governance/ethics or the old A2 report) and
+# not referenced by anything still in the package
+docs/governance/ export-ignore
+docs/reports/ export-ignore
+docs/architecture/seq_api_query.md export-ignore
+docs/architecture/seq_api_query.png export-ignore
+
 # Third-party reference PDF used only as a chunker stress-test sample —
 # copyright, not ours to redistribute in a public submission
 materials/ export-ignore

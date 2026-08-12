@@ -38,7 +38,7 @@ def refresh():
     if not token_state:
         return jsonify({"error": "invalid refresh token"}), 401
 
-    user = _state().find_demo_user(token_state.get("email", ""))
+    user = _state().find_user_any_source(token_state.get("email", ""))
     if not user:
         return jsonify({"error": "user no longer available"}), 401
     return jsonify(_state().issue_tokens(user))
