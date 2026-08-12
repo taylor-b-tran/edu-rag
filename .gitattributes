@@ -21,6 +21,7 @@ data/sample_manifest.md export-ignore
 # Required by the A4 marking rubric ("Attached Documents... Contribution
 # table") — must ship in the zip, not excluded like the rest of internal docs.
 docs/sprint7_plan.md export-ignore
+docs/t04_multi_subject_scoping_verification.md export-ignore
 
 # Sprint 3/4/5 internal working docs, out of scope for A4
 docs/sprint4_summary.md export-ignore
