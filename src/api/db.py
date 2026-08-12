@@ -393,3 +393,157 @@ def touch_last_login(user_id: str) -> None:
                 "UPDATE users SET last_login_at = NOW() WHERE id = %s",
                 (user_id,),
             )
+
+
+# ─── Courses & enrollments (Sprint 7, T03) ──────────────────────────────
+
+def _normalize_course_row(row: dict[str, Any]) -> dict[str, Any]:
+    row["id"] = str(row["id"])
+    if row.get("created_at") is not None:
+        row["created_at"] = row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    return row
+
+
+def list_courses(active_only: bool = False) -> list[dict[str, Any]]:
+    query = """
+        SELECT id, course_code, course_name, description, is_active, created_at
+          FROM courses
+    """
+    if active_only:
+        query += " WHERE is_active = TRUE"
+    query += " ORDER BY course_code"
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+    return [_normalize_course_row(row) for row in rows]
+
+
+def get_course_by_code(course_code: str) -> dict[str, Any] | None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, course_code, course_name, description, is_active, created_at
+                  FROM courses
+                 WHERE course_code = %s
+                """,
+                (course_code,),
+            )
+            row = cur.fetchone()
+    return _normalize_course_row(row) if row is not None else None
+
+
+def create_course(course_code: str, course_name: str,
+                   description: str | None = None) -> dict[str, Any] | None:
+    """Returns None if course_code already exists."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO courses (course_code, course_name, description)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (course_code) DO NOTHING
+                RETURNING id, course_code, course_name, description, is_active, created_at
+                """,
+                (course_code, course_name, description),
+            )
+            row = cur.fetchone()
+    return _normalize_course_row(row) if row is not None else None
+
+
+def update_course(course_code: str, course_name: str | None = None,
+                   description: str | None = None,
+                   is_active: bool | None = None) -> dict[str, Any] | None:
+    """Returns None if course_code doesn't exist. With no fields set, returns
+    the course unchanged."""
+    fields: list[str] = []
+    params: list[Any] = []
+    if course_name is not None:
+        fields.append("course_name = %s")
+        params.append(course_name)
+    if description is not None:
+        fields.append("description = %s")
+        params.append(description)
+    if is_active is not None:
+        fields.append("is_active = %s")
+        params.append(is_active)
+    if not fields:
+        return get_course_by_code(course_code)
+    fields.append("updated_at = NOW()")
+    params.append(course_code)
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE courses SET {', '.join(fields)}
+                 WHERE course_code = %s
+                RETURNING id, course_code, course_name, description, is_active, created_at
+                """,
+                params,
+            )
+            row = cur.fetchone()
+    return _normalize_course_row(row) if row is not None else None
+
+
+def list_course_members(course_code: str) -> list[dict[str, Any]]:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT u.id AS user_id, u.username, u.email, u.role AS account_role,
+                       cm.membership_role, cm.joined_at
+                  FROM course_memberships cm
+                  JOIN users u ON u.id = cm.user_id
+                  JOIN courses c ON c.id = cm.course_id
+                 WHERE c.course_code = %s
+                 ORDER BY u.email
+                """,
+                (course_code,),
+            )
+            rows = cur.fetchall()
+    members = []
+    for row in rows:
+        row["user_id"] = str(row["user_id"])
+        if row.get("joined_at") is not None:
+            row["joined_at"] = row["joined_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        members.append(row)
+    return members
+
+
+def add_course_membership(course_code: str, email: str,
+                           membership_role: str) -> dict[str, Any] | None:
+    """Enroll a user (by email) into a course by code. Returns None if the
+    course or user doesn't exist. Re-enrolling an existing member updates
+    their membership_role instead of erroring."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO course_memberships (user_id, course_id, membership_role)
+                SELECT u.id, c.id, %s
+                  FROM users u, courses c
+                 WHERE u.email = %s AND c.course_code = %s
+                ON CONFLICT (user_id, course_id)
+                DO UPDATE SET membership_role = EXCLUDED.membership_role, updated_at = NOW()
+                RETURNING user_id, course_id, membership_role
+                """,
+                (membership_role, email, course_code),
+            )
+            row = cur.fetchone()
+    return row
+
+
+def remove_course_membership(course_code: str, email: str) -> bool:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM course_memberships cm
+                 USING users u, courses c
+                 WHERE cm.user_id = u.id AND cm.course_id = c.id
+                   AND u.email = %s AND c.course_code = %s
+                """,
+                (email, course_code),
+            )
+            return cur.rowcount > 0
