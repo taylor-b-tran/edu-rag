@@ -81,6 +81,10 @@ class APIState:
     def rag_available(self) -> bool:
         return self._backend_mode == "chromadb"
 
+    @property
+    def db_available(self) -> bool:
+        return self._db_available
+
     def get_generator(self):
         if self._generator is None:
             try:
@@ -212,6 +216,36 @@ class APIState:
                 if course["course_id"] in enrolled or course.get("course_code") in enrolled:
                     return True
         return False
+
+    def list_courses(self) -> list[dict[str, Any]]:
+        """Courses for the subject selector — Postgres when available (T03),
+        else the fixture course list, in the same normalized shape."""
+        if self._db_available:
+            try:
+                from src.api import db
+                return [
+                    {
+                        "course_code": row["course_code"],
+                        "name": row["course_name"],
+                        "description": row.get("description"),
+                        "is_active": row.get("is_active", True),
+                    }
+                    for row in db.list_courses()
+                ]
+            except Exception as exc:
+                logger.warning(
+                    "Postgres course list failed (%s: %s); falling back to fixtures.",
+                    type(exc).__name__, exc,
+                )
+        return [
+            {
+                "course_code": course.get("course_code"),
+                "name": course.get("name"),
+                "description": course.get("description"),
+                "is_active": True,
+            }
+            for course in self.fixtures.get("courses", [])
+        ]
 
     def resolve_course(self, course_ref: str | None) -> tuple[str | None, str | None]:
         """Resolve a course code or UUID to (course_id_uuid, course_code).

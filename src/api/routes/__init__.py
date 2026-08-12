@@ -5,6 +5,7 @@ import os
 from flask import Flask
 
 from src.api.routes.auth import auth_bp
+from src.api.routes.courses import courses_bp
 from src.api.routes.documents import documents_bp
 from src.api.routes.health import health_bp
 from src.api.routes.query import query_bp
@@ -19,12 +20,13 @@ def register_routes(app: Flask) -> None:
     app.register_blueprint(query_bp)
     app.register_blueprint(documents_bp)
     app.register_blueprint(sessions_bp)
+    app.register_blueprint(courses_bp)
 
     @app.after_request
     def _cors(response):
         response.headers["Access-Control-Allow-Origin"] = _ALLOWED_ORIGIN
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         return response
 
     @app.route("/api/<path:_>", methods=["OPTIONS"])

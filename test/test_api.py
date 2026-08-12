@@ -1,5 +1,6 @@
 from __future__ import annotations
 import io
+import uuid
 from src.api.app import create_app
 
 def _client():
@@ -263,3 +264,107 @@ def test_sessions_returns_collection_after_query():
     sessions_response = c.get("/api/sessions", headers=_auth(token))
     assert sessions_response.status_code == 200
     assert len(sessions_response.get_json()["sessions"]) == 1
+
+
+# ─── Courses (Sprint 7, T03) ─────────────────────────────────────────
+#
+# Write endpoints require Postgres, which CI doesn't run as a service
+# (see .github/workflows/ci.yml) — so writes are asserted as either
+# succeeding (db available) or 503 (db unavailable), same graceful
+# degradation as the rest of the API.
+
+
+def test_courses_list_returns_401_without_token():
+    c = _client()
+    assert c.get("/api/courses").status_code == 401
+
+
+def test_courses_list_returns_known_course_codes():
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.get("/api/courses", headers=_auth(token))
+
+    assert response.status_code == 200
+    courses = response.get_json()["courses"]
+    codes = {course["course_code"] for course in courses}
+    assert {"CSIT321", "CSIT214"}.issubset(codes)
+
+
+def test_create_course_returns_401_without_token():
+    c = _client()
+    response = c.post("/api/courses", json={"course_code": "CSIT000", "course_name": "x"})
+    assert response.status_code == 401
+
+
+def test_create_course_returns_403_for_non_admin():
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.post(
+        "/api/courses",
+        json={"course_code": "CSIT000", "course_name": "x"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_course_admin_succeeds_or_db_unavailable():
+    c = _client()
+    token = _login(c, "admin@uow.edu.au", "admin123")
+    course_code = f"TEST{uuid.uuid4().hex[:6].upper()}"
+
+    response = c.post(
+        "/api/courses",
+        json={"course_code": course_code, "course_name": "Temporary Test Course"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code in (201, 503)
+    if response.status_code == 201:
+        assert response.get_json()["course"]["course_code"] == course_code
+
+
+def test_create_course_rejects_missing_fields():
+    c = _client()
+    token = _login(c, "admin@uow.edu.au", "admin123")
+
+    response = c.post("/api/courses", json={"course_code": "CSIT000"}, headers=_auth(token))
+
+    assert response.status_code == 400
+
+
+def test_course_members_returns_403_for_non_admin():
+    c = _client()
+    token = _login(c, "lecturer@uow.edu.au", "lecturer123")
+
+    response = c.get("/api/courses/CSIT321/members", headers=_auth(token))
+
+    assert response.status_code == 403
+
+
+def test_add_course_member_admin_succeeds_or_db_unavailable():
+    c = _client()
+    token = _login(c, "admin@uow.edu.au", "admin123")
+
+    response = c.post(
+        "/api/courses/CSIT321/members",
+        json={"email": "student@uow.edu.au", "membership_role": "student"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code in (201, 503)
+
+
+def test_add_course_member_rejects_invalid_role():
+    c = _client()
+    token = _login(c, "admin@uow.edu.au", "admin123")
+
+    response = c.post(
+        "/api/courses/CSIT321/members",
+        json={"email": "student@uow.edu.au", "membership_role": "admin"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 400

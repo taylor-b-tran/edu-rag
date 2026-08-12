@@ -27,6 +27,7 @@ def health():
                 "/api/documents",
                 "/api/sessions",
                 "/api/warmup",
+                "/api/courses",
             ],
         }
     )
@@ -37,7 +38,6 @@ def health():
 def metrics():
     state = _state()
     fixture_users = state.fixtures.get("demo_users", []) if state.fixture_loaded else []
-    courses = state.fixtures.get("courses", []) if state.fixture_loaded else []
     total_messages = sum(len(s.get("messages", [])) for s in state.sessions.values())
     return jsonify(
         {
@@ -47,7 +47,7 @@ def metrics():
             "sessions": len(state.sessions),
             "queries_total": total_messages,
             "users": len(fixture_users),
-            "courses": len(courses),
+            "courses": len(state.list_courses()),
             "mode": state.backend_mode,
             "warmup": getattr(state, "warmup_status", {"status": "unknown"}),
         }
