@@ -437,17 +437,21 @@ def _normalise_user_for_ui(user: dict) -> dict:
     return ui_user
 
 
+def _all_courses() -> list[dict]:
+    """Live courses from /api/courses (falls back to fixtures if the API
+    or Postgres is unavailable — see PaediaAPIClient.get_courses)."""
+    return api.get_courses()
+
+
 def _course_options_for_user(user: dict) -> list[str]:
-    courses = data.get("courses", []) if data else []
     enrolled = set(user.get("enrolled_courses", []) or [])
     role = str(user.get("role", "")).lower()
     options: list[str] = []
-    for course in courses:
-        code = course.get("course_code") or course.get("course_id")
-        course_id = course.get("course_id")
-        if not code:
+    for course in _all_courses():
+        code = course.get("course_code")
+        if not code or not course.get("is_active", True):
             continue
-        if role == "admin" or course_id in enrolled or code in enrolled:
+        if role == "admin" or code in enrolled:
             options.append(code)
     if not options:
         options = [c for c in COURSE_FALLBACKS if c]
@@ -460,12 +464,20 @@ def _default_course_for_user(user: dict) -> str:
 
 
 def _course_display_label(course_code: str) -> str:
-    courses = data.get("courses", []) if data else []
-    for course in courses:
+    for course in _all_courses():
         if course.get("course_code") == course_code:
             name = course.get("name")
             return f"{course_code} — {name}" if name else course_code
     return course_code
+
+
+def _refresh_course_options() -> None:
+    """Call after an admin creates/deactivates a course so the current
+    session's selector picks it up without needing to log out and back in."""
+    user = st.session_state.get("user")
+    if not user:
+        return
+    st.session_state.course_options = _course_options_for_user(user)
 
 
 def init_session_state():
@@ -1290,6 +1302,87 @@ def _render_document_table(student_view: bool = False):
 
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
 
+def render_course_management():
+    """T05 — Courses & enrollments, backed by /api/courses (Sprint 7 T03)."""
+    st.markdown("#### Courses & Enrollments")
+    st.caption("Live from /api/courses — create courses and manage who's enrolled.")
+
+    with st.expander("➕ Create a new course"):
+        with st.form("create_course_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            new_code = c1.text_input("Course code", placeholder="e.g. CSIT330")
+            new_name = c2.text_input("Course name", placeholder="e.g. Software Testing")
+            new_desc = st.text_area("Description (optional)", height=68)
+            if st.form_submit_button("Create course", type="primary"):
+                if not new_code.strip() or not new_name.strip():
+                    st.error("Course code and name are required.")
+                else:
+                    result = api.create_course(
+                        new_code.strip().upper(), new_name.strip(), new_desc.strip() or None
+                    )
+                    if result.get("success"):
+                        st.success(f"Created {new_code.strip().upper()}.")
+                        _refresh_course_options()
+                        st.rerun()
+                    else:
+                        st.error(result.get("error") or "Failed to create course.")
+
+    courses = _all_courses()
+    if not courses:
+        st.info("No courses yet, or the database backend is unavailable.")
+        return
+
+    for course in courses:
+        code = course.get("course_code", "?")
+        active = course.get("is_active", True)
+        status_icon = "🟢" if active else "⚪"
+        with st.expander(f"{status_icon} {code} — {course.get('name', '')}"):
+            st.caption(course.get("description") or "No description.")
+
+            members = api.get_course_members(code)
+            if members:
+                mcols = st.columns([3, 3, 2, 1])
+                for col, header in zip(mcols, ["User", "Email", "Role", ""]):
+                    col.markdown(f"**{header}**")
+                for m in members:
+                    mcols = st.columns([3, 3, 2, 1])
+                    mcols[0].write(m.get("username", "—"))
+                    mcols[1].write(m.get("email", "—"))
+                    mcols[2].write(str(m.get("membership_role", "—")).capitalize())
+                    if mcols[3].button("Remove", key=f"rm_{code}_{m.get('email')}"):
+                        result = api.remove_course_member(code, m.get("email", ""))
+                        if result.get("success"):
+                            st.rerun()
+                        else:
+                            st.error(result.get("error") or "Failed to remove member.")
+            else:
+                st.caption("No members enrolled yet.")
+
+            with st.form(f"add_member_form_{code}", clear_on_submit=True):
+                a1, a2, a3 = st.columns([3, 2, 1])
+                add_email = a1.text_input("Email", label_visibility="collapsed",
+                                          placeholder="email@example.com")
+                add_role = a2.selectbox("Role", ["student", "lecturer"], label_visibility="collapsed")
+                if a3.form_submit_button("Enroll"):
+                    if not add_email.strip():
+                        st.error("Email is required.")
+                    else:
+                        result = api.add_course_member(code, add_email.strip(), add_role)
+                        if result.get("success"):
+                            st.rerun()
+                        else:
+                            st.error(result.get("error") or "Failed to enroll member.")
+
+            if active:
+                if st.button("Deactivate course", key=f"deact_{code}"):
+                    result = api.deactivate_course(code)
+                    if result.get("success"):
+                        _refresh_course_options()
+                        st.rerun()
+                    else:
+                        st.error(result.get("error") or "Failed to deactivate course.")
+
+
 def render_admin_page():
     st.markdown("### ⚙️ Admin Dashboard")
     st.markdown("<span class='status-badge' style='background:#FEE2E2; color:#991B1B;'>Admin</span>", unsafe_allow_html=True)
@@ -1321,6 +1414,9 @@ def render_admin_page():
     else:
         st.caption(f"Live from /api/admin/stats · Ollama warm-up: {warmup_status}"
                    + (f" ({warmup.get('elapsed_ms')} ms)" if warmup.get("elapsed_ms") else ""))
+
+    st.divider()
+    render_course_management()
 
     st.divider()
     st.markdown("#### User Management")
