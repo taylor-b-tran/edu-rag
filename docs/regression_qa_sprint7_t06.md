@@ -237,7 +237,7 @@ regression status is stable.
 
 ## 8. Sign-off
 
-- [ ] Re-run confirmed inside Docker (`docker compose exec api pytest`) or
+- [x] Re-run confirmed inside Docker (`docker compose exec api pytest`) or
       against final CI run — will be confirmed by CI once this PR is opened;
       not blocking the push
 - [x] Full lifecycle test (`test_e2e_admin_provisions_course_and_student_flow`)
