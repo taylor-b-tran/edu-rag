@@ -1303,11 +1303,17 @@ def _render_document_table(student_view: bool = False):
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
 
 def render_course_management():
-    """T05 — Courses & enrollments, backed by /api/courses (Sprint 7 T03)."""
+    """T05 — Courses & enrollments, backed by /api/courses (Sprint 7 T03).
+
+    Uses st.container(border=True) instead of st.expander throughout — the
+    expander's arrow icon relies on a web font that doesn't load in some
+    environments and renders as literal overlapping text instead of a glyph.
+    """
     st.markdown("#### Courses & Enrollments")
     st.caption("Live from /api/courses — create courses and manage who's enrolled.")
 
-    with st.expander("➕ Create a new course"):
+    with st.container(border=True):
+        st.markdown("**➕ Create a new course**")
         with st.form("create_course_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             new_code = c1.text_input("Course code", placeholder="e.g. CSIT330")
@@ -1336,7 +1342,8 @@ def render_course_management():
         code = course.get("course_code", "?")
         active = course.get("is_active", True)
         status_icon = "🟢" if active else "⚪"
-        with st.expander(f"{status_icon} {code} — {course.get('name', '')}"):
+        with st.container(border=True):
+            st.markdown(f"**{status_icon} {code} — {course.get('name', '')}**")
             st.caption(course.get("description") or "No description.")
 
             members = api.get_course_members(code)
@@ -1420,7 +1427,11 @@ def render_admin_page():
 
     st.divider()
     st.markdown("#### User Management")
-    st.caption("Demo users are read from `fixtures/sample_responses.json`. Editing is not wired in Sprint 5.")
+    st.caption(
+        "Demo users are read from `fixtures/sample_responses.json` and this table is "
+        "still read-only. To enroll or remove someone from a course, use "
+        "**Courses & Enrollments** above."
+    )
 
     col1, col2 = st.columns([4, 2])
     with col1:
