@@ -171,6 +171,53 @@ class PaediaAPIClient:
                     time.sleep(0.5 * (attempt + 1))
         return None
 
+    def _patch(self, endpoint: str, payload: dict) -> Optional[dict]:
+        """Make a PATCH request to the Flask API. Returns None on failure."""
+        if not self._check_api() or not HAS_REQUESTS:
+            return None
+        try:
+            resp = requests.patch(
+                f"{self.config.base_url}{endpoint}",
+                json=payload,
+                headers=self._headers(),
+                timeout=self.config.timeout,
+            )
+            if resp.status_code >= 400:
+                try:
+                    error = resp.json()
+                except Exception:
+                    error = {"error": resp.text or resp.reason}
+                error["_api_error"] = True
+                error["status_code"] = resp.status_code
+                return error
+            return resp.json()
+        except Exception as e:
+            logger.warning("API PATCH %s failed: %s", endpoint, e)
+            return None
+
+    def _delete(self, endpoint: str) -> Optional[dict]:
+        """Make a DELETE request to the Flask API. Returns None on failure."""
+        if not self._check_api() or not HAS_REQUESTS:
+            return None
+        try:
+            resp = requests.delete(
+                f"{self.config.base_url}{endpoint}",
+                headers=self._headers(),
+                timeout=self.config.timeout,
+            )
+            if resp.status_code >= 400:
+                try:
+                    error = resp.json()
+                except Exception:
+                    error = {"error": resp.text or resp.reason}
+                error["_api_error"] = True
+                error["status_code"] = resp.status_code
+                return error
+            return resp.json()
+        except Exception as e:
+            logger.warning("API DELETE %s failed: %s", endpoint, e)
+            return None
+
     def _get(self, endpoint: str, params: Optional[dict] = None) -> Optional[dict]:
         """Make a GET request to the Flask API. Returns None on failure."""
         if not self._check_api():
@@ -487,3 +534,75 @@ class PaediaAPIClient:
         if self._fixtures:
             return self._fixtures.get("courses", [])
         return []
+
+    def create_course(self, course_code: str, course_name: str,
+                       description: Optional[str] = None) -> dict:
+        """
+        Create a course (admin only).
+
+        Live API: POST /api/courses
+        Returns: { "success": bool, "course": dict, "error": str|None }
+        """
+        result = self._post("/api/courses", {
+            "course_code": course_code,
+            "course_name": course_name,
+            "description": description,
+        })
+        if result and result.get("_api_error"):
+            return {"success": False, "course": {}, "error": result.get("error")}
+        if result and "course" in result:
+            return {"success": True, "course": result["course"], "error": None}
+        return {"success": False, "course": {}, "error": "Course management is unavailable right now."}
+
+    def deactivate_course(self, course_code: str) -> dict:
+        """
+        Deactivate a course (admin only, soft-delete).
+
+        Live API: DELETE /api/courses/<code>
+        """
+        result = self._delete(f"/api/courses/{course_code}")
+        if result and result.get("_api_error"):
+            return {"success": False, "error": result.get("error")}
+        if result and "course" in result:
+            return {"success": True, "course": result["course"], "error": None}
+        return {"success": False, "error": "Course management is unavailable right now."}
+
+    def get_course_members(self, course_code: str) -> list:
+        """
+        List a course's enrolled members (admin only).
+
+        Live API: GET /api/courses/<code>/members
+        """
+        result = self._get(f"/api/courses/{course_code}/members")
+        if result and "members" in result:
+            return result["members"]
+        return []
+
+    def add_course_member(self, course_code: str, email: str, membership_role: str) -> dict:
+        """
+        Enroll a user into a course by email (admin only).
+
+        Live API: POST /api/courses/<code>/members
+        """
+        result = self._post(f"/api/courses/{course_code}/members", {
+            "email": email,
+            "membership_role": membership_role,
+        })
+        if result and result.get("_api_error"):
+            return {"success": False, "error": result.get("error")}
+        if result and result.get("status") == "enrolled":
+            return {"success": True, "error": None}
+        return {"success": False, "error": "Course management is unavailable right now."}
+
+    def remove_course_member(self, course_code: str, email: str) -> dict:
+        """
+        Unenroll a user from a course (admin only).
+
+        Live API: DELETE /api/courses/<code>/members/<email>
+        """
+        result = self._delete(f"/api/courses/{course_code}/members/{email}")
+        if result and result.get("_api_error"):
+            return {"success": False, "error": result.get("error")}
+        if result and result.get("status") == "unenrolled":
+            return {"success": True, "error": None}
+        return {"success": False, "error": "Course management is unavailable right now."}
