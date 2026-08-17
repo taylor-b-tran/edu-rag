@@ -8,6 +8,10 @@ Sprint 5 updates:
   S5-T09: Fixed readability/contrast — all text visible, buttons readable
   S5-T10: Connected query flow to backend evidence — ChromaDB metadata, model info, error states
   S5-T11: Improved upload + history flow — timestamps, query state, session management
+
+Sprint 6 updates:
+  T05: Multi-subject selector — sidebar course dropdown, "My Courses" card page,
+       course-scoped chat header. All backed by real /api/courses endpoints.
 """
 
 import streamlit as st
@@ -708,8 +712,28 @@ def render_sidebar():
         st.caption("AI Course Assistant")
         st.divider()
 
+        # ── Course selector (T05) ──
+        st.markdown("**Active Course**")
+        course_opts = st.session_state.get("course_options") or COURSE_FALLBACKS
+        current_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+        sel_idx = course_opts.index(current_cid) if current_cid in course_opts else 0
+        new_cid = st.selectbox(
+            "Course", course_opts, index=sel_idx,
+            format_func=_course_display_label,
+            label_visibility="collapsed", key="sidebar_course_select",
+        )
+        if new_cid != current_cid:
+            st.session_state.course_id = new_cid
+            st.session_state.selected_course_id = new_cid
+            st.rerun()
+
+        # Show doc count for selected course
+        sel_docs = api.get_documents(new_cid)
+        st.caption(f"📄 {len(sel_docs)} docs indexed for {new_cid}")
+        st.divider()
+
         # Navigation buttons
-        pages = {"chat": ("💬", "Q&A Chat"), "history": ("📋", "Session History")}
+        pages = {"chat": ("💬", "Q&A Chat"), "courses": ("📚", "My Courses"), "history": ("📋", "Session History")}
         if role in ("Lecturer", "Admin"):
             pages["doc_manager"] = ("📁", "Document Manager")
         else:
@@ -873,9 +897,12 @@ def _send_message(text: str, append_user: bool = True):
 def render_chat_page():
     session = get_active_session()
 
+    active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+
     col1, col2, col3, col4 = st.columns([5, 3, 2, 2])
     with col1:
         st.markdown("### 💬 Ask your course materials")
+        st.caption(f"Querying **{_course_display_label(active_cid)}**")
     with col2:
         current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
         live_docs = api.get_documents(current_course)
@@ -1302,6 +1329,69 @@ def _render_document_table(student_view: bool = False):
 
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
 
+def render_courses_page():
+    """T05 — Card-based course browser, backed by real /api/courses data."""
+    st.markdown("### 📚 My Courses")
+    st.caption("Select a course to scope your Q&A queries, uploads, and document retrieval.")
+
+    user = st.session_state.get("user") or {}
+    role = user.get("role", "Student")
+    active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    courses = _all_courses()
+
+    if not courses:
+        st.info("No courses available — the backend may be offline.")
+        return
+
+    # Filter to enrolled courses for students, show all for admins
+    user_options = set(_course_options_for_user(user))
+    visible = [c for c in courses if c.get("course_code") in user_options]
+    if not visible:
+        visible = courses  # fallback: show everything
+
+    cols = st.columns(2, gap="medium")
+    for idx, course in enumerate(visible):
+        code = course.get("course_code", "?")
+        is_active = code == active_cid
+        with cols[idx % 2]:
+            border_style = "border-left: 4px solid #0D9488;" if is_active else "border-left: 4px solid #E2E8F0;"
+            bg = "#F0FDFA" if is_active else "#FFFFFF"
+            with st.container(border=True):
+                st.markdown(
+                    f"<div style='{border_style} padding-left: 12px; background: {bg}; border-radius: 4px;'>"
+                    f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{'✅ ' if is_active else ''}{code}</span><br/>"
+                    f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
+                    f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                # Course stats from API
+                members = api.get_course_members(code) if role == "Admin" else []
+                docs = api.get_documents(code)
+                stats_parts = [f"📄 {len(docs)} docs"]
+                if members:
+                    stats_parts.append(f"👥 {len(members)} members")
+                active_label = "🟢 Active" if course.get("is_active", True) else "⚪ Inactive"
+                stats_parts.append(active_label)
+                st.caption(" · ".join(stats_parts))
+
+                if is_active:
+                    st.button("✓ Active Course", key=f"sel_{code}", type="primary",
+                              use_container_width=True, disabled=True)
+                else:
+                    if st.button(f"Switch to {code}", key=f"sel_{code}", use_container_width=True):
+                        st.session_state.course_id = code
+                        st.session_state.selected_course_id = code
+                        st.rerun()
+
+    st.divider()
+    st.info(
+        f"All queries and uploads are currently scoped to **{active_cid} — "
+        f"{_course_display_label(active_cid)}**. "
+        "ChromaDB retrieval uses `course_id` filtering so only documents from this course are searched."
+    )
+
+
 def render_course_management():
     """T05 — Courses & enrollments, backed by /api/courses (Sprint 7 T03).
 
@@ -1530,6 +1620,8 @@ def main():
 
     if page == "chat":
         render_chat_page()
+    elif page == "courses":
+        render_courses_page()
     elif page == "history":
         render_history_page()
     elif page == "uploads":
