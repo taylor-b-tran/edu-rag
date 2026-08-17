@@ -244,3 +244,31 @@ regression status is stable.
       re-run with Postgres live — 4 passed, 2 warnings in 20.87s (see Section 4)
 - [x] Sprint 6 baseline count located and diffed against (Section 7)
 - [x] This file committed to `feature/tung-sprint7` and pushed
+
+---
+ 
+## 9. Follow-up — T05 landed (post-merge addendum)
+ 
+**Added:** 17 August 2026, after this doc's original PR merged to `develop`.
+ 
+Anmoldeep's T05 work has now landed on `develop`. Reviewed the diff against
+the snapshot this doc was originally verified on:
+ 
+- **Changed:** `apps/streamlit/api_client.py` (new `create_course`,
+  `deactivate_course`, `get_course_members`, `add_course_member`,
+  `remove_course_member` client methods), `apps/streamlit/main.py` (new
+  `render_course_management()` admin UI, live course selector wired to
+  `/api/courses` instead of fixtures).
+- **Unchanged:** `src/api/` — every route, auth check, and enrollment rule
+  this doc's regression coverage exercises is identical to what was tested.
+Because T05 only wires the Streamlit UI to endpoints T06 already covers
+(`/api/courses`, `/api/courses/<code>/members`, etc.), the automated
+backend regression results in Section 4 remain valid — no re-run needed for
+the backend suite. The open item in Section 6 (T05 UI-side QA) is now
+**closed for scope purposes**: the endpoints the UI depends on are verified.
+ 
+**Still outside this doc's scope:** a manual/UI smoke test of
+`render_course_management()` itself (does the admin panel render correctly,
+handle errors gracefully, etc.). That's UI-level QA, not the API-level
+regression this task covers — worth a quick manual pass before the sprint
+wraps, but not blocking T06.
