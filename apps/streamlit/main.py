@@ -854,6 +854,7 @@ def _send_message(text: str, append_user: bool = True):
         "confidence_score": response.get("confidence_score"),
         "model_used": response.get("model_used", "ollama/llama3"),
         "token_count": response.get("token_count", 0),
+        "latency_ms": response.get("latency_ms"),
         "is_fallback": response.get("is_fallback", False),
         "from_api": response.get("from_api", False),
         "backend_mode": response.get("backend_mode"),
@@ -1001,6 +1002,8 @@ def render_chat_page():
                     model_badge = get_model_badge(model_used)
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
                     api_indicator = " · 🟢 Live API" if msg.get("from_api") else ""
+                    latency_ms = msg.get("latency_ms")
+                    latency_indicator = f" · ⏱️ {latency_ms / 1000:.1f}s" if isinstance(latency_ms, (int, float)) else ""
 
                     html_content = (
                         f'<div class="clearfix"><div class="{msg_class}">'
@@ -1009,7 +1012,7 @@ def render_chat_page():
                         f'<div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>'
                         f'</div>'
                         f'<div class="confidence-text">'
-                        f'{conf_label}: {conf_pct}% · {model_badge} · {timestamp_str}{api_indicator}'
+                        f'{conf_label}: {conf_pct}% · {model_badge}{latency_indicator} · {timestamp_str}{api_indicator}'
                         f'</div>'
                         f'</div></div>'
                     )
