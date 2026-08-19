@@ -10,6 +10,17 @@ def _state():
     return current_app.config["EDURAG_API_STATE"]
 
 
+def _require_admin():
+    """Gate the operational endpoints. /api/health stays open because the
+    container healthcheck calls it unauthenticated."""
+    user = _state().validate_bearer(request.headers.get("Authorization"))
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+    if user.get("role") != "admin":
+        return jsonify({"error": "Admin role required."}), 403
+    return None
+
+
 @health_bp.get("/health")
 def health():
     state = _state()
@@ -36,6 +47,9 @@ def health():
 @health_bp.get("/admin/stats")
 @health_bp.get("/metrics")
 def metrics():
+    err = _require_admin()
+    if err:
+        return err
     state = _state()
     fixture_users = state.fixtures.get("demo_users", []) if state.fixture_loaded else []
     total_messages = sum(len(s.get("messages", [])) for s in state.sessions.values())
@@ -57,6 +71,9 @@ def metrics():
 @health_bp.get("/admin/audit-logs")
 @health_bp.get("/logs")
 def logs():
+    err = _require_admin()
+    if err:
+        return err
     return jsonify({"logs": [], "mode": _state().backend_mode})
 
 
