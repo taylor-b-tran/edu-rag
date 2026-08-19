@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import time
 import uuid
@@ -11,6 +12,16 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _fixture_auth_allowed() -> bool:
+    """Whether the demo accounts in fixtures/ may be used to log in.
+
+    Off unless explicitly enabled, so the committed passwords cannot become a
+    way in on a deployed instance. Tests and offline development set
+    PAEDIA_ALLOW_FIXTURE_AUTH=1.
+    """
+    return os.environ.get("PAEDIA_ALLOW_FIXTURE_AUTH", "").strip().lower() in {"1", "true", "yes"}
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = REPO_ROOT / "fixtures" / "sample_responses.json"
@@ -142,16 +153,35 @@ class APIState:
         return None
 
     def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
+        """Authenticate against Postgres when it is available, fixtures otherwise.
+
+        The two are never both consulted for the same login. Postgres returning
+        None means the password was wrong, and that answer is final - previously
+        it fell through to _authenticate_via_fixture, so the plaintext demo
+        passwords committed in fixtures/sample_responses.json kept working as an
+        admin login no matter what the database said.
+        """
         if self._db_available:
             try:
-                pg_user = self._authenticate_via_postgres(email, password)
-                if pg_user is not None:
-                    return pg_user
+                return self._authenticate_via_postgres(email, password)
             except Exception as exc:
-                logger.warning(
-                    "Postgres auth lookup failed for %s (%s: %s); falling back to fixtures.",
+                # The database is the credential store. If it errors we refuse the
+                # login rather than reaching for the committed demo passwords,
+                # which would let anyone who can disrupt Postgres log in as admin.
+                logger.error(
+                    "Postgres auth failed for %s (%s: %s); refusing the login.",
                     email, type(exc).__name__, exc,
                 )
+                return None
+
+        if not _fixture_auth_allowed():
+            logger.error(
+                "No database is configured and fixture auth is disabled; refusing "
+                "the login for %s. Set PAEDIA_ALLOW_FIXTURE_AUTH=1 only for tests "
+                "and offline development.",
+                email,
+            )
+            return None
         return self._authenticate_via_fixture(email, password)
 
     def _authenticate_via_postgres(self, email: str, password: str) -> dict[str, Any] | None:
@@ -178,7 +208,9 @@ class APIState:
         if not user:
             return None
         stored = user.get("password")
-        if stored and stored != password:
+        # A fixture entry with no password used to authenticate against anything,
+        # because the comparison was skipped when `stored` was falsy.
+        if not stored or not secrets.compare_digest(str(stored), password):
             return None
         return user
 
@@ -198,11 +230,15 @@ class APIState:
                         "role": record["role"],
                         "enrolled_courses": db.get_enrolled_course_codes(record["user_id"]),
                     }
+                return None
             except Exception as exc:
-                logger.warning(
-                    "Postgres lookup failed for %s during refresh (%s: %s); falling back to fixtures.",
+                logger.error(
+                    "Postgres lookup failed for %s during refresh (%s: %s); refusing.",
                     email, type(exc).__name__, exc,
                 )
+                return None
+        if not _fixture_auth_allowed():
+            return None
         return self.find_demo_user(email)
 
     def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
