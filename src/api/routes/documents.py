@@ -46,6 +46,28 @@ def _require_auth():
     return user, None
 
 
+def _find_document(doc_id: str):
+    """Locate a document by either of the two id fields it is stored under."""
+    for document in _state().list_documents():
+        if document.get("document_id") == doc_id or document.get("id") == doc_id:
+            return document
+    return None
+
+
+def _document_course(document: dict) -> str:
+    return document.get("course_id") or document.get("course_code") or ""
+
+
+def _may_see_document(user: dict, document: dict) -> bool:
+    """Whether this user is allowed to know the document exists.
+
+    Enrollment is the test, and admins pass it for every course. Callers turn a
+    False into a 404 rather than a 403: a 403 confirms the id is real, which
+    lets anyone walk the id space and learn what other courses hold.
+    """
+    return _state().is_enrolled(user, _document_course(document))
+
+
 def _bg_index_document(file_path: Path, course_id: str, document_id: str, job_id: str, state):
     try:
         state.update_job(job_id, status="processing", progress_percent=10)
@@ -205,10 +227,14 @@ def get_document(doc_id: str):
     user, err = _require_auth()
     if err:
         return err
-    for document in _state().list_documents():
-        if document.get("document_id") == doc_id or document.get("id") == doc_id:
-            return jsonify(document)
-    return jsonify({"error": "document not found"}), 404
+    document = _find_document(doc_id)
+    if document is None:
+        return jsonify({"error": "document not found"}), 404
+    if not _may_see_document(user, document):
+        logger.warning("User %s requested document %s from unauthorised course %s",
+                       user.get("user_id"), doc_id, _document_course(document))
+        return jsonify({"error": "document not found"}), 404
+    return jsonify(document)
 
 
 @documents_bp.delete("/document/<doc_id>")
@@ -224,6 +250,15 @@ def delete_document(doc_id: str):
         if doc.get("document_id") == doc_id or doc.get("id") == doc_id:
             target_doc = doc
             break
+
+    # Holding the lecturer role is not enough. Without this, any lecturer could
+    # delete any other lecturer's material in any course - and deletion also
+    # removes the document's chunks from ChromaDB, so it is not recoverable
+    # from the UI.
+    if target_doc is not None and not _state().is_enrolled(user, _document_course(target_doc)):
+        logger.warning("User %s attempted to delete document %s in unauthorised course %s",
+                       user.get("user_id"), doc_id, _document_course(target_doc))
+        return jsonify({"error": "document not found"}), 404
 
     if target_doc:
         filename = target_doc.get("filename")
@@ -254,5 +289,13 @@ def get_indexing_job(job_id: str):
         return err
     job = _state().indexing_jobs.get(job_id)
     if not job:
+        return jsonify({"error": "indexing job not found"}), 404
+
+    # A job carries the document it belongs to, and its `error` field can quote
+    # server-side file paths, so it is gated on the same enrollment test.
+    document = _find_document(job.get("document_id") or "")
+    if document is not None and not _may_see_document(user, document):
+        logger.warning("User %s requested indexing job %s for unauthorised course %s",
+                       user.get("user_id"), job_id, _document_course(document))
         return jsonify({"error": "indexing job not found"}), 404
     return jsonify(job)
