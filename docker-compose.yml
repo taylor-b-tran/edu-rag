@@ -139,12 +139,16 @@ services:
     image: chromadb/chroma@sha256:607103123fbd79794e3cd8029e16137031a464551e3a61df77191627a9d23c72
     environment:
       IS_PERSISTENT: "TRUE"
+      # This image persists to /data, not the /chroma/chroma path used by
+      # older chromadb releases. Stated explicitly so the volume mount below
+      # can never silently drift away from where the data actually lands.
+      PERSIST_DIRECTORY: /data
       CHROMA_SERVER_HTTP_PORT: 8000
       ALLOW_RESET: "TRUE"
     ports:
       - "${CHROMA_PORT:-8000}:8000"
     volumes:
-      - chromadb_data:/chroma/chroma
+      - chromadb_data:/data
     networks:
       - edurag-net
 
