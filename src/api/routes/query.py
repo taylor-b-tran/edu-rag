@@ -28,15 +28,30 @@ def _state():
     return current_app.config["EDURAG_API_STATE"]
 
 
-def _check_rate(ip: str) -> bool:
+def _check_rate(key: str) -> bool:
+    """Rate-limit one caller.
+
+    The key is the authenticated user id, not the client address. Streamlit
+    calls this API server-side, so every student's request arrives from the
+    same container IP - keying on the address made the limit one bucket shared
+    by the whole class, where the eleventh question in a minute from anyone at
+    all was rejected.
+    """
     now = time.time()
     window_start = now - _RATE_WINDOW
-    timestamps = [t for t in _RATE_STORE.get(ip, []) if t > window_start]
+
+    # Drop callers whose window has fully expired. Without this the store grows
+    # for the life of the process, one entry per key ever seen.
+    for stale in [k for k, ts in _RATE_STORE.items() if not ts or ts[-1] <= window_start]:
+        if stale != key:
+            del _RATE_STORE[stale]
+
+    timestamps = [t for t in _RATE_STORE.get(key, []) if t > window_start]
     if len(timestamps) >= _RATE_MAX:
-        _RATE_STORE[ip] = timestamps
+        _RATE_STORE[key] = timestamps
         return False
     timestamps.append(now)
-    _RATE_STORE[ip] = timestamps
+    _RATE_STORE[key] = timestamps
     return True
 
 
@@ -51,14 +66,18 @@ def _is_ambiguous(question: str) -> bool:
 @query_bp.post("/query")
 def query():
     state = _state()
-    ip = request.remote_addr or "unknown"
-    if not _check_rate(ip):
-        logger.warning("Rate limit exceeded for IP %s", ip)
-        return jsonify({"error": "Too many requests. Limit is 10 per minute."}), 429
 
+    # Authenticate before rate-limiting: the limit is per user, so we need to
+    # know who is asking. An unauthenticated request is rejected below without
+    # reaching retrieval or the model, so nothing expensive runs first.
     user = state.validate_bearer(request.headers.get("Authorization"))
     if user is None:
         return jsonify({"error": "Authentication required."}), 401
+
+    rate_key = str(user.get("user_id") or user.get("email") or "unknown")
+    if not _check_rate(rate_key):
+        logger.warning("Rate limit exceeded for user %s", rate_key)
+        return jsonify({"error": "Too many requests. Limit is 10 per minute."}), 429
 
     try:
         body = request.get_json(force=False, silent=False)

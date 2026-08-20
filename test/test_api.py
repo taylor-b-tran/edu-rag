@@ -204,7 +204,11 @@ def test_upload_queues_document_when_lecturer_authenticated():
 
     assert response.status_code == 202
     body = response.get_json()
-    assert body["document"]["filename"] == "demo.pdf"
+    # Stored under a unique name so two uploads of demo.pdf cannot collide;
+    # the uploader's own name is kept separately and is what the UI shows.
+    assert body["document"]["original_filename"] == "demo.pdf"
+    assert body["document"]["filename"].startswith("demo-")
+    assert body["document"]["filename"].endswith(".pdf")
     assert body["indexing_job"]["status"] == "queued"
 
 

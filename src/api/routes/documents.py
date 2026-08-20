@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import uuid as _uuid
 from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
@@ -137,21 +138,39 @@ def upload_document():
                        user.get("user_id"), course_id)
         return jsonify({"error": "Not allowed to upload to this course."}), 403
 
-    # Ensure secure filename and write content
-    filename = secure_filename(uploaded_file.filename or "uploaded_document")
+    # Only accept what the chunker can actually read. Anything else would be
+    # written to disk and then fail in the background job with "no extractable
+    # text", which tells the uploader nothing useful.
+    from src.document_processor.chunker import SUPPORTED_EXTENSIONS
+
+    original_filename = uploaded_file.filename or "uploaded_document"
+    safe_name = secure_filename(original_filename) or "uploaded_document"
+    extension = Path(safe_name).suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        return jsonify({
+            "error": "unsupported file type",
+            "message": f"Only {', '.join(sorted(SUPPORTED_EXTENSIONS))} files can be indexed.",
+        }), 400
+
+    # Store under a unique name. Two lecturers uploading week1.pdf used to
+    # overwrite each other on disk, and because ChromaDB chunks are keyed on
+    # source_file, deleting either document removed both sets of chunks.
+    stored_name = f"{Path(safe_name).stem}-{_uuid.uuid4().hex[:8]}{extension}"
     upload_dir = _upload_dir()
     upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / filename
+    file_path = upload_dir / stored_name
 
-    data = uploaded_file.read()
-    with open(file_path, "wb") as f:
-        f.write(data)
+    # save() streams from the request to disk. The previous read() pulled the
+    # whole file into memory first.
+    uploaded_file.save(file_path)
+    file_size = file_path.stat().st_size
 
     import copy
     result = _state().queue_upload(
-        filename=filename,
-        file_size=len(data),
+        filename=stored_name,
+        file_size=file_size,
         course_id=course_id,
+        original_filename=original_filename,
     )
     response_payload = copy.deepcopy(result)
 
@@ -162,8 +181,9 @@ def upload_document():
     )
     t.start()
 
-    logger.info("User %s uploaded %s to course %s (indexing job %s started)",
-                user.get("user_id"), filename, course_id, result["job_id"])
+    logger.info("User %s uploaded %s (stored as %s) to course %s (indexing job %s started)",
+                user.get("user_id"), original_filename, stored_name, course_id,
+                result["job_id"])
     return jsonify(response_payload), 202
 
 
