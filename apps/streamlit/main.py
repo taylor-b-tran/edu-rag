@@ -765,7 +765,7 @@ def render_sidebar():
         course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
         docs = api.get_documents(course_id)
         for doc in docs[:5]:
-            doc_name = doc.get("filename", doc.get("name", "Unknown"))
+            doc_name = doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown"
             status = str(doc.get("status", "pending")).lower()
             status_color = "#10B981" if status in ("indexed", "completed") else ("#F59E0B" if status == "processing" else "#EF4444")
             st.markdown(
@@ -1276,7 +1276,7 @@ def _render_document_table(student_view: bool = False):
 
     for doc in docs:
         doc_id = doc.get("document_id") or doc.get("id") or "unknown"
-        doc_name = doc.get("filename") or doc.get("original_filename") or "Unknown"
+        doc_name = doc.get("original_filename") or doc.get("filename") or "Unknown"
         doc_type = doc.get("file_type") or doc_name.rsplit(".", 1)[-1] if "." in doc_name else "unknown"
         doc_type = str(doc_type).upper()
         if "/" in doc_type:

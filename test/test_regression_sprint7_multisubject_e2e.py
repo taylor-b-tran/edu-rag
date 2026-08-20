@@ -175,7 +175,9 @@ def test_e2e_admin_provisions_course_and_student_flow():
     docs_resp = c.get(f"/api/documents?course_id={course_code}", headers=_auth(student_token))
     assert docs_resp.status_code == 200
     docs = docs_resp.get_json()["documents"]
-    assert any(d.get("filename") == "t06_regression.pdf" for d in docs)
+    # Uploads are stored under a unique name; original_filename is the
+    # name the uploader gave, which is what a human recognises.
+    assert any(d.get("original_filename") == "t06_regression.pdf" for d in docs)
     # No cross-course leakage: nothing from the two demo courses should appear
     leaked = [d for d in docs if d.get("course_id") not in (course_code, None) and
               d.get("course_code") not in (course_code, None)]

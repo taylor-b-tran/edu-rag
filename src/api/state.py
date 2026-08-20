@@ -378,7 +378,15 @@ class APIState:
             ]
         return documents
 
-    def queue_upload(self, filename: str, file_size: int, course_id: str) -> dict[str, Any]:
+    def queue_upload(self, filename: str, file_size: int, course_id: str,
+                     original_filename: str | None = None) -> dict[str, Any]:
+        """Record an upload.
+
+        `filename` is the name the file was stored under on disk, which is made
+        unique per upload so two people uploading week1.pdf cannot overwrite
+        each other. `original_filename` is what the uploader called it, and is
+        what the UI shows. They differ by a short suffix.
+        """
         document_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
         extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
@@ -389,7 +397,7 @@ class APIState:
             "course_id": code_form or course_id,
             "course_code": code_form or course_id,
             "course_uuid": uuid_form,
-            "original_filename": filename,
+            "original_filename": original_filename or filename,
             "filename": filename,
             "file_type": extension,
             "file_size_bytes": file_size,

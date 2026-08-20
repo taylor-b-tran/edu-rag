@@ -10,6 +10,11 @@ from src.api.state import APIState
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    # Cap the request body. Without this, an upload of any size was read whole
+    # into memory, so a single request could exhaust the container. Flask
+    # rejects anything larger with 413 before the view runs.
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.environ.get("PAEDIA_MAX_UPLOAD_MB", "50")) * 1024 * 1024
     app.config["EDURAG_API_STATE"] = APIState()
     register_routes(app)
     return app
