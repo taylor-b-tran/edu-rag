@@ -24,12 +24,14 @@ def _require_admin():
 @health_bp.get("/health")
 def health():
     state = _state()
+    from src.document_processor.ingest_corpus import embedder_status
     return jsonify(
         {
             "status": "ok",
             "mode": state.backend_mode,
             "rag_available": state.rag_available,
             "fixture_loaded": state.fixture_loaded,
+            "embedder": embedder_status(),
             "warmup": getattr(state, "warmup_status", {"status": "unknown"}),
             "routes": [
                 "/api/auth/login",

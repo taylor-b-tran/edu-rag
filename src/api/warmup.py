@@ -22,6 +22,14 @@ def _ollama_model() -> str:
         or "qwen3:14b"
     )
 
+# Check whether Ollama thinking mode is enabled.
+def _ollama_think() -> bool:
+    return os.environ.get("OLLAMA_THINK", "false").strip().lower() in {"1", "true", "yes"}
+
+# Get how long Ollama should keep the model loaded.
+def _ollama_keep_alive() -> str:
+    return os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
+
 
 def warmup_ollama(
     host: str | None = None,
@@ -81,6 +89,8 @@ def warmup_ollama(
                 "model": model,
                 "prompt": "ping",
                 "stream": False,
+                "think": _ollama_think(),
+                "keep_alive": _ollama_keep_alive(),
                 "options": {"num_predict": 4, "temperature": 0.0},
             },
             timeout=generate_timeout,
