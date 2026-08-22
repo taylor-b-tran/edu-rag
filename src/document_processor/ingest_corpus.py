@@ -2,42 +2,72 @@ import os, time
 # chromadb imported lazily inside get_chroma_client() — CI has no chromadb installed
 from src.document_processor.seed_documents import SEED_DOCUMENTS
 
-# ── ChromaDB connection ──
+# ChromaDB connection
 CHROMA_HOST = os.getenv("CHROMA_HOST", "")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_data")
  
-# ── Collection / course config ──
+# Collection / course config 
 COLLECTION  = "csit321_course"
-COURSE_ID   = "CSIT321"
+COURSE_ID = "CSIT321"
  
-# ── Threshold ──
+# Threshold 
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.35"))   
-DISTANCE_THRESHOLD   = float(os.getenv("DISTANCE_THRESHOLD",   "0.65")) 
+DISTANCE_THRESHOLD = float(os.getenv("DISTANCE_THRESHOLD",   "0.65")) 
+
+EMBEDDER_CACHE_DIR = os.getenv("EMBEDDER_CACHE_DIR", "./models/embedder_cache")
+_EMBEDDER_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
+
+_embedder_status: dict = {"status": "not_loaded"}
+
+
+def _embedder_already_cached() -> bool:
+    """True if the model's snapshot folder already exists under
+    EMBEDDER_CACHE_DIR, i.e. a previous run already downloaded it."""
+    safe_name = "models--" + _EMBEDDER_MODEL_ID.replace("/", "--")
+    model_dir = os.path.join(EMBEDDER_CACHE_DIR, safe_name)
+    return os.path.isdir(model_dir) and any(os.scandir(model_dir))
+
+
+def embedder_status() -> dict:
+    """Read-only snapshot of which embedder is loaded, for /api/health."""
+    return dict(_embedder_status)
+
 
 def _load_embedder():
     if os.getenv("EDURAG_OFFLINE_EMBEDDER"):
         from src.document_processor.offline_embedder import OfflineEmbedder
         model = OfflineEmbedder()
+        _embedder_status.update(status="offline_fallback", model_name=model.MODEL_NAME, reason="EDURAG_OFFLINE_EMBEDDER set", cached=False)
         return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+
+        cached = _embedder_already_cached()
+        if cached:
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+        model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder=EMBEDDER_CACHE_DIR)
         try:
             dim = model.get_embedding_dimension()
         except AttributeError:
             dim = model.get_sentence_embedding_dimension()
-        print(f"  [INFO] Using SentenceTransformer all-MiniLM-L6-v2 (dim={dim})")
+        print(f"[INFO] Using SentenceTransformer all-MiniLM-L6-v2 (dim={dim}, "
+              f"cache={EMBEDDER_CACHE_DIR}, was_cached={cached})")
+        _embedder_status.update(status="ok", model_name="all-MiniLM-L6-v2", dim=dim, cache_dir=EMBEDDER_CACHE_DIR, cached=cached)
         return model, "all-MiniLM-L6-v2", dim
     except Exception as exc:
         print(
             f"WARNING: SentenceTransformer unavailable ({type(exc).__name__})\n"
-            f" Falling back to OfflineEmbedder (FNV-1a hash, dim=384).\n"
-            f" Retrieval quality will be significantly lower.\n"
-            f" Install sentence-transformers to restore full quality.\n"
+            f"Falling back to OfflineEmbedder (FNV-1a hash, dim=384).\n"
+            f"Retrieval quality will be significantly lower.\n"
+            f"Install sentence-transformers to restore full quality.\n"
         )
         from src.document_processor.offline_embedder import OfflineEmbedder
         model = OfflineEmbedder()
+        _embedder_status.update(status="offline_fallback", model_name=model.MODEL_NAME,
+                                 reason=f"{type(exc).__name__}: {exc}", cached=False)
         return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
 
 def get_chroma_client():
@@ -71,24 +101,23 @@ def ingest(force_reload: bool = False) -> dict:
             pass
 
     collection = get_or_create_collection(client)
-    print(f"  ChromaDB target : {CHROMA_HOST + ':' + str(CHROMA_PORT) if CHROMA_HOST else CHROMA_PATH}")
-    print(f"  Collection      : {COLLECTION}")
-    print(f"  Course ID       : {COURSE_ID}")
-    print(f"  Seed documents  : {len(SEED_DOCUMENTS)}")
-    print(f"  Existing chunks : {collection.count()}")
-    print(f"  Sim threshold   : {SIMILARITY_THRESHOLD}  (distance equiv: {DISTANCE_THRESHOLD})")
+    print(f"ChromaDB target : {CHROMA_HOST + ':' + str(CHROMA_PORT) if CHROMA_HOST else CHROMA_PATH}")
+    print(f"Collection      : {COLLECTION}")
+    print(f"Course ID       : {COURSE_ID}")
+    print(f"Seed documents  : {len(SEED_DOCUMENTS)}")
+    print(f"Existing chunks : {collection.count()}")
+    print(f"Sim threshold   : {SIMILARITY_THRESHOLD}  (distance equiv: {DISTANCE_THRESHOLD})")
     print()
 
     model, model_name, dim = _load_embedder()
-    print(f"  Embedding model : {model_name}  dim={dim}\n")
+    print(f"Embedding model : {model_name}  dim={dim}\n")
 
     ids, texts, embeddings, metadatas, errors = [], [], [], [], []
     t0 = time.time()
 
-    # Batch-encode all seed documents in a single model.encode() call instead of
-    # one call per document. SentenceTransformer amortises tokenisation and
-    # forward-pass overhead across the batch, which is significantly faster
-    # than a per-document loop for a corpus this size (T09, Sprint 6).
+    # Batch-encode all seed documents in a single model.encode() call instead of one call per document
+    # SentenceTransformer amortises tokenisation and forward-pass overhead across the batch, which is significantly faster
+    # than a per-document loop for a corpus this size.
     doc_texts = [doc["text"] for doc in SEED_DOCUMENTS]
     try:
         batch_embeddings = model.encode(doc_texts, normalize_embeddings=True)
@@ -112,7 +141,7 @@ def ingest(force_reload: bool = False) -> dict:
                 "topic"      : doc["topic"],
                 "week"       : doc["week"],
             })
-            print(f"  [OK] {doc['doc_id']}")
+            print(f"[OK] {doc['doc_id']}")
 
     if ids:
         collection.upsert(

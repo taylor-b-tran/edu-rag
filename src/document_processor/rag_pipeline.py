@@ -18,6 +18,9 @@ OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
 OLLAMA_TOP_P = float(os.getenv("OLLAMA_TOP_P", "0.9"))
 OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "220"))
 
+OLLAMA_THINK = os.getenv("OLLAMA_THINK", "false").strip().lower() in {"1", "true", "yes"}
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+
 @dataclass
 class RetrievedChunk:
     chunk_id: str; text: str; source_file: str
@@ -70,8 +73,7 @@ class LLMResponseGeneration:
     """Builds a prompt from retrieved chunks and asks Ollama to answer."""
     def __init__(self, retriever=None, strategy=None):
         self._retriever = retriever or VectorRetriever()
-        # Which prompt version this instance uses (lets the benchmark script
-        # compare strategies without touching env vars)
+        # Which prompt version this instance uses (lets the benchmark script compare strategies without touching env vars)
         self.strategy = strategy or PROMPT_STRATEGY
 
     def _build_prompt(self, query, chunks, history=None):
@@ -110,7 +112,6 @@ class LLMResponseGeneration:
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
                 f"[STUDENT QUESTION]\n{query}\n\n[PAEDIA ANSWER]")
 
-    # New default: rules block + forces [S1], [S2]... citations so answers can be checked against real sources instead of free text
     def _build_prompt_evidence_cited(self, query, chunks, history=None):
         sys_instr = (
             "You are Paedia, a course-material-grounded assistant for CSIT321 at UOW.\n\n"
@@ -171,6 +172,8 @@ class LLMResponseGeneration:
             resp = requests.post(
                 f"{OLLAMA_HOST}/api/generate",
                 json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
+                      "think": OLLAMA_THINK,
+                      "keep_alive": OLLAMA_KEEP_ALIVE,
                       "options": {"temperature": OLLAMA_TEMPERATURE,
                                   "top_p": OLLAMA_TOP_P,
                                   "num_predict": OLLAMA_NUM_PREDICT}},
