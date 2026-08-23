@@ -556,7 +556,9 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      # Opaque server-side tokens, not JWTs. The server holds them, which is
+      # what makes logout revoke immediately; a stateless JWT could not.
+      bearerFormat: opaque
 
   parameters:
     CourseIdQuery:
