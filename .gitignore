@@ -17,3 +17,8 @@ ci_pytest_raw_*.txt
 
 # Assessment rubrics from UOW — keep local only, never push to repo.
 docs/A3_Marking-*.pdf
+
+# Embedding model cache, downloaded at runtime (T8-16). Roughly 88 MB of
+# HuggingFace blobs and symlinks - it belongs on the machine, not in the repo,
+# and one `git add -A` would otherwise pull all of it in.
+models/

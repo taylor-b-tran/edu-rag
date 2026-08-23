@@ -14,6 +14,16 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# Opaque tokens, held server-side rather than self-describing JWTs. That is a
+# deliberate choice, not an accident of history: because the server holds them,
+# logout genuinely revokes and an account can be cut off immediately, which a
+# stateless JWT cannot do without a denylist. api_spec.yaml used to advertise
+# JWT and has been corrected. T8-24 moves this store into Postgres, which suits
+# opaque tokens and would fight a stateless design.
+ACCESS_TOKEN_TTL_SECONDS = int(os.environ.get("PAEDIA_ACCESS_TOKEN_TTL", "3600"))
+REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("PAEDIA_REFRESH_TOKEN_TTL", str(14 * 24 * 3600)))
+
+
 def _fixture_auth_allowed() -> bool:
     """Whether the demo accounts in fixtures/ may be used to log in.
 
@@ -113,6 +123,7 @@ class APIState:
     def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
         access_token = f"dev_access_{secrets.token_urlsafe(24)}"
         refresh_token = f"dev_refresh_{secrets.token_urlsafe(24)}"
+        now = time.time()
         payload = {
             "user_id": user.get("user_id") or user.get("id"),
             "email": user.get("email"),
@@ -120,13 +131,15 @@ class APIState:
             "enrolled_courses": user.get("enrolled_courses", []),
             "issued_at": _utc_now(),
         }
-        self.access_tokens[access_token] = payload
-        self.refresh_tokens[refresh_token] = payload
+        # expires_in was reported to clients but never enforced, so every token
+        # ever issued stayed valid for the life of the process.
+        self.access_tokens[access_token] = {**payload, "expires_at": now + ACCESS_TOKEN_TTL_SECONDS}
+        self.refresh_tokens[refresh_token] = {**payload, "expires_at": now + REFRESH_TOKEN_TTL_SECONDS}
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
-            "expires_in": 3600,
+            "expires_in": ACCESS_TOKEN_TTL_SECONDS,
             "user": {
                 "id": payload["user_id"],
                 "name": user.get("name") or user.get("username") or user.get("email"),
@@ -143,7 +156,32 @@ class APIState:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             return None
-        return self.access_tokens.get(token)
+        return self._live_token(self.access_tokens, token)
+
+    @staticmethod
+    def _live_token(store: dict[str, Any], token: str) -> dict[str, Any] | None:
+        """Return the token's payload, or None if it is unknown or expired.
+
+        An expired entry is dropped on the way out so the store does not keep
+        growing with tokens nobody can use.
+        """
+        payload = store.get(token)
+        if payload is None:
+            return None
+        expires_at = payload.get("expires_at")
+        if expires_at is not None and time.time() >= expires_at:
+            store.pop(token, None)
+            return None
+        return payload
+
+    def consume_refresh_token(self, token: str | None) -> dict[str, Any] | None:
+        """Validate a refresh token and retire it, so each one is used once."""
+        if not token:
+            return None
+        payload = self._live_token(self.refresh_tokens, token)
+        if payload is not None:
+            self.refresh_tokens.pop(token, None)
+        return payload
 
     def find_demo_user(self, email: str) -> dict[str, Any] | None:
         users = self.fixtures.get("demo_users", [])

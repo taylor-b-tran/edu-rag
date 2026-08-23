@@ -117,9 +117,11 @@ def refresh():
     except Exception:
         return jsonify({"error": "invalid JSON body"}), 400
     refresh_token = body.get("refresh_token")
-    token_state = _state().refresh_tokens.get(refresh_token)
+    # Retires the token as it is read, so a captured refresh token cannot be
+    # replayed after the legitimate holder has already used it.
+    token_state = _state().consume_refresh_token(refresh_token)
     if not token_state:
-        return jsonify({"error": "invalid refresh token"}), 401
+        return jsonify({"error": "invalid or expired refresh token"}), 401
 
     user = _state().find_user_any_source(token_state.get("email", ""))
     if not user:
