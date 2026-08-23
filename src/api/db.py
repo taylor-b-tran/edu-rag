@@ -365,6 +365,43 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
     }
 
 
+def create_user(username: str, email: str, role: str,
+                password: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Create an account.
+
+    Returns (user, None) on success, or (None, reason) where reason is
+    "email" or "username" if that field is already taken. The uniqueness is
+    enforced by the table, not by the check below - the lookup afterwards only
+    exists to say which field collided, so two simultaneous signups still
+    cannot both succeed.
+    """
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO users (username, email, role, password_hash)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                RETURNING id, username, email, role
+                """,
+                (username, email, role, password_hash),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                return {
+                    "user_id": str(row["id"]),
+                    "username": row["username"],
+                    "email": row["email"],
+                    "role": row["role"],
+                    "enrolled_courses": [],
+                }, None
+
+            cur.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+            taken = "email" if cur.fetchone() else "username"
+    return None, taken
+
+
 def get_enrolled_course_codes(user_id: str) -> list[str]:
     """Course codes (e.g. "CSIT321"), not Postgres UUIDs — the rest of the
     system (resolve_course, course-scoped retrieval) already keys off codes

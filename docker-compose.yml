@@ -21,6 +21,19 @@ services:
       OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-llama3.2}
       DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Browser origin allowed to call this API directly. Streamlit talks to it
+      # server-side so the UI does not depend on this, but anything calling the
+      # API from a browser does. Defaults to the local Streamlit port.
+      PAEDIA_ALLOWED_ORIGIN: ${PAEDIA_ALLOWED_ORIGIN:-http://localhost:8501}
+      # Generation settings. These were only readable inside the container, so
+      # tuning them meant editing the image rather than .env (T8-17).
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-220}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.2}
+      OLLAMA_TOP_P: ${OLLAMA_TOP_P:-0.9}
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      TOP_K: ${TOP_K:-5}
+      PROMPT_STRATEGY: ${PROMPT_STRATEGY:-evidence_cited}
       PYTHONPATH: /workspace
     depends_on:
       postgres:
