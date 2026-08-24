@@ -115,10 +115,26 @@ CREATE INDEX IF NOT EXISTS idx_course_memberships_course_id ON course_membership
 
 # Same three demo accounts the fixture file has always used, now with a
 # distinct real bcrypt hash per password instead of one shared placeholder.
+# Demo account passwords come from the environment. They used to be literals
+# here, printed on the login screen and listed in the README, which made every
+# one of them public knowledge - including the admin. The fallbacks keep a
+# local checkout usable; any instance more than one person can reach must set
+# these in its own .env.
+def _demo_password(env_key: str, fallback: str) -> tuple[str, bool]:
+    """Return (password, came_from_env). Only an explicitly configured password
+    is written over an existing account - otherwise every restart would reset
+    whatever the instance had been changed to."""
+    value = (os.environ.get(env_key) or "").strip()
+    return (value, True) if value else (fallback, False)
+
+
 _DEMO_USERS = [
-    ("admin_demo", "admin@uow.edu.au", "admin", "admin123"),
-    ("lecturer_demo", "lecturer@uow.edu.au", "lecturer", "lecturer123"),
-    ("student_demo", "student@uow.edu.au", "student", "student123"),
+    ("admin_demo", "admin@uow.edu.au", "admin",
+     *_demo_password("PAEDIA_DEMO_ADMIN_PASSWORD", "admin123")),
+    ("lecturer_demo", "lecturer@uow.edu.au", "lecturer",
+     *_demo_password("PAEDIA_DEMO_LECTURER_PASSWORD", "lecturer123")),
+    ("student_demo", "student@uow.edu.au", "student",
+     *_demo_password("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")),
 ]
 _DEMO_COURSES = [
     ("CSIT321", "Project"),
@@ -129,15 +145,19 @@ _DEMO_COURSES = [
 def _seed_demo_auth_data() -> None:
     with connect() as conn:
         with conn.cursor() as cur:
-            for username, email, role, password in _DEMO_USERS:
+            for username, email, role, password, from_env in _DEMO_USERS:
                 password_hash = bcrypt.hashpw(
                     password.encode("utf-8"), bcrypt.gensalt()
                 ).decode("utf-8")
+                conflict = (
+                    "DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()"
+                    if from_env else "DO NOTHING"
+                )
                 cur.execute(
-                    """
+                    f"""
                     INSERT INTO users (username, email, role, password_hash)
                     VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (email) DO NOTHING
+                    ON CONFLICT (email) {conflict}
                     """,
                     (username, email, role, password_hash),
                 )

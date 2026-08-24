@@ -25,6 +25,12 @@ services:
       # server-side so the UI does not depend on this, but anything calling the
       # API from a browser does. Defaults to the local Streamlit port.
       PAEDIA_ALLOWED_ORIGIN: ${PAEDIA_ALLOWED_ORIGIN:-http://localhost:8501}
+      # Demo account passwords, seeded into Postgres on startup. Empty means
+      # db.py falls back to its published defaults - fine locally, not on a
+      # shared host.
+      PAEDIA_DEMO_ADMIN_PASSWORD: ${PAEDIA_DEMO_ADMIN_PASSWORD:-}
+      PAEDIA_DEMO_LECTURER_PASSWORD: ${PAEDIA_DEMO_LECTURER_PASSWORD:-}
+      PAEDIA_DEMO_STUDENT_PASSWORD: ${PAEDIA_DEMO_STUDENT_PASSWORD:-}
       # Generation settings. These were only readable inside the container, so
       # tuning them meant editing the image rather than .env (T8-17).
       OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-220}

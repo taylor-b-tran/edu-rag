@@ -640,7 +640,7 @@ def handle_login_submit() -> None:
             st.session_state.login_error = None
             create_new_session("Welcome Chat")
         else:
-            st.session_state.login_error = "Invalid email or password. Try student@uow.edu.au / student123"
+            st.session_state.login_error = "Invalid email or password."
     else:
         st.session_state.login_error = login_result.get("error") or "Invalid email or password."
 
@@ -692,12 +692,12 @@ def render_login_page():
         st.markdown("---")
         st.caption("CSIT321 Project 37 · Group 19 — Aletheia's Zetetes")
 
+        # The demo credentials used to be printed here. On an instance the team
+        # can reach, that hands an admin login to anyone who opens the page.
         st.markdown("""
         <div style="background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 16px; margin-top: 16px; font-size: 0.82rem; color: #475569;">
-            <strong style="color: #1E293B;">Demo accounts:</strong><br>
-            <span style="color: #334155;">Student:</span> student@uow.edu.au / student123<br>
-            <span style="color: #334155;">Lecturer:</span> lecturer@uow.edu.au / lecturer123<br>
-            <span style="color: #334155;">Admin:</span> admin@uow.edu.au / admin123
+            Ask your lecturer or the team lead for an account, or sign up if
+            self-registration is open.
         </div>
         """, unsafe_allow_html=True)
 
