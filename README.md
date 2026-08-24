@@ -405,7 +405,7 @@ All four should return 200. The `/api/health` response includes a `warmup` block
 ### 9.2 End-to-end smoke test (browser)
 
 1. Open <http://localhost:8501> in any modern browser.
-2. Sign in as **`student@uow.edu.au`** / **`student123`** (see [§10](#10-demo-credentials)).
+2. Sign in as **`student@uow.edu.au`** — password from your `.env` (see [§10](#10-demo-credentials)).
 3. In the chat box, ask: **"What is Retrieval-Augmented Generation?"**
 4. Expected: an answer that cites `Week1_RAG_Introduction.pdf p.1` (or similar), `Confidence: High`, latency 5–15 s on GPU.
 
@@ -413,7 +413,7 @@ If the answer comes back as a generic "I am Paedia, I help with…" boilerplate,
 
 ### 9.3 End-to-end upload flow (browser)
 
-1. Sign out, sign in as **`lecturer@uow.edu.au`** / **`lecturer123`**.
+1. Sign out, sign in as **`lecturer@uow.edu.au`** — password from your `.env`.
 2. Navigate to **Document Manager** in the sidebar.
 3. Course selector: pick **CSIT321 – Project**.
 4. Drop in any small PDF (try a 1–3 page handout to keep indexing fast).
@@ -430,9 +430,15 @@ These users live in `fixtures/sample_responses.json`. Auth is in-memory — see 
 
 | Email | Password | Role | Enrolled courses |
 |---|---|---|---|
-| `student@uow.edu.au` | `student123` | Student | CSIT214, CSIT321 |
-| `lecturer@uow.edu.au` | `lecturer123` | Lecturer | CSIT214, CSIT321 |
-| `admin@uow.edu.au` | `admin123` | Admin | All (bypasses enrollment check) |
+| `student@uow.edu.au` | `PAEDIA_DEMO_STUDENT_PASSWORD` | Student | CSIT214, CSIT321 |
+| `lecturer@uow.edu.au` | `PAEDIA_DEMO_LECTURER_PASSWORD` | Lecturer | CSIT214, CSIT321 |
+| `admin@uow.edu.au` | `PAEDIA_DEMO_ADMIN_PASSWORD` | Admin | All (bypasses enrollment check) |
+
+**Passwords are no longer written down here.** They come from the three
+variables above, set in your own gitignored `.env`. Leave them empty and
+`src/api/db.py` falls back to the old published values — acceptable for a
+checkout only you can reach, never for an instance anyone else can open. On the
+shared host they are set to generated values; ask the team lead for them.
 
 **Wrong password returns 401.** **Logout invalidates the token** — subsequent API calls return 401 until you log back in.
 
@@ -927,9 +933,9 @@ python scripts/check_demo_ready.py                                       # confi
 
 Then in a browser:
 
-1. Open <http://localhost:8501>, sign in as `student@uow.edu.au` / `student123` (full list in [§10](#10-demo-credentials)).
+1. Open <http://localhost:8501>, sign in as `student@uow.edu.au` (passwords in [§10](#10-demo-credentials)).
 2. Ask: *"What is Retrieval-Augmented Generation?"* — expect an answer citing `Week1_RAG_Introduction.pdf`, confidence label, and model name shown in the response footer.
-3. Sign out, sign in as `lecturer@uow.edu.au` / `lecturer123`, open **Document Manager**, upload a short PDF, watch it go `queued → processing → indexed`.
+3. Sign out, sign in as `lecturer@uow.edu.au`, open **Document Manager**, upload a short PDF, watch it go `queued → processing → indexed`.
 4. Ask a question that depends on that file — the citation should point at your filename.
 
 If any of this doesn't work, [§12 Troubleshooting](#12-troubleshooting) covers the common failure modes.

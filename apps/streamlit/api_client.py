@@ -305,7 +305,18 @@ class PaediaAPIClient:
                 "status_code": result.get("status_code"),
             }
 
-        return {"success": False, "user": {}, "error": None, "use_demo_auth": True}
+        # The API did not answer at all. Offering the built-in demo credentials
+        # here means that whenever the API is down, the passwords published in
+        # this repo let someone into the UI - the same shape of hole that was
+        # closed on the server in T8-27. Only offer it when fixture mode is
+        # explicitly on.
+        if self.config.use_fixtures:
+            return {"success": False, "user": {}, "error": None, "use_demo_auth": True}
+        return {
+            "success": False,
+            "user": {},
+            "error": "Cannot reach the server. Try again in a moment.",
+        }
 
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
         """
