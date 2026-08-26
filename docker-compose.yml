@@ -40,6 +40,12 @@ services:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       TOP_K: ${TOP_K:-5}
       PROMPT_STRATEGY: ${PROMPT_STRATEGY:-evidence_cited}
+      # The all-MiniLM-L6-v2 cache under models/ is complete, so never reach
+      # for the Hub at startup. A transient network blip there makes
+      # sentence-transformers fall back to the FNV-1a hash embedder for the
+      # life of the process: the corpus stays embedded with the real model,
+      # queries are not, retrieval collapses, and /api/health still says ok.
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
       PYTHONPATH: /workspace
     depends_on:
       postgres:
@@ -142,7 +148,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-edurag}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edurag_dev_password}
     ports:
-      - "${PAEDIA_BIND_ADDR:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+      # Nothing outside this host needs the database: api and streamlit reach
+      # it over the compose network. Kept off PAEDIA_BIND_ADDR so putting the
+      # UI on the tailnet does not put Postgres there too.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
