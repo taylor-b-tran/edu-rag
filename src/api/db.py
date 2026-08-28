@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
 import bcrypt
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool, PoolTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +24,54 @@ def _conninfo() -> str:
         f"password={os.environ.get('POSTGRES_PASSWORD', 'edurag_dev_password')}"
     )
 
+_POOL: ConnectionPool | None = None
+
+_pg_last_failure: float = 0.0
+_PG_CIRCUIT_COOLDOWN = float(os.environ.get("POSTGRES_CIRCUIT_COOLDOWN", "20"))
+
+
+def _pool() -> ConnectionPool:
+    global _POOL
+    if _POOL is None:
+        min_size = int(os.environ.get("POSTGRES_POOL_MIN_SIZE", "2"))
+        max_size = int(os.environ.get("POSTGRES_POOL_MAX_SIZE", "10"))
+        
+        acquire_timeout = float(os.environ.get("POSTGRES_POOL_TIMEOUT", "3"))
+        _POOL = ConnectionPool(
+            conninfo=_conninfo(),
+            min_size=min_size,
+            max_size=max_size,
+            timeout=acquire_timeout,
+            kwargs={"row_factory": dict_row, "autocommit": True},
+            open=True,
+        )
+        logger.info("Postgres connection pool opened (min=%d, max=%d, timeout=%.1fs).",
+                    min_size, max_size, acquire_timeout)
+    return _POOL
+
+
+class PostgresCircuitOpenError(RuntimeError):
+    """Raised instead of re-probing the pool while the circuit breaker is
+    open. Behaves like any other connection failure to existing callers —
+    everything that catches Exception around connect() (APIState, db.init_schema)
+    already handles this the same way it handled a real connection error."""
+
 
 @contextmanager
 def connect() -> Iterator[psycopg.Connection]:
-    conn = psycopg.connect(_conninfo(), row_factory=dict_row, autocommit=True)
+    global _pg_last_failure
+    if _pg_last_failure and (time.monotonic() - _pg_last_failure) < _PG_CIRCUIT_COOLDOWN:
+        raise PostgresCircuitOpenError(
+            f"Postgres marked unreachable {round(time.monotonic() - _pg_last_failure, 1)}s ago; "
+            f"not retrying for another {round(_PG_CIRCUIT_COOLDOWN - (time.monotonic() - _pg_last_failure), 1)}s."
+        )
     try:
-        yield conn
-    finally:
-        conn.close()
+        with _pool().connection() as conn:
+            _pg_last_failure = 0.0
+            yield conn
+    except (PoolTimeout, psycopg.OperationalError):
+        _pg_last_failure = time.monotonic()
+        raise
 
 
 SCHEMA = """
@@ -113,6 +155,66 @@ CREATE INDEX IF NOT EXISTS idx_course_memberships_user_id ON course_memberships(
 CREATE INDEX IF NOT EXISTS idx_course_memberships_course_id ON course_memberships(course_id);
 """
 
+# T8-24: tokens, chat sessions/messages, and rate-limit hits were all
+# in-memory dicts on APIState (access_tokens, refresh_tokens, sessions) or a
+# module-level dict in routes/query.py (_RATE_STORE). Every one of those was
+# lost on restart — a routine gunicorn worker recycle (T8-23) or a
+# deployment would silently log the whole class out and forget every open
+# chat. Moving them to Postgres, the same store everything else already
+# survives a restart in, fixes that.
+SESSION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS access_tokens (
+    token             TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL,
+    email             TEXT,
+    role              TEXT,
+    enrolled_courses  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    issued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    token             TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL,
+    email             TEXT,
+    role              TEXT,
+    enrolled_courses  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    issued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id  TEXT PRIMARY KEY,
+    user_id     TEXT,
+    course_id   TEXT,
+    archived    BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id  TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
+    question    TEXT,
+    answer      TEXT,
+    sources     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS chat_messages_session_idx ON chat_messages(session_id);
+
+-- One row per request that counted toward the caller's rate limit. Old rows
+-- are pruned in check_and_record_rate() rather than by a cron job — simplest
+-- thing that works at class-sized traffic.
+CREATE TABLE IF NOT EXISTS rate_limit_hits (
+    id        BIGSERIAL PRIMARY KEY,
+    rate_key  TEXT NOT NULL,
+    hit_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS rate_limit_hits_key_idx ON rate_limit_hits (rate_key, hit_at);
+"""
+
 # Same three demo accounts the fixture file has always used, now with a
 # distinct real bcrypt hash per password instead of one shared placeholder.
 # Demo account passwords come from the environment. They used to be literals
@@ -191,10 +293,12 @@ def init_schema() -> None:
             with conn.cursor() as cur:
                 cur.execute(SCHEMA)
                 cur.execute(AUTH_SCHEMA)
+                cur.execute(SESSION_SCHEMA)
         _seed_demo_auth_data()
         logger.info(
             "Postgres schema initialised (uploaded_documents, indexing_jobs, "
-            "users, courses, course_memberships)."
+            "users, courses, course_memberships, access_tokens, refresh_tokens, "
+            "chat_sessions, chat_messages, rate_limit_hits)."
         )
     except Exception as exc:
         logger.warning(
@@ -604,3 +708,191 @@ def remove_course_membership(course_code: str, email: str) -> bool:
                 (email, course_code),
             )
             return cur.rowcount > 0
+
+
+# ─── Tokens, sessions, rate limits (Sprint 8, T8-24) ────────────────────
+
+def _insert_token(table: str, token: str, payload: dict[str, Any],
+                   expires_in_seconds: int) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {table}
+                  (token, user_id, email, role, enrolled_courses, expires_at)
+                VALUES (%s, %s, %s, %s, %s, NOW() + %s * INTERVAL '1 second')
+                ON CONFLICT (token) DO NOTHING
+                """,
+                (
+                    token,
+                    str(payload.get("user_id")),
+                    payload.get("email"),
+                    payload.get("role"),
+                    json.dumps(payload.get("enrolled_courses", [])),
+                    expires_in_seconds,
+                ),
+            )
+
+
+def insert_access_token(token: str, payload: dict[str, Any],
+                         expires_in_seconds: int = 3600) -> None:
+    _insert_token("access_tokens", token, payload, expires_in_seconds)
+
+
+def insert_refresh_token(token: str, payload: dict[str, Any],
+                          expires_in_seconds: int = 60 * 60 * 24 * 30) -> None:
+    _insert_token("refresh_tokens", token, payload, expires_in_seconds)
+
+
+def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT token, user_id, email, role, enrolled_courses, issued_at "
+                f"FROM {table}"
+            )
+            rows = cur.fetchall()
+    tokens: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        token = row.pop("token")
+        row["enrolled_courses"] = row.get("enrolled_courses") or []
+        if row.get("issued_at") is not None:
+            row["issued_at"] = row["issued_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        tokens[token] = row
+    return tokens
+
+
+def load_all_access_tokens() -> dict[str, dict[str, Any]]:
+    return _load_all_tokens("access_tokens")
+
+
+def load_all_refresh_tokens() -> dict[str, dict[str, Any]]:
+    return _load_all_tokens("refresh_tokens")
+
+
+def upsert_chat_session(session_id: str, user_id: str | None,
+                         course_id: str | None) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chat_sessions (session_id, user_id, course_id)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (session_id)
+                DO UPDATE SET updated_at = NOW()
+                """,
+                (session_id, user_id, course_id),
+            )
+
+
+def insert_chat_message(session_id: str, message: dict[str, Any]) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chat_messages
+                  (message_id, session_id, question, answer, sources)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (message_id) DO NOTHING
+                """,
+                (
+                    message.get("message_id"),
+                    session_id,
+                    message.get("question"),
+                    message.get("answer"),
+                    json.dumps(message.get("sources", [])),
+                ),
+            )
+
+
+def archive_chat_session(session_id: str) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE chat_sessions SET archived = TRUE, updated_at = NOW() "
+                "WHERE session_id = %s",
+                (session_id,),
+            )
+
+
+def load_all_sessions() -> dict[str, dict[str, Any]]:
+    """Returns the same shape APIState.sessions already used in memory:
+    {session_id: {session_id, user_id, course_id, created_at, updated_at,
+                  messages: [...]}}
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_id, user_id, course_id, archived,
+                       created_at, updated_at
+                  FROM chat_sessions
+                """
+            )
+            session_rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT message_id, session_id, question, answer, sources, created_at
+                  FROM chat_messages
+                 ORDER BY created_at ASC
+                """
+            )
+            message_rows = cur.fetchall()
+
+    sessions: dict[str, dict[str, Any]] = {}
+    for row in session_rows:
+        sid = row["session_id"]
+        sessions[sid] = {
+            "session_id": sid,
+            "user_id": row.get("user_id"),
+            "course_id": row.get("course_id"),
+            "archived": row.get("archived", False),
+            "created_at": row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                if row.get("created_at") else None,
+            "updated_at": row["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                if row.get("updated_at") else None,
+            "messages": [],
+        }
+    for row in message_rows:
+        sid = row["session_id"]
+        if sid not in sessions:
+            continue
+        sessions[sid]["messages"].append({
+            "message_id": row["message_id"],
+            "question": row.get("question", ""),
+            "answer": row.get("answer", ""),
+            "sources": row.get("sources") or [],
+            "created_at": row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                if row.get("created_at") else None,
+        })
+    return sessions
+
+
+def check_and_record_rate(rate_key: str, window_seconds: int, max_hits: int) -> bool:
+    """Atomically: prune hits older than the window, count what's left, and
+    — only if under the limit — record this hit. Returns True if the caller
+    is allowed through, False if they're over the limit.
+
+    Pruning inline (rather than a separate cleanup job) keeps this a single
+    round trip and means the table never grows past what a small class
+    produces in one rate-limit window.
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM rate_limit_hits "
+                "WHERE rate_key = %s AND hit_at <= NOW() - %s * INTERVAL '1 second'",
+                (rate_key, window_seconds),
+            )
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM rate_limit_hits WHERE rate_key = %s",
+                (rate_key,),
+            )
+            count = cur.fetchone()["n"]
+            if count >= max_hits:
+                return False
+            cur.execute(
+                "INSERT INTO rate_limit_hits (rate_key) VALUES (%s)",
+                (rate_key,),
+            )
+            return True

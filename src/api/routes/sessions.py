@@ -52,5 +52,5 @@ def archive_session(session_id: str):
         return jsonify({"error": "session not found"}), 404
     if session.get("user_id") != user.get("user_id"):
         return jsonify({"error": "Access denied."}), 403
-    session["archived"] = True
+    _state().archive_session(session_id)
     return jsonify({"status": "success", "session_id": session_id})

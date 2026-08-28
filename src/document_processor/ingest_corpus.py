@@ -20,6 +20,18 @@ _EMBEDDER_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 
 _embedder_status: dict = {"status": "not_loaded"}
 
+# T8-31: the actual (model, name, dim) tuple, cached after first load so
+# every caller in this process shares one instance. See _load_embedder().
+_embedder_singleton = None
+
+
+def reset_embedder_cache_for_tests() -> None:
+    """Test-only: clears the in-process singleton so a test can force a
+    fresh _load_embedder() call (e.g. to switch between the real model and
+    EDURAG_OFFLINE_EMBEDDER within the same process)."""
+    global _embedder_singleton
+    _embedder_singleton = None
+
 
 def _embedder_already_cached() -> bool:
     """True if the model's snapshot folder already exists under
@@ -35,11 +47,16 @@ def embedder_status() -> dict:
 
 
 def _load_embedder():
+    global _embedder_singleton
+    if _embedder_singleton is not None:
+        return _embedder_singleton
+
     if os.getenv("EDURAG_OFFLINE_EMBEDDER"):
         from src.document_processor.offline_embedder import OfflineEmbedder
         model = OfflineEmbedder()
         _embedder_status.update(status="offline_fallback", model_name=model.MODEL_NAME, reason="EDURAG_OFFLINE_EMBEDDER set", cached=False)
-        return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
+        _embedder_singleton = (model, model.MODEL_NAME, model.get_sentence_embedding_dimension())
+        return _embedder_singleton
     try:
         from sentence_transformers import SentenceTransformer
 
@@ -56,7 +73,8 @@ def _load_embedder():
         print(f"[INFO] Using SentenceTransformer all-MiniLM-L6-v2 (dim={dim}, "
               f"cache={EMBEDDER_CACHE_DIR}, was_cached={cached})")
         _embedder_status.update(status="ok", model_name="all-MiniLM-L6-v2", dim=dim, cache_dir=EMBEDDER_CACHE_DIR, cached=cached)
-        return model, "all-MiniLM-L6-v2", dim
+        _embedder_singleton = (model, "all-MiniLM-L6-v2", dim)
+        return _embedder_singleton
     except Exception as exc:
         print(
             f"WARNING: SentenceTransformer unavailable ({type(exc).__name__})\n"
@@ -68,7 +86,8 @@ def _load_embedder():
         model = OfflineEmbedder()
         _embedder_status.update(status="offline_fallback", model_name=model.MODEL_NAME,
                                  reason=f"{type(exc).__name__}: {exc}", cached=False)
-        return model, model.MODEL_NAME, model.get_sentence_embedding_dimension()
+        _embedder_singleton = (model, model.MODEL_NAME, model.get_sentence_embedding_dimension())
+        return _embedder_singleton
 
 def get_chroma_client():
     import chromadb                        # lazy import
