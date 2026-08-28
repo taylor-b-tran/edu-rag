@@ -7,8 +7,15 @@ CHROMA_HOST = os.getenv("CHROMA_HOST", "")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_data")
  
-# Collection / course config 
-COLLECTION  = "csit321_course"
+# Collection / course config
+# T8-13 (Sprint 8): renamed from "csit321_course" now that the corpus holds
+# four subjects (CSIT321, CSIT214, CSCI369, MATH202). On a shared
+# host this rename means the old collection is orphaned, so `ingest --force`
+# (or POST /api/ingest with force=true) must be re-run once after upgrading 
+COLLECTION  = "edurag_course"
+# Default course_id used only as a fallback for legacy seed entries that
+# don't specify their own "course_id", and as the default course_id for
+# VectorRetriever.search()/generate() when the caller doesn't pass one.
 COURSE_ID = "CSIT321"
  
 # Threshold 
@@ -120,9 +127,10 @@ def ingest(force_reload: bool = False) -> dict:
             pass
 
     collection = get_or_create_collection(client)
+    course_ids = sorted({doc.get("course_id", COURSE_ID) for doc in SEED_DOCUMENTS})
     print(f"ChromaDB target : {CHROMA_HOST + ':' + str(CHROMA_PORT) if CHROMA_HOST else CHROMA_PATH}")
     print(f"Collection      : {COLLECTION}")
-    print(f"Course ID       : {COURSE_ID}")
+    print(f"Courses seeded  : {', '.join(course_ids)}")
     print(f"Seed documents  : {len(SEED_DOCUMENTS)}")
     print(f"Existing chunks : {collection.count()}")
     print(f"Sim threshold   : {SIMILARITY_THRESHOLD}  (distance equiv: {DISTANCE_THRESHOLD})")
@@ -154,7 +162,7 @@ def ingest(force_reload: bool = False) -> dict:
             texts.append(doc["text"])
             embeddings.append(emb)
             metadatas.append({
-                "course_id"  : COURSE_ID,
+                "course_id"  : doc.get("course_id", COURSE_ID),
                 "source_file": doc["source_file"],
                 "page_number": doc["page_number"],
                 "topic"      : doc["topic"],
@@ -173,33 +181,51 @@ def ingest(force_reload: bool = False) -> dict:
     print(f"\n  [OK] Upserted {len(ids)} chunks  ({elapsed:.1f}s)")
     print(f"  [OK] Collection total: {final_count} chunks")
 
-    # Smoke-test
-    print("\n  [TEST] Smoke-test: 'What is RAG?' ...")
-    q_emb = model.encode("What is RAG?", normalize_embeddings=True)
-    if hasattr(q_emb, "tolist"):
-        q_emb = q_emb.tolist()
-    result = collection.query(
-        query_embeddings=[q_emb], n_results=1,
-        where={"course_id": {"$eq": COURSE_ID}},
-        include=["documents", "distances", "metadatas"],
-    )
-
-    if result["documents"][0]:
-        dist = result["distances"][0][0]
-        meta = result["metadatas"][0][0]
-        sim  = max(0.0, 1.0 - dist)
-        print(f"  [TEST] Best match : {meta['source_file']} p.{meta['page_number']}")
-        print(f"  [TEST] Similarity : {sim:.4f}  Distance: {dist:.4f}  Topic: {meta['topic']}")
-        status = "PASSED" if sim >= SIMILARITY_THRESHOLD else "WARN – below threshold"
-        print(f"  [TEST] {status}")
-    else:
-        print("  [WARN] No results returned.")
+    # Smoke-test: one query per seeded course, to confirm the course_id
+    # metadata filter actually separates each subject's chunks rather than
+    # every chunk silently landing under the default COURSE_ID.
+    smoke_queries = {
+        "CSIT321": "What is RAG?",
+        "CSIT214": "What is a work breakdown structure?",
+        "CSCI369": "What is ARP poisoning?",
+        "MATH202": "How do you solve a first-order linear differential equation?",
+    }
+    per_course_counts = {
+        cid: sum(1 for doc in SEED_DOCUMENTS if doc.get("course_id", COURSE_ID) == cid)
+        for cid in course_ids
+    }
+    smoke_results = {}
+    for cid in course_ids:
+        query_text = smoke_queries.get(cid, "What does this course cover?")
+        print(f"\n  [TEST] Smoke-test [{cid}]: '{query_text}' ...")
+        q_emb = model.encode(query_text, normalize_embeddings=True)
+        if hasattr(q_emb, "tolist"):
+            q_emb = q_emb.tolist()
+        result = collection.query(
+            query_embeddings=[q_emb], n_results=1,
+            where={"course_id": {"$eq": cid}},
+            include=["documents", "distances", "metadatas"],
+        )
+        if result["documents"][0]:
+            dist = result["distances"][0][0]
+            meta = result["metadatas"][0][0]
+            sim  = max(0.0, 1.0 - dist)
+            status = "PASSED" if sim >= SIMILARITY_THRESHOLD else "WARN - below threshold"
+            print(f"  [TEST] Best match : {meta['source_file']} p.{meta['page_number']}")
+            print(f"  [TEST] Similarity : {sim:.4f}  Distance: {dist:.4f}  Topic: {meta['topic']}")
+            print(f"  [TEST] {status}")
+            smoke_results[cid] = {"similarity": round(sim, 4), "status": status}
+        else:
+            print("  [WARN] No results returned.")
+            smoke_results[cid] = {"similarity": None, "status": "WARN - no results"}
 
     summary = {
         "total_documents": len(SEED_DOCUMENTS),
         "upserted": len(ids),
         "errors": errors,
         "collection_count": final_count,
+        "courses": per_course_counts,
+        "smoke_test": smoke_results,
         "embed_model": model_name,
         "embed_dim": dim,
         "elapsed_s": round(elapsed, 2),

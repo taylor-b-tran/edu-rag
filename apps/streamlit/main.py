@@ -398,7 +398,9 @@ def get_api_client():
 
 api = get_api_client()
 DEFAULT_COURSE_ID = "CSIT321"
-COURSE_FALLBACKS = [DEFAULT_COURSE_ID, "CSIT214"]
+# T8-13 (Sprint 8): corpus now covers four real UOW subjects, not just the
+# original two demo courses.
+COURSE_FALLBACKS = [DEFAULT_COURSE_ID, "CSIT214", "CSCI369", "MATH202"]
 LOGIN_COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "components", "login_form")
 login_form_component = components.declare_component("paedia_login_form", path=LOGIN_COMPONENT_DIR)
 
