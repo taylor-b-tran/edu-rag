@@ -134,5 +134,7 @@ def logout():
     auth_header = request.headers.get("Authorization")
     token = auth_header.partition(" ")[2] if auth_header else ""
     if token:
-        _state().access_tokens.pop(token, None)
+        # Must reach Postgres: the row outlives the worker that issued it, and
+        # every other worker would keep honouring the token.
+        _state().revoke_access_token(token)
     return jsonify({"status": "success", "message": "Logged out successfully."})

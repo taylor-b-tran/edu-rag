@@ -838,7 +838,8 @@ def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT token, user_id, email, role, enrolled_courses, issued_at "
+                f"SELECT token, user_id, email, role, enrolled_courses, issued_at, "
+                f"       EXTRACT(EPOCH FROM expires_at) AS expires_at "
                 f"FROM {table}"
             )
             rows = cur.fetchall()
@@ -846,10 +847,46 @@ def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
     for row in rows:
         token = row.pop("token")
         row["enrolled_courses"] = row.get("enrolled_courses") or []
+        if row.get("expires_at") is not None:
+            row["expires_at"] = float(row["expires_at"])
         if row.get("issued_at") is not None:
             row["issued_at"] = row["issued_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
         tokens[token] = row
     return tokens
+
+
+def get_token(table: str, token: str) -> dict[str, Any] | None:
+    """Look up one token. Postgres is the source of truth for validation:
+    gunicorn runs more than one worker, each with its own APIState, so a token
+    issued by one worker is not in another worker's dictionary."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT user_id, email, role, enrolled_courses, issued_at,
+                       EXTRACT(EPOCH FROM expires_at) AS expires_at
+                  FROM {table}
+                 WHERE token = %s
+                """,
+                (token,),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return None
+    row["enrolled_courses"] = row.get("enrolled_courses") or []
+    if row.get("expires_at") is not None:
+        row["expires_at"] = float(row["expires_at"])
+    if row.get("issued_at") is not None:
+        row["issued_at"] = row["issued_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    return row
+
+
+def delete_token(table: str, token: str) -> None:
+    """Retire a token everywhere, not just in the worker that handled the
+    request - otherwise logout leaves it valid on every other worker."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {table} WHERE token = %s", (token,))
 
 
 def load_all_access_tokens() -> dict[str, dict[str, Any]]:
