@@ -12,6 +12,12 @@ Sprint 5 updates:
 Sprint 6 updates:
   T05: Multi-subject selector — sidebar course dropdown, "My Courses" card page,
        course-scoped chat header. All backed by real /api/courses endpoints.
+
+Sprint 8 updates:
+  T8-06: Signup UI — tabbed Sign In / Sign Up on login page, POST /api/auth/signup,
+         auto-login on success, inline validation and API error display.
+  T8-07: Removed hardcoded content — suggested prompts are now course-aware and
+         built from indexed documents, UOW-specific placeholders replaced.
 """
 
 import streamlit as st
@@ -502,6 +508,7 @@ def init_session_state():
         "course_options": COURSE_FALLBACKS,
         "selected_course_id": DEFAULT_COURSE_ID,
         "login_error": None,
+        "signup_error": None,
         "last_login_nonce": None,
         "pending_send": False,
         "query_state": None,
@@ -570,9 +577,43 @@ def get_ai_response(query: str) -> dict:
 
 
 def get_suggested_prompts() -> list:
-    fallback = ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
-    prompts = data.get("suggested_prompts", fallback) if data else fallback
-    return random.sample(prompts, min(4, len(prompts)))
+    """Return context-aware prompt suggestions based on the active course.
+
+    T8-07: replaced the six hardcoded strings from fixtures with prompts
+    that reference the user's selected course and its indexed documents.
+    Cached per course so the buttons don't reshuffle on every re-run.
+    """
+    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+
+    # Return cached prompts if the course hasn't changed
+    cached = st.session_state.get("_cached_prompts_course")
+    if cached == course_id and st.session_state.get("_cached_prompts"):
+        return st.session_state["_cached_prompts"]
+
+    docs = api.get_documents(course_id)
+    # Use original_filename (T8-28: uploads store under a generated name)
+    doc_names = [
+        (d.get("original_filename") or d.get("filename") or d.get("name") or "")
+        for d in docs
+    ]
+    doc_names = [n for n in doc_names if n]
+
+    prompts: list[str] = []
+    if doc_names:
+        first_doc = doc_names[0].rsplit(".", 1)[0]
+        prompts.append(f"Summarise {first_doc}")
+    prompts.append(f"What topics are covered in {course_id}?")
+    prompts.append(f"Give me a quick quiz on {course_id}")
+    prompts.append(f"Explain the key concepts from the latest lecture")
+    if len(doc_names) > 1:
+        second_doc = doc_names[1].rsplit(".", 1)[0]
+        prompts.append(f"Compare themes in {first_doc} and {second_doc}")
+    prompts.append(f"What should I revise for {course_id}?")
+
+    picked = random.sample(prompts, min(4, len(prompts)))
+    st.session_state["_cached_prompts_course"] = course_id
+    st.session_state["_cached_prompts"] = picked
+    return picked
 
 
 def get_model_badge(model_used: str) -> str:
@@ -647,6 +688,39 @@ def handle_login_submit() -> None:
         st.session_state.login_error = login_result.get("error") or "Invalid email or password."
 
 
+def handle_signup_submit() -> None:
+    """Register a new user via POST /api/auth/signup, then auto-login on success."""
+    email = st.session_state.get("signup_email", "").strip()
+    username = st.session_state.get("signup_username", "").strip()
+    password = st.session_state.get("signup_password", "")
+    confirm = st.session_state.get("signup_confirm", "")
+    role = st.session_state.get("signup_role", "student").lower()
+
+    if not email or not username or not password:
+        st.session_state.signup_error = "All fields are required."
+        return
+    if password != confirm:
+        st.session_state.signup_error = "Passwords do not match."
+        return
+
+    result = api.signup(email, username, password, role)
+    if result.get("success"):
+        # Auto-login: the signup response already contains tokens + user
+        user = _normalise_user_for_ui(result.get("user", {}))
+        st.session_state.authenticated = True
+        st.session_state.jwt_token = result.get("jwt_token")
+        st.session_state.user = user
+        st.session_state.course_options = _course_options_for_user(user)
+        st.session_state.course_id = _default_course_for_user(user)
+        st.session_state.selected_course_id = st.session_state.course_id
+        st.session_state.signup_error = None
+        st.session_state.login_error = None
+        create_new_session("Welcome Chat")
+    else:
+        # Show the API error message as-is (it's already user-facing)
+        st.session_state.signup_error = result.get("error") or "Signup failed."
+
+
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
 
 def render_login_page():
@@ -663,45 +737,65 @@ def render_login_page():
         """, unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown("#### Welcome back!")
 
-        login_payload = login_form_component(
-            default_email=st.session_state.get("login_email", ""),
-            key="login_form_component",
-        )
+        # ── Toggle between Sign In and Sign Up ──
+        auth_mode = st.session_state.get("auth_mode", "login")
+        tab_login, tab_signup = st.tabs(["Sign In", "Sign Up"])
 
-        if st.session_state.login_error:
-            st.error(st.session_state.login_error)
+        # ──────────── SIGN IN TAB ────────────
+        with tab_login:
+            login_payload = login_form_component(
+                default_email=st.session_state.get("login_email", ""),
+                key="login_form_component",
+            )
 
-        if isinstance(login_payload, dict) and login_payload.get("submitted"):
-            nonce = login_payload.get("nonce")
-            if nonce != st.session_state.get("last_login_nonce"):
-                st.session_state.last_login_nonce = nonce
-                st.session_state.login_email = login_payload.get("email", "")
-                st.session_state.login_password = login_payload.get("password", "")
-                handle_login_submit()
-                st.rerun()
+            if st.session_state.login_error:
+                st.error(st.session_state.login_error)
 
-        st.markdown("""
-        <div style="text-align: center; margin: 16px 0;">
-            <span style="color: #94A3B8; font-size: 0.85rem;">OR</span>
-        </div>
-        """, unsafe_allow_html=True)
+            if isinstance(login_payload, dict) and login_payload.get("submitted"):
+                nonce = login_payload.get("nonce")
+                if nonce != st.session_state.get("last_login_nonce"):
+                    st.session_state.last_login_nonce = nonce
+                    st.session_state.login_email = login_payload.get("email", "")
+                    st.session_state.login_password = login_payload.get("password", "")
+                    handle_login_submit()
+                    st.rerun()
 
-        if st.button("Sign in with UOW SSO", use_container_width=True):
-            st.info("UOW SSO integration is not available in the prototype.")
+        # ──────────── SIGN UP TAB (T8-06) ────────────
+        with tab_signup:
+            with st.form("signup_form", clear_on_submit=False):
+                st.text_input("Email", placeholder="you@example.com",
+                              key="signup_email")
+                st.text_input("Username", placeholder="Choose a username",
+                              key="signup_username")
+                s1, s2 = st.columns(2)
+                with s1:
+                    st.text_input("Password", type="password",
+                                  placeholder="At least 10 characters",
+                                  key="signup_password")
+                with s2:
+                    st.text_input("Confirm Password", type="password",
+                                  placeholder="Re-enter password",
+                                  key="signup_confirm")
+                st.selectbox("I am a", ["Student", "Lecturer"],
+                             key="signup_role",
+                             format_func=lambda x: x)
+
+                submitted = st.form_submit_button("Create Account", type="primary",
+                                                   use_container_width=True)
+                if submitted:
+                    handle_signup_submit()
+                    if st.session_state.authenticated:
+                        st.rerun()
+
+            if st.session_state.get("signup_error"):
+                st.error(st.session_state.signup_error)
+
+            st.caption("Password must be at least 10 characters, not a common password, "
+                       "and different from your email or username.")
 
         st.markdown("---")
         st.caption("CSIT321 Project 37 · Group 19 — Aletheia's Zetetes")
-
-        # The demo credentials used to be printed here. On an instance the team
-        # can reach, that hands an admin login to anyone who opens the page.
-        st.markdown("""
-        <div style="background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 16px; margin-top: 16px; font-size: 0.82rem; color: #475569;">
-            Ask your lecturer or the team lead for an account, or sign up if
-            self-registration is open.
-        </div>
-        """, unsafe_allow_html=True)
 
 
 # ─── SIDEBAR (T09: readability + T11: session management) ─────────

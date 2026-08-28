@@ -318,6 +318,40 @@ class PaediaAPIClient:
             "error": "Cannot reach the server. Try again in a moment.",
         }
 
+    def signup(self, email: str, username: str, password: str, role: str = "student") -> dict:
+        """
+        Register a new user.
+
+        Live API: POST /api/auth/signup { email, username, password, role }
+        role must be "student" or "lecturer" — "admin" is rejected server-side.
+
+        On 201 the response mirrors login: access_token, refresh_token, user object.
+        Errors (400 weak password / bad role, 409 duplicate) return
+        {"error": ..., "message": ...} where "message" is user-facing.
+
+        Returns: { "success": bool, "user": dict, "jwt_token": str|None, "error": str|None }
+        """
+        result = self._post("/api/auth/signup", {
+            "email": email,
+            "username": username,
+            "password": password,
+            "role": role,
+        })
+        if result and result.get("access_token"):
+            self._jwt_token = result["access_token"]
+            self._refresh_token = result.get("refresh_token")
+            return {
+                "success": True,
+                "user": result.get("user", {}),
+                "jwt_token": self._jwt_token,
+                "error": None,
+            }
+        # API returned an error — use the message field as-is
+        error_msg = (
+            result.get("message") or result.get("error") or "Signup failed."
+        ) if result else "Cannot reach the server. Try again in a moment."
+        return {"success": False, "user": {}, "jwt_token": None, "error": error_msg}
+
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
         """
         Submit a RAG query.
