@@ -15,6 +15,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO courses (id, course_code, course_name, description, is_active, created_at, updated_at)
 VALUES
     ('44444444-4444-4444-8444-444444444444', 'CSIT321', 'Project', 'Sample course used for EduRAG Sprint 3 development.', TRUE, NOW(), NOW())
+    -- T8-13 (Sprint 8): real UOW subjects added alongside CSIT321/CSIT214 so
+    -- local dev Postgres matches the multi-subject ChromaDB corpus.
+    ('44444444-4444-4444-8444-444444444445', 'CSIT214', 'IT Project Management', 'Scope, schedule, cost estimation, Agile/Scrum, risk, and ethics for IT projects.', TRUE, NOW(), NOW()),
+    ('44444444-4444-4444-8444-444444444446', 'CSCI369', 'Ethical Hacking', 'Penetration testing concepts, information gathering, TCP/IP, scanning, and MITM techniques.', TRUE, NOW(), NOW()),
+    ('44444444-4444-4444-8444-444444444447', 'MATH202', 'Differential Equations. Analysis and Applications', 'First- and second-order ODEs and their applications.', TRUE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO course_memberships (id, user_id, course_id, membership_role, joined_at, created_at, updated_at)

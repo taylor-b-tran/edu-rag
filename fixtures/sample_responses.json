@@ -17,9 +17,23 @@
     {
       "course_id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
       "course_code": "CSIT214",
-      "name": "Database Systems",
-      "description": "Relational databases, SQL, normalisation, indexing",
+      "name": "IT Project Management",
+      "description": "Scope, schedule, cost estimation, Agile/Scrum, risk, and ethics for IT projects.",
       "created_at": "2026-02-10T09:00:00Z"
+    },
+    {
+      "course_id": "b2c3d4e5-6f70-4a8b-9c0d-1e2f3a4b5c7e",
+      "course_code": "CSCI369",
+      "name": "Ethical Hacking",
+      "description": "Penetration testing concepts, information gathering, TCP/IP, scanning, and MITM techniques.",
+      "created_at": "2026-08-18T09:00:00Z"
+    },
+    {
+      "course_id": "c3d4e5f6-7081-4b9c-8d1e-2f3a4b5c6d8f",
+      "course_code": "MATH202",
+      "name": "Differential Equations. Analysis and Applications",
+      "description": "First- and second-order ODEs and their applications.",
+      "created_at": "2026-08-18T09:00:00Z"
     }
   ],
   "documents": [
@@ -143,7 +157,7 @@
       "chunk_id": "ch-007",
       "document_id": "d3c4d5e6-7f8a-9b0c-1d2e-a3b4c5d6e7f8",
       "chunk_order": 14,
-      "text": "Third Normal Form (3NF) requires that the table is already in 2NF and that no transitive dependencies exist — non-key attributes must not depend on other non-key attributes...",
+      "text": "Third Normal Form (3NF) requires that the table is already in 2NF and that no transitive dependencies exist \u2014 non-key attributes must not depend on other non-key attributes...",
       "page_number": 22,
       "token_count": 445,
       "created_at": "2026-04-14T14:22:00Z"
@@ -184,7 +198,7 @@
       "is_fallback": false
     },
     "Can you summarize the key steps in the RAG pipeline?": {
-      "answer": "The RAG pipeline consists of two sequential phases that work together to provide accurate, context-aware answers:\n\n**Phase 1 — Document Ingest**\n1. A Lecturer uploads a course document (PDF, PPTX, or DOCX) through the WebApplication.\n2. DocumentProcessor extracts raw text using format-specific parsers.\n3. The text is split using the accepted Sprint 3 baseline: chunk_size=1024 and chunk_overlap=0.\n4. SentenceTransformers all-MiniLM-L6-v2 encodes each chunk as a 384-dimensional dense vector embedding.\n5. Each embedding is written to ChromaDB with metadata including the course_id, document name, and chunk index.\n6. The system confirms the upload and indexing status to the Lecturer.\n\n**Phase 2 — Query Flow**\n1. A Student submits a natural language question and selects the relevant course context.\n2. WebApplication validates the JWT, checks the rate limit, and forwards the request.\n3. VectorRetriever embeds the question using the same encoding model and searches ChromaDB with a cosine similarity query scoped to the active course_id.\n4. The top-k most relevant chunks (default k=5) are returned with their similarity scores.\n5. LLMResponseGeneration builds a context-grounded prompt from the retrieved chunks and the original question.\n6. The prompt is sent to the configured language model (Ollama in development, OpenAI API in the sprint demo).\n7. The generated answer is returned to the Student with source citations. If no chunks exceeded the similarity threshold, the response carries the general-knowledge fallback label.\n8. The interaction is stored in the session record and the audit log.",
+      "answer": "The RAG pipeline consists of two sequential phases that work together to provide accurate, context-aware answers:\n\n**Phase 1 \u2014 Document Ingest**\n1. A Lecturer uploads a course document (PDF, PPTX, or DOCX) through the WebApplication.\n2. DocumentProcessor extracts raw text using format-specific parsers.\n3. The text is split using the accepted Sprint 3 baseline: chunk_size=1024 and chunk_overlap=0.\n4. SentenceTransformers all-MiniLM-L6-v2 encodes each chunk as a 384-dimensional dense vector embedding.\n5. Each embedding is written to ChromaDB with metadata including the course_id, document name, and chunk index.\n6. The system confirms the upload and indexing status to the Lecturer.\n\n**Phase 2 \u2014 Query Flow**\n1. A Student submits a natural language question and selects the relevant course context.\n2. WebApplication validates the JWT, checks the rate limit, and forwards the request.\n3. VectorRetriever embeds the question using the same encoding model and searches ChromaDB with a cosine similarity query scoped to the active course_id.\n4. The top-k most relevant chunks (default k=5) are returned with their similarity scores.\n5. LLMResponseGeneration builds a context-grounded prompt from the retrieved chunks and the original question.\n6. The prompt is sent to the configured language model (Ollama in development, OpenAI API in the sprint demo).\n7. The generated answer is returned to the Student with source citations. If no chunks exceeded the similarity threshold, the response carries the general-knowledge fallback label.\n8. The interaction is stored in the session record and the audit log.",
       "source_references": [
         {
           "chunk_id": "ch-005",
@@ -242,7 +256,7 @@
       "is_fallback": false
     },
     "What are SQL joins and when should I use each type?": {
-      "answer": "SQL joins combine rows from two or more tables based on a related column between them. Here are the main types:\n\n**INNER JOIN**\nReturns only rows that have matching values in both tables. Use when you only want records that exist in both tables.\n```sql\nSELECT * FROM Students INNER JOIN Enrollments ON Students.id = Enrollments.student_id;\n```\n\n**LEFT (OUTER) JOIN**\nReturns all rows from the left table, plus matching rows from the right table. Non-matching rows get NULL values. Use when you want all records from the primary table regardless of matches.\n\n**RIGHT (OUTER) JOIN**\nOpposite of LEFT JOIN — returns all rows from the right table. Less commonly used; you can often restructure as a LEFT JOIN.\n\n**FULL (OUTER) JOIN**\nReturns all rows from both tables, with NULLs where there's no match. Use when you need a complete picture of both datasets.\n\n**CROSS JOIN**\nProduces a Cartesian product — every row in the first table paired with every row in the second. Rarely used intentionally.",
+      "answer": "SQL joins combine rows from two or more tables based on a related column between them. Here are the main types:\n\n**INNER JOIN**\nReturns only rows that have matching values in both tables. Use when you only want records that exist in both tables.\n```sql\nSELECT * FROM Students INNER JOIN Enrollments ON Students.id = Enrollments.student_id;\n```\n\n**LEFT (OUTER) JOIN**\nReturns all rows from the left table, plus matching rows from the right table. Non-matching rows get NULL values. Use when you want all records from the primary table regardless of matches.\n\n**RIGHT (OUTER) JOIN**\nOpposite of LEFT JOIN \u2014 returns all rows from the right table. Less commonly used; you can often restructure as a LEFT JOIN.\n\n**FULL (OUTER) JOIN**\nReturns all rows from both tables, with NULLs where there's no match. Use when you need a complete picture of both datasets.\n\n**CROSS JOIN**\nProduces a Cartesian product \u2014 every row in the first table paired with every row in the second. Rarely used intentionally.",
       "source_references": [
         {
           "chunk_id": "ch-003",
@@ -286,7 +300,7 @@
           "similarity": 0.85
         }
       ],
-      "confidence": 0.90,
+      "confidence": 0.9,
       "model_used": "ollama/llama3",
       "token_count": 186,
       "is_fallback": false
@@ -308,7 +322,10 @@
       "email": "student@uow.edu.au",
       "password": "student123",
       "role": "student",
-      "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d", "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"]
+      "enrolled_courses": [
+        "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+        "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"
+      ]
     },
     {
       "user_id": "u-lect-001",
@@ -317,7 +334,10 @@
       "email": "lecturer@uow.edu.au",
       "password": "lecturer123",
       "role": "lecturer",
-      "enrolled_courses": ["a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d", "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"]
+      "enrolled_courses": [
+        "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+        "c9a1f2e0-4b3d-4e6a-8f1c-2d3e4f5a6b7c"
+      ]
     },
     {
       "user_id": "u-admin-001",
