@@ -815,6 +815,25 @@ def insert_refresh_token(token: str, payload: dict[str, Any],
     _insert_token("refresh_tokens", token, payload, expires_in_seconds)
 
 
+def update_enrolled_courses_for_user(user_id: str, courses: list[str]) -> None:
+    """Write a user's new enrollment list onto every token they hold.
+
+    T8-24 moved tokens into Postgres and reloads them at startup, so updating
+    only the in-memory copy would survive until the next restart and no
+    further - a lecturer would silently lose access to the course they had
+    just created. Both tables are updated because a refresh issues a new
+    access token from the stored refresh payload.
+    """
+    payload = json.dumps(list(courses))
+    with connect() as conn:
+        with conn.cursor() as cur:
+            for table in ("access_tokens", "refresh_tokens"):
+                cur.execute(
+                    f"UPDATE {table} SET enrolled_courses = %s WHERE user_id = %s",
+                    (payload, user_id),
+                )
+
+
 def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
     with connect() as conn:
         with conn.cursor() as cur:

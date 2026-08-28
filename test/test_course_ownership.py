@@ -251,3 +251,45 @@ def test_unauthenticated_calls_are_rejected(client):
                        headers=AUTH).status_code == 401
     assert client.patch("/api/courses/OWNED101", json={},
                         headers=AUTH).status_code == 401
+
+
+# --- enrollment refresh reaches storage, not just memory -------------
+
+def test_enrollment_refresh_is_written_to_postgres(app, monkeypatch):
+    """T8-24 reloads tokens from Postgres at startup, so refreshing only the
+    in-memory copy would last until the next restart and no further - the
+    lecturer would quietly lose the course they had just made."""
+    from src.api import db
+
+    state = app.config["EDURAG_API_STATE"]
+    monkeypatch.setattr(state, "_db_available", True)
+    monkeypatch.setattr(db, "get_enrolled_course_codes", lambda uid: ["NEW101"])
+
+    written = {}
+    monkeypatch.setattr(db, "update_enrolled_courses_for_user",
+                        lambda uid, courses: written.update({uid: list(courses)}))
+
+    state.access_tokens["tok"] = {"user_id": "lect-1", "enrolled_courses": []}
+    state.refresh_enrolled_courses("lect-1")
+
+    assert state.access_tokens["tok"]["enrolled_courses"] == ["NEW101"], "in memory"
+    assert written == {"lect-1": ["NEW101"]}, "and persisted"
+
+
+def test_a_failed_write_does_not_break_the_request(app, monkeypatch):
+    """The enrollment is still correct for this process; losing it on restart
+    is worth a warning, not a 500 in the middle of creating a course."""
+    from src.api import db
+
+    state = app.config["EDURAG_API_STATE"]
+    monkeypatch.setattr(state, "_db_available", True)
+    monkeypatch.setattr(db, "get_enrolled_course_codes", lambda uid: ["NEW101"])
+
+    def boom(uid, courses):
+        raise RuntimeError("postgres is away")
+
+    monkeypatch.setattr(db, "update_enrolled_courses_for_user", boom)
+    state.access_tokens["tok"] = {"user_id": "lect-1", "enrolled_courses": []}
+
+    assert state.refresh_enrolled_courses("lect-1") == ["NEW101"]
+    assert state.access_tokens["tok"]["enrolled_courses"] == ["NEW101"]

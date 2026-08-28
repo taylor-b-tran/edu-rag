@@ -19,3 +19,8 @@ outputs
 *.log
 *.tmp
 ~$*.docx
+
+# The HuggingFace embedder cache. It is bind-mounted into the container at
+# runtime, so it never needs to be in the build context - and its snapshot
+# layout uses symlinks that the builder rejects outright.
+models/
