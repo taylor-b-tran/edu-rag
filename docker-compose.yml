@@ -195,6 +195,11 @@ services:
     image: ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      # Ollama sizes its KV cache as num_ctx x num_parallel. Left unset it
+      # allocates one slot, so the host answers one question at a time and
+      # everybody else queues - which is the wrong shape for a class demo.
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-4096}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
     ports:
       - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     volumes:

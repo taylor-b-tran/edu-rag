@@ -176,31 +176,69 @@ class APIState:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             return None
-        return self._live_token(self.access_tokens, token)
+        return self._live_token(self.access_tokens, token, "access_tokens")
 
-    @staticmethod
-    def _live_token(store: dict[str, Any], token: str) -> dict[str, Any] | None:
+    def _live_token(self, store: dict[str, Any], token: str,
+                    table: str) -> dict[str, Any] | None:
         """Return the token's payload, or None if it is unknown or expired.
 
-        An expired entry is dropped on the way out so the store does not keep
-        growing with tokens nobody can use.
+        Postgres is consulted first whenever it is available, because gunicorn
+        runs more than one worker and each has its own APIState. A token issued
+        by one worker is simply absent from another worker's dictionary, so a
+        plain dictionary lookup rejected roughly half of all requests once a
+        second worker started taking traffic. Reading the row also means logout
+        takes effect everywhere rather than only where it was called.
+
+        The dictionary remains the source of truth when there is no database,
+        which is how the test suite runs.
         """
-        payload = store.get(token)
+        if self._db_available:
+            try:
+                from src.api import db
+                payload = db.get_token(table, token)
+                if payload is None:
+                    # Postgres is authoritative when it answers: no row means
+                    # the token was retired or never existed. Falling back to
+                    # this worker's cache here would undo logout, because the
+                    # worker that did not handle it still holds a copy.
+                    store.pop(token, None)
+                    return None
+            except Exception as exc:
+                logger.warning("Token lookup failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+                payload = store.get(token)
+        else:
+            payload = store.get(token)
         if payload is None:
             return None
+
         expires_at = payload.get("expires_at")
         if expires_at is not None and time.time() >= expires_at:
-            store.pop(token, None)
+            self._retire_token(store, token, table)
             return None
         return payload
+
+    def _retire_token(self, store: dict[str, Any], token: str, table: str) -> None:
+        """Drop a token from this worker and from Postgres."""
+        store.pop(token, None)
+        if self._db_available:
+            try:
+                from src.api import db
+                db.delete_token(table, token)
+            except Exception as exc:
+                logger.warning("Could not delete %s from Postgres (%s: %s); it "
+                               "may still be accepted elsewhere until it expires.",
+                               table, type(exc).__name__, exc)
 
     def consume_refresh_token(self, token: str | None) -> dict[str, Any] | None:
         """Validate a refresh token and retire it, so each one is used once."""
         if not token:
             return None
-        payload = self._live_token(self.refresh_tokens, token)
+        payload = self._live_token(self.refresh_tokens, token, "refresh_tokens")
         if payload is not None:
-            self.refresh_tokens.pop(token, None)
+            # Retiring it in Postgres is what makes "used once" hold across
+            # workers; popping the local dictionary alone does not.
+            self._retire_token(self.refresh_tokens, token, "refresh_tokens")
         return payload
 
     def find_demo_user(self, email: str) -> dict[str, Any] | None:
@@ -298,6 +336,10 @@ class APIState:
         if not _fixture_auth_allowed():
             return None
         return self.find_demo_user(email)
+
+    def revoke_access_token(self, token: str) -> None:
+        """Log a token out everywhere."""
+        self._retire_token(self.access_tokens, token, "access_tokens")
 
     def refresh_enrolled_courses(self, user_id: str | None) -> list[str] | None:
         """Re-read one user's enrollments and update every live token they hold.
