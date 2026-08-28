@@ -150,6 +150,16 @@ CREATE TABLE IF NOT EXISTS course_memberships (
     UNIQUE (user_id, course_id)
 );
 
+-- Sprint 8 (T8-04): course ownership. Added as an ALTER rather than a column
+-- in the CREATE above so an existing database picks it up too; there is still
+-- no migration runner, and this file is replayed on every start.
+-- Nullable on purpose: courses that predate this own nobody, and stay
+-- admin-only until an owner is set. ON DELETE SET NULL keeps a course alive
+-- when its lecturer's account goes away.
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS owner_id UUID NULL
+    REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_courses_owner_id ON courses(owner_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_course_memberships_user_id ON course_memberships(user_id);
 CREATE INDEX IF NOT EXISTS idx_course_memberships_course_id ON course_memberships(course_id);
@@ -489,6 +499,35 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
     }
 
 
+def get_user_by_id(user_id: str) -> dict[str, Any] | None:
+    """Look a user up by id. Used when authorizing course ownership, where the
+    owner is known by id rather than by email. Returns None for an id that is
+    not a well-formed UUID rather than raising, so a bad request body cannot
+    turn into a 500."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    SELECT id, username, email, role
+                      FROM users
+                     WHERE id = %s
+                    """,
+                    (user_id,),
+                )
+            except Exception:
+                return None
+            row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "user_id": str(row["id"]),
+        "username": row["username"],
+        "email": row["email"],
+        "role": row["role"],
+    }
+
+
 def create_user(username: str, email: str, role: str,
                 password: str) -> tuple[dict[str, Any] | None, str | None]:
     """Create an account.
@@ -558,16 +597,23 @@ def touch_last_login(user_id: str) -> None:
 
 # ─── Courses & enrollments (Sprint 7, T03) ──────────────────────────────
 
+# Every course read returns the same shape, so the owner travels with the
+# course and callers never have to make a second query to authorize a write.
+_COURSE_COLUMNS = "id, course_code, course_name, description, is_active, owner_id, created_at"
+
+
 def _normalize_course_row(row: dict[str, Any]) -> dict[str, Any]:
     row["id"] = str(row["id"])
+    if row.get("owner_id") is not None:
+        row["owner_id"] = str(row["owner_id"])
     if row.get("created_at") is not None:
         row["created_at"] = row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
     return row
 
 
 def list_courses(active_only: bool = False) -> list[dict[str, Any]]:
-    query = """
-        SELECT id, course_code, course_name, description, is_active, created_at
+    query = f"""
+        SELECT {_COURSE_COLUMNS}
           FROM courses
     """
     if active_only:
@@ -584,8 +630,8 @@ def get_course_by_code(course_code: str) -> dict[str, Any] | None:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                SELECT id, course_code, course_name, description, is_active, created_at
+                f"""
+                SELECT {_COURSE_COLUMNS}
                   FROM courses
                  WHERE course_code = %s
                 """,
@@ -596,18 +642,23 @@ def get_course_by_code(course_code: str) -> dict[str, Any] | None:
 
 
 def create_course(course_code: str, course_name: str,
-                   description: str | None = None) -> dict[str, Any] | None:
-    """Returns None if course_code already exists."""
+                   description: str | None = None,
+                   owner_id: str | None = None) -> dict[str, Any] | None:
+    """Returns None if course_code already exists.
+
+    owner_id is the lecturer who may manage the course afterwards. Left None
+    for an admin-created course, which keeps it admin-only.
+    """
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                INSERT INTO courses (course_code, course_name, description)
-                VALUES (%s, %s, %s)
+                f"""
+                INSERT INTO courses (course_code, course_name, description, owner_id)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (course_code) DO NOTHING
-                RETURNING id, course_code, course_name, description, is_active, created_at
+                RETURNING {_COURSE_COLUMNS}
                 """,
-                (course_code, course_name, description),
+                (course_code, course_name, description, owner_id),
             )
             row = cur.fetchone()
     return _normalize_course_row(row) if row is not None else None
@@ -639,10 +690,30 @@ def update_course(course_code: str, course_name: str | None = None,
                 f"""
                 UPDATE courses SET {', '.join(fields)}
                  WHERE course_code = %s
-                RETURNING id, course_code, course_name, description, is_active, created_at
+                RETURNING {_COURSE_COLUMNS}
                 """,
                 params,
             )
+            row = cur.fetchone()
+    return _normalize_course_row(row) if row is not None else None
+
+
+def set_course_owner(course_code: str, owner_id: str | None) -> dict[str, Any] | None:
+    """Transfer a course to another lecturer, or pass None to make it
+    admin-only again. Returns None if the course does not exist."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    f"""
+                    UPDATE courses SET owner_id = %s, updated_at = NOW()
+                     WHERE course_code = %s
+                    RETURNING {_COURSE_COLUMNS}
+                    """,
+                    (owner_id, course_code),
+                )
+            except Exception:
+                return None
             row = cur.fetchone()
     return _normalize_course_row(row) if row is not None else None
 

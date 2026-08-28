@@ -299,6 +299,30 @@ class APIState:
             return None
         return self.find_demo_user(email)
 
+    def refresh_enrolled_courses(self, user_id: str | None) -> list[str] | None:
+        """Re-read one user's enrollments and update every live token they hold.
+
+        enrolled_courses is copied into the token payload when the token is
+        issued, so without this a lecturer who has just created a course - or a
+        student an admin has just enrolled - keeps being told they are not a
+        member until they log in again. Returns the fresh list, or None if it
+        could not be read.
+        """
+        if not self._db_available or not user_id:
+            return None
+        try:
+            from src.api import db
+            courses = db.get_enrolled_course_codes(user_id)
+        except Exception as exc:
+            logger.warning("Could not refresh enrollments for %s (%s: %s).",
+                           user_id, type(exc).__name__, exc)
+            return None
+        for store in (self.access_tokens, self.refresh_tokens):
+            for payload in store.values():
+                if payload.get("user_id") == user_id:
+                    payload["enrolled_courses"] = list(courses)
+        return list(courses)
+
     def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
         if user.get("role") == "admin":
             return True
