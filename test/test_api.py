@@ -339,9 +339,13 @@ def test_create_course_rejects_missing_fields():
     assert response.status_code == 400
 
 
-def test_course_members_returns_403_for_non_admin():
+def test_course_members_returns_403_for_a_student():
+    """Membership management is admin-or-owner since T8-04, so a lecturer is no
+    longer categorically refused - whether they get in depends on who owns the
+    course. A student is refused either way, and without consulting the
+    database, which is what this pins down."""
     c = _client()
-    token = _login(c, "lecturer@uow.edu.au", "lecturer123")
+    token = _login(c, "student@uow.edu.au", "student123")
 
     response = c.get("/api/courses/CSIT321/members", headers=_auth(token))
 
