@@ -70,10 +70,15 @@ class APIState:
             db.init_schema()
             self.uploaded_documents = db.load_all_documents()
             self.indexing_jobs = db.load_all_jobs()
+            self.access_tokens = db.load_all_access_tokens()
+            self.refresh_tokens = db.load_all_refresh_tokens()
+            self.sessions = db.load_all_sessions()
             self._db_available = True
             logger.info(
-                "APIState hydrated from Postgres: %d documents, %d jobs.",
+                "APIState hydrated from Postgres: %d documents, %d jobs, "
+                "%d access tokens, %d sessions.",
                 len(self.uploaded_documents), len(self.indexing_jobs),
+                len(self.access_tokens), len(self.sessions),
             )
         except Exception as exc:
             logger.warning(
@@ -135,6 +140,21 @@ class APIState:
         # ever issued stayed valid for the life of the process.
         self.access_tokens[access_token] = {**payload, "expires_at": now + ACCESS_TOKEN_TTL_SECONDS}
         self.refresh_tokens[refresh_token] = {**payload, "expires_at": now + REFRESH_TOKEN_TTL_SECONDS}
+
+        # T8-24: best-effort persist. A failed write here shouldn't fail the
+        # login — the in-memory dicts above already make this token work for
+        # the life of this process, same as before this task existed. It's
+        # only a restart that loses it if this write didn't land.
+        if self._db_available:
+            try:
+                from src.api import db
+                db.insert_access_token(access_token, payload,
+                                        expires_in_seconds=ACCESS_TOKEN_TTL_SECONDS)
+                db.insert_refresh_token(refresh_token, payload,
+                                         expires_in_seconds=REFRESH_TOKEN_TTL_SECONDS)
+            except Exception as exc:
+                logger.warning("Failed to persist tokens to Postgres (%s: %s).",
+                                type(exc).__name__, exc)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -378,6 +398,7 @@ class APIState:
     ) -> str:
         if not session_id:
             session_id = str(uuid.uuid4())
+        is_new_session = session_id not in self.sessions
         session = self.sessions.setdefault(
             session_id,
             {
@@ -389,17 +410,44 @@ class APIState:
                 "messages": [],
             },
         )
-        session["messages"].append(
-            {
-                "message_id": str(uuid.uuid4()),
-                "question": question,
-                "answer": answer.get("answer", ""),
-                "sources": answer.get("source_references", []),
-                "created_at": _utc_now(),
-            }
-        )
+        message = {
+            "message_id": str(uuid.uuid4()),
+            "question": question,
+            "answer": answer.get("answer", ""),
+            "sources": answer.get("source_references", []),
+            "created_at": _utc_now(),
+        }
+        session["messages"].append(message)
         session["updated_at"] = _utc_now()
+        
+        # T8-24: best-effort persist, same reasoning as issue_tokens above —
+        # a failed write only costs this message on the next restart, not
+        # the response the user already got.
+        if self._db_available:
+            try:
+                from src.api import db
+                if is_new_session:
+                    db.upsert_chat_session(session_id, user_id, course_id)
+                db.insert_chat_message(session_id, message)
+            except Exception as exc:
+                logger.warning("Failed to persist chat session to Postgres (%s: %s).",
+                                type(exc).__name__, exc)
         return session_id
+
+    def archive_session(self, session_id: str) -> None:
+        """Used by DELETE /api/sessions/<id>. In-memory flag is set
+        immediately for callers that read self.sessions right after; the
+        Postgres write is best-effort like the other T8-24 writes."""
+        session = self.sessions.get(session_id)
+        if session is not None:
+            session["archived"] = True
+        if self._db_available:
+            try:
+                from src.api import db
+                db.archive_chat_session(session_id)
+            except Exception as exc:
+                logger.warning("Failed to persist session archive to Postgres (%s: %s).",
+                                type(exc).__name__, exc)
 
     def list_documents(self, course_id: str | None = None) -> list[dict[str, Any]]:
         documents = list(self.fixtures.get("documents", [])) + self.uploaded_documents
@@ -518,7 +566,7 @@ class APIState:
         return removed
 
 class _FixtureResponse:
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, response_style: str = "concise"):
         self.answer           = data.get("answer", "")
         self.source_refs      = data.get("source_references", data.get("sources", []))
         self.is_fallback      = bool(data.get("is_fallback", data.get("fallback_used", False)))
@@ -526,6 +574,7 @@ class _FixtureResponse:
         self.top_chunks       = []
         self.confidence       = "Medium"
         self.confidence_score = data.get("confidence", 0.5)
+        self.response_style   = response_style
 
 
 class _FixtureGenerator:
@@ -533,6 +582,7 @@ class _FixtureGenerator:
     def __init__(self, state):
         self._state = state
 
-    def generate(self, query: str, course_id: str = "CSIT321", **_kwargs) -> _FixtureResponse:
+    def generate(self, query: str, course_id: str = "CSIT321",
+                 response_style: str = "concise", **_kwargs) -> _FixtureResponse:
         data = self._state.query_fixture(query)
-        return _FixtureResponse(data)
+        return _FixtureResponse(data, response_style=response_style)

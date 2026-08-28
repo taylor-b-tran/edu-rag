@@ -22,3 +22,5 @@ docs/A3_Marking-*.pdf
 # HuggingFace blobs and symlinks - it belongs on the machine, not in the repo,
 # and one `git add -A` would otherwise pull all of it in.
 models/
+
+data/uploads/

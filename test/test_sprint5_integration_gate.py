@@ -63,6 +63,7 @@ def test_seeded_ingestion_imports_seed_documents_and_offline_embedder(monkeypatc
     monkeypatch.setenv("EDURAG_OFFLINE_EMBEDDER", "1")
 
     from src.document_processor import ingest_corpus
+    ingest_corpus.reset_embedder_cache_for_tests()  # T8-31 made this a process-wide singleton
 
     model, model_name, dim = ingest_corpus._load_embedder()
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 import uuid as _uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
@@ -16,6 +16,10 @@ _LECTURER_ROLES = {"lecturer", "admin"}
 
 # Repo root: src/api/routes/documents.py -> parents[3] = repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+_UPLOAD_THREAD_LIMIT = int(os.environ.get("EDURAG_UPLOAD_THREAD_LIMIT", "3"))
+_upload_executor = ThreadPoolExecutor(
+    max_workers=_UPLOAD_THREAD_LIMIT, thread_name_prefix="upload-index"
+)
 
 
 def _upload_dir() -> Path:
@@ -196,12 +200,11 @@ def upload_document():
     )
     response_payload = copy.deepcopy(result)
 
-    # Spawn background indexing thread
-    t = threading.Thread(
-        target=_bg_index_document,
-        args=(file_path, course_id, result["document"]["document_id"], result["job_id"], _state())
+    # Queue background indexing on the bounded pool instead of an unbounded per-request thread (T8-31).
+    _upload_executor.submit(
+        _bg_index_document, file_path, course_id,
+        result["document"]["document_id"], result["job_id"], _state(),
     )
-    t.start()
 
     logger.info("User %s uploaded %s (stored as %s) to course %s (indexing job %s started)",
                 user.get("user_id"), original_filename, stored_name, course_id,

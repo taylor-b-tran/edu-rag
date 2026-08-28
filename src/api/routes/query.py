@@ -28,7 +28,20 @@ def _state():
     return current_app.config["EDURAG_API_STATE"]
 
 
-def _check_rate(key: str) -> bool:
+# T8-10: lets the UI render the picker from a single source of truth instead of hardcoding the five style names/labels
+# client-side. No auth required — this is static config, not user data.
+@query_bp.get("/response-styles")
+def response_styles():
+    from src.document_processor.rag_pipeline import RESPONSE_STYLES, DEFAULT_RESPONSE_STYLE
+    return jsonify({
+        "styles": [
+            {"id": style_id, **info} for style_id, info in RESPONSE_STYLES.items()
+        ],
+        "default": DEFAULT_RESPONSE_STYLE,
+    })
+
+
+def _check_rate(key: str, state=None) -> bool:
     """Rate-limit one caller.
 
     The key is the authenticated user id, not the client address. Streamlit
@@ -36,7 +49,22 @@ def _check_rate(key: str) -> bool:
     same container IP - keying on the address made the limit one bucket shared
     by the whole class, where the eleventh question in a minute from anyone at
     all was rejected.
+
+    T8-24: when Postgres is available, the count is checked/recorded there
+    instead of the in-memory _RATE_STORE below. This used to be a plain
+    module-level dict, which meant each gunicorn worker (T8-23) had its own
+    separate count — a caller could get 10 requests per worker instead of 10
+    total. The in-memory path stays as a fallback for when Postgres isn't
+    reachable (and is what the existing tests exercise, since there's no
+    live Postgres in CI).
     """
+    if state is not None and getattr(state, "_db_available", False):
+        try:
+            from src.api import db
+            return db.check_and_record_rate(key, _RATE_WINDOW, _RATE_MAX)
+        except Exception:
+            logger.warning("Postgres rate-limit check failed; falling back to in-memory.")
+
     now = time.time()
     window_start = now - _RATE_WINDOW
 
@@ -75,7 +103,7 @@ def query():
         return jsonify({"error": "Authentication required."}), 401
 
     rate_key = str(user.get("user_id") or user.get("email") or "unknown")
-    if not _check_rate(rate_key):
+    if not _check_rate(rate_key, state):
         logger.warning("Rate limit exceeded for user %s", rate_key)
         return jsonify({"error": "Too many requests. Limit is 10 per minute."}), 429
 
@@ -91,12 +119,22 @@ def query():
     question_raw = body.get("query") or ""
     course_id_raw = body.get("course_id", "CSIT321")
     session_id = body.get("session_id")
+    response_style_raw = body.get("response_style")
     if not isinstance(question_raw, str):
         return jsonify({"error": "query must be a string"}), 400
     if not isinstance(course_id_raw, str):
         return jsonify({"error": "course_id must be a string"}), 400
     if session_id is not None and not isinstance(session_id, str):
         return jsonify({"error": "session_id must be a string"}), 400
+    if response_style_raw is not None:
+        if not isinstance(response_style_raw, str):
+            return jsonify({"error": "response_style must be a string"}), 400
+        from src.document_processor.rag_pipeline import RESPONSE_STYLES
+        if response_style_raw not in RESPONSE_STYLES:
+            return jsonify({
+                "error": "invalid response_style",
+                "message": f"response_style must be one of: {', '.join(sorted(RESPONSE_STYLES))}",
+            }), 400
 
     question = question_raw.strip()
     course_id = course_id_raw.strip()
@@ -123,7 +161,8 @@ def query():
 
     started = time.time()
     try:
-        generated = state.get_generator().generate(question, course_id=course_id)
+        generated = state.get_generator().generate(
+            question, course_id=course_id, response_style=response_style_raw)
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
         return jsonify({
@@ -142,6 +181,7 @@ def query():
         "confidence_score": generated.confidence_score,
         "model_used": generated.model_used,
         "is_fallback": generated.is_fallback,
+        "response_style": generated.response_style,
     }
     session_id = state.record_session_message(
         session_id=session_id,

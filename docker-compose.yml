@@ -6,7 +6,18 @@ services:
       context: .
       dockerfile: docker/Dockerfile.demo
     working_dir: /workspace
-    command: ["python", "apps/integration/backend/api.py"]
+    # Gunicorn replaces the Flask dev server for the shared host.
+    # --workers=2 lets two people query at once; --timeout=300 is longer
+    # than Ollama's own 240s limit so slow answers aren't killed mid-generation.
+    command: [
+      "gunicorn",
+      "--bind=0.0.0.0:5000",
+      "--workers=2",
+      "--threads=4",
+      "--timeout=300",
+      "--access-logfile=-",
+      "src.api.wsgi:app",
+    ]
     environment:
       APP_ENV: ${APP_ENV:-development}
       PORT: 5000
