@@ -321,6 +321,15 @@ class APIState:
             for payload in store.values():
                 if payload.get("user_id") == user_id:
                     payload["enrolled_courses"] = list(courses)
+
+        # Tokens are reloaded from Postgres on startup (T8-24), so the
+        # in-memory update above would last only until the next restart.
+        try:
+            db.update_enrolled_courses_for_user(user_id, courses)
+        except Exception as exc:
+            logger.warning("Refreshed enrollments in memory but not in Postgres "
+                           "for %s (%s: %s); they revert on restart.",
+                           user_id, type(exc).__name__, exc)
         return list(courses)
 
     def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
