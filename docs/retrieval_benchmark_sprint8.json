@@ -1,0 +1,588 @@
+{
+  "summary": {
+    "corpus_size": 46,
+    "n_queries": 22,
+    "n_in_corpus_queries": 20,
+    "n_off_topic_queries": 2,
+    "avg_precision_at_5": 0.2,
+    "theoretical_max_precision_at_5": 0.22,
+    "precision_at_5_pct_of_ceiling": 0.909,
+    "avg_recall_at_10": 1.0,
+    "mrr": 0.925,
+    "off_topic_fallback_correct_rate": 1.0,
+    "meets_precision_target": false,
+    "meets_recall_target": true
+  },
+  "results": [
+    {
+      "id": "R01",
+      "question": "What does RAG stand for and how does it reduce hallucination?",
+      "topic": "RAG Fundamentals",
+      "relevant_chunk_ids": [
+        "csit321-w1-rag-intro"
+      ],
+      "retrieved_top10": [
+        "csit321-w1-rag-intro",
+        "csit321-w6-fallback",
+        "csit321-w6-evaluation",
+        "csit321-w1-rag-components",
+        "csit321-overview-system",
+        "csit321-w4-architecture",
+        "csit321-w4-jwt-rbac",
+        "csit321-w14-a5-a6-documentation",
+        "csit321-w5-latency",
+        "csit321-w2-chunking"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.345
+    },
+    {
+      "id": "R02",
+      "question": "What are the three core components of a RAG pipeline?",
+      "topic": "RAG Fundamentals",
+      "relevant_chunk_ids": [
+        "csit321-w1-rag-components"
+      ],
+      "retrieved_top10": [
+        "csit321-w1-rag-components",
+        "csit321-w4-architecture",
+        "csit321-w6-evaluation",
+        "csit321-w1-rag-intro",
+        "csit321-w6-fallback",
+        "csit321-w14-a5-a6-documentation",
+        "csit321-w14-a4-prototype",
+        "csit321-w5-latency",
+        "csit321-w3-chromadb",
+        "csit321-w2-chunking"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.478
+    },
+    {
+      "id": "R03",
+      "question": "What embedding model does EduRAG use and how many dimensions does it produce?",
+      "topic": "Vector Embeddings",
+      "relevant_chunk_ids": [
+        "csit321-w2-embeddings"
+      ],
+      "retrieved_top10": [
+        "csit321-w2-embeddings",
+        "csit321-w4-architecture",
+        "csit321-overview-system",
+        "csit321-w7-security",
+        "csit321-w2-chunking",
+        "csit321-w6-fallback",
+        "csit321-w5-latency",
+        "csit321-w5-prompt-engineering",
+        "csit321-w7-docker",
+        "csit321-w5-ollama"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.472
+    },
+    {
+      "id": "R04",
+      "question": "What chunk size and overlap does EduRAG use by default and why?",
+      "topic": "Vector Embeddings",
+      "relevant_chunk_ids": [
+        "csit321-w2-chunking"
+      ],
+      "retrieved_top10": [
+        "csit321-w2-chunking",
+        "csit321-w4-architecture",
+        "csit321-w7-security",
+        "csit321-w6-fallback",
+        "csit321-overview-system",
+        "csit321-w5-latency",
+        "csit321-w5-prompt-engineering",
+        "csit321-w7-database",
+        "csit321-w2-embeddings",
+        "csit321-w1-rag-components"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.612
+    },
+    {
+      "id": "R05",
+      "question": "What metadata fields does ChromaDB store for each chunk in EduRAG?",
+      "topic": "ChromaDB",
+      "relevant_chunk_ids": [
+        "csit321-w3-chromadb"
+      ],
+      "retrieved_top10": [
+        "csit321-w3-chromadb",
+        "csit321-w7-database",
+        "csit321-w3-chromadb-api",
+        "csit321-overview-system",
+        "csit321-w2-chunking",
+        "csit321-w7-security",
+        "csit321-w4-architecture",
+        "csit321-w1-rag-components",
+        "csit321-w2-embeddings",
+        "csit321-w5-latency"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.625
+    },
+    {
+      "id": "R06",
+      "question": "How do you filter a ChromaDB query so it only returns results from one course?",
+      "topic": "ChromaDB",
+      "relevant_chunk_ids": [
+        "csit321-w3-chromadb-api"
+      ],
+      "retrieved_top10": [
+        "csit321-w3-chromadb",
+        "csit321-w3-chromadb-api",
+        "csit321-w7-database",
+        "csit321-overview-system",
+        "csit321-w6-fallback",
+        "csit321-w2-embeddings",
+        "csit321-w1-rag-components",
+        "csit321-w1-rag-intro",
+        "csit321-w6-evaluation",
+        "csit321-w2-chunking"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 0.5,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.472
+    },
+    {
+      "id": "R07",
+      "question": "What are the main Flask API routes in EduRAG?",
+      "topic": "Flask API",
+      "relevant_chunk_ids": [
+        "csit321-w4-flask"
+      ],
+      "retrieved_top10": [
+        "csit321-w4-flask",
+        "csit321-w7-docker",
+        "csit321-w5-ollama",
+        "csit321-w3-chromadb-api",
+        "csit321-w4-architecture",
+        "csit321-overview-system",
+        "csit321-w3-chromadb",
+        "csit321-w7-security",
+        "csit321-w4-jwt-rbac",
+        "csit321-w5-latency"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.651
+    },
+    {
+      "id": "R08",
+      "question": "How does EduRAG implement authentication and role-based access control?",
+      "topic": "Flask API",
+      "relevant_chunk_ids": [
+        "csit321-w4-jwt-rbac"
+      ],
+      "retrieved_top10": [
+        "csit321-w4-jwt-rbac",
+        "csit321-w7-security",
+        "csit321-w4-architecture",
+        "csit321-overview-system",
+        "csit321-w7-docker",
+        "csit321-w5-prompt-engineering",
+        "csit321-w4-flask",
+        "csit321-w5-ollama",
+        "csit321-w6-fallback",
+        "csit321-w7-database"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.627
+    },
+    {
+      "id": "R09",
+      "question": "Does EduRAG use a monolith or microservices architecture, and why?",
+      "topic": "Flask API",
+      "relevant_chunk_ids": [
+        "csit321-w4-architecture"
+      ],
+      "retrieved_top10": [
+        "csit321-w4-architecture",
+        "csit321-w7-docker",
+        "csit321-w5-ollama",
+        "csit321-w7-security",
+        "csit321-overview-system",
+        "csit321-w4-flask",
+        "csit321-w4-jwt-rbac",
+        "csit321-w5-prompt-engineering",
+        "csit321-w5-latency",
+        "csit321-w7-database"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.693
+    },
+    {
+      "id": "R10",
+      "question": "Why does EduRAG use Ollama instead of the OpenAI API during development?",
+      "topic": "Ollama & LLM Generation",
+      "relevant_chunk_ids": [
+        "csit321-w5-ollama"
+      ],
+      "retrieved_top10": [
+        "csit321-w5-ollama",
+        "csit321-w7-docker",
+        "csit321-overview-system",
+        "csit321-w4-architecture",
+        "csit321-w5-latency",
+        "csit321-w5-prompt-engineering",
+        "csit321-w7-security",
+        "csit321-w4-flask",
+        "csit321-w4-jwt-rbac",
+        "csit321-w3-chromadb-api"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.787
+    },
+    {
+      "id": "R11",
+      "question": "What four sections make up EduRAG's prompt template?",
+      "topic": "Ollama & LLM Generation",
+      "relevant_chunk_ids": [
+        "csit321-w5-prompt-engineering"
+      ],
+      "retrieved_top10": [
+        "csit321-w5-prompt-engineering",
+        "csit321-overview-system",
+        "csit321-w7-security",
+        "csit321-w14-a4-prototype",
+        "csit321-w4-architecture",
+        "csit321-w2-chunking",
+        "csit321-w14-a5-a6-documentation",
+        "csit321-w6-fallback",
+        "csit321-w14-spring-structure",
+        "csit321-w14-assessment-schedule"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.535
+    },
+    {
+      "id": "R12",
+      "question": "What is EduRAG's target query response time and what are the two main latency contributors?",
+      "topic": "Ollama & LLM Generation",
+      "relevant_chunk_ids": [
+        "csit321-w5-latency"
+      ],
+      "retrieved_top10": [
+        "csit321-w5-latency",
+        "csit321-w4-architecture",
+        "csit321-w7-security",
+        "csit321-overview-system",
+        "csit321-w5-prompt-engineering",
+        "csit321-w6-fallback",
+        "csit321-w2-chunking",
+        "csit321-w4-jwt-rbac",
+        "csit321-w5-ollama",
+        "csit321-w6-evaluation"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.733
+    },
+    {
+      "id": "R13",
+      "question": "What do Precision@K and Recall@K measure in RAG evaluation, and what targets does EduRAG use?",
+      "topic": "RAG Evaluation",
+      "relevant_chunk_ids": [
+        "csit321-w6-evaluation"
+      ],
+      "retrieved_top10": [
+        "csit321-w6-evaluation",
+        "csit321-w6-fallback",
+        "csit321-w2-chunking",
+        "csit321-w1-rag-components",
+        "csit321-overview-system",
+        "csit321-w1-rag-intro",
+        "csit321-w5-latency",
+        "csit321-w7-security",
+        "csit321-w4-architecture",
+        "csit321-w5-prompt-engineering"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.612
+    },
+    {
+      "id": "R14",
+      "question": "What happens when no retrieved chunk passes the similarity threshold?",
+      "topic": "RAG Evaluation",
+      "relevant_chunk_ids": [
+        "csit321-w6-fallback"
+      ],
+      "retrieved_top10": [
+        "csit321-w2-chunking",
+        "csit321-w6-fallback",
+        "csit321-w1-rag-components",
+        "csit321-w6-evaluation",
+        "csit321-w2-embeddings",
+        "csit321-overview-system",
+        "csit321-w7-database",
+        "csit321-w1-rag-intro",
+        "csit321-w5-prompt-engineering",
+        "csit321-w3-chromadb"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 0.5,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.592
+    },
+    {
+      "id": "R15",
+      "question": "How does EduRAG mitigate prompt injection from untrusted input?",
+      "topic": "Security & Deployment",
+      "relevant_chunk_ids": [
+        "csit321-w7-security"
+      ],
+      "retrieved_top10": [
+        "csit321-w7-security",
+        "csit321-w5-prompt-engineering",
+        "csit321-overview-system",
+        "csit321-w4-jwt-rbac",
+        "csit321-w6-fallback",
+        "csit321-w4-architecture",
+        "csit321-w7-docker",
+        "csit321-w5-latency",
+        "csit321-w2-chunking",
+        "csit321-w5-ollama"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.665
+    },
+    {
+      "id": "R16",
+      "question": "What services run in EduRAG's Docker Compose stack?",
+      "topic": "Security & Deployment",
+      "relevant_chunk_ids": [
+        "csit321-w7-docker"
+      ],
+      "retrieved_top10": [
+        "csit321-w7-docker",
+        "csit321-w4-architecture",
+        "csit321-w5-ollama",
+        "csit321-w7-security",
+        "csit321-overview-system",
+        "csit321-w3-chromadb",
+        "csit321-w4-flask",
+        "csit321-w5-prompt-engineering",
+        "csit321-w3-chromadb-api",
+        "csit321-w5-latency"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.59
+    },
+    {
+      "id": "R17",
+      "question": "Why does EduRAG use PostgreSQL alongside ChromaDB instead of just one database?",
+      "topic": "Security & Deployment",
+      "relevant_chunk_ids": [
+        "csit321-w7-database"
+      ],
+      "retrieved_top10": [
+        "csit321-w7-database",
+        "csit321-w7-security",
+        "csit321-w7-docker",
+        "csit321-w3-chromadb-api",
+        "csit321-w3-chromadb",
+        "csit321-w4-architecture",
+        "csit321-overview-system",
+        "csit321-w5-latency",
+        "csit321-w5-ollama",
+        "csit321-w6-fallback"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.659
+    },
+    {
+      "id": "R18",
+      "question": "Give a high-level overview of how EduRAG answers a student's question end to end.",
+      "topic": "System Overview",
+      "relevant_chunk_ids": [
+        "csit321-overview-system"
+      ],
+      "retrieved_top10": [
+        "csit321-w5-prompt-engineering",
+        "csit321-overview-system",
+        "csit321-w6-fallback",
+        "csit321-w2-embeddings",
+        "csit321-w4-architecture",
+        "csit321-w2-chunking",
+        "csit321-w7-security",
+        "csit321-w14-assessment-schedule",
+        "csit321-w5-latency",
+        "csit321-w1-rag-intro"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 0.5,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.584
+    },
+    {
+      "id": "R19",
+      "question": "What vector database and embedding model does EduRAG use together for retrieval?",
+      "topic": "Vector Embeddings / ChromaDB",
+      "relevant_chunk_ids": [
+        "csit321-w2-embeddings",
+        "csit321-w3-chromadb"
+      ],
+      "retrieved_top10": [
+        "csit321-w2-embeddings",
+        "csit321-w7-database",
+        "csit321-overview-system",
+        "csit321-w1-rag-components",
+        "csit321-w3-chromadb-api",
+        "csit321-w3-chromadb",
+        "csit321-w2-chunking",
+        "csit321-w4-architecture",
+        "csit321-w6-fallback",
+        "csit321-w5-latency"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.612
+    },
+    {
+      "id": "R20",
+      "question": "How does EduRAG handle both user authentication and API routing?",
+      "topic": "Flask API",
+      "relevant_chunk_ids": [
+        "csit321-w4-flask",
+        "csit321-w4-jwt-rbac"
+      ],
+      "retrieved_top10": [
+        "csit321-w4-jwt-rbac",
+        "csit321-w7-security",
+        "csit321-w7-docker",
+        "csit321-w4-architecture",
+        "csit321-overview-system",
+        "csit321-w5-ollama",
+        "csit321-w4-flask",
+        "csit321-w5-prompt-engineering",
+        "csit321-w6-fallback",
+        "csit321-w3-chromadb-api"
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "is_off_topic_query": false,
+      "correctly_triggered_fallback": false,
+      "best_similarity": 0.606
+    },
+    {
+      "id": "R21",
+      "question": "What's the weather forecast for Sydney tomorrow?",
+      "topic": "off_topic",
+      "relevant_chunk_ids": [],
+      "retrieved_top10": [
+        "csit321-w14-assessment-schedule",
+        "csit321-w5-ollama",
+        "csit321-w14-spring-structure",
+        "csit321-w14-a4-prototype",
+        "csit321-w5-latency",
+        "csit321-w7-docker",
+        "csit321-w14-a5-a6-documentation",
+        "csit321-w4-flask",
+        "csit321-w5-prompt-engineering",
+        "csit321-w1-rag-components"
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_10": null,
+      "reciprocal_rank": null,
+      "is_off_topic_query": true,
+      "correctly_triggered_fallback": true,
+      "best_similarity": 0.184
+    },
+    {
+      "id": "R22",
+      "question": "Can you recommend a good chocolate cake recipe?",
+      "topic": "off_topic",
+      "relevant_chunk_ids": [],
+      "retrieved_top10": [
+        "csit321-w14-a4-prototype",
+        "csit321-w5-latency",
+        "csit321-w3-chromadb",
+        "csit321-w4-jwt-rbac",
+        "csit321-w1-rag-components",
+        "csit321-w4-flask",
+        "csit321-w2-embeddings",
+        "csit321-w7-database",
+        "csit321-w7-security",
+        "csit321-w6-evaluation"
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_10": null,
+      "reciprocal_rank": null,
+      "is_off_topic_query": true,
+      "correctly_triggered_fallback": true,
+      "best_similarity": 0.052
+    }
+  ]
+}

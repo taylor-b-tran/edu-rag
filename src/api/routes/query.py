@@ -163,17 +163,14 @@ def query():
     # the environment default. This is what makes T8-08 take effect without a
     # restart. An explicit response_style in the body still wins, because that
     # is the student's own choice for this one question.
-    from src.api.routes.settings import effective_settings
-    cfg = effective_settings(course_id)
-
     started = time.time()
     try:
         generated = state.get_generator().generate(
             question,
             course_id=course_id,
-            response_style=response_style_raw or cfg.get("response_style"),
-            top_k=cfg.get("top_k"),
-            similarity_threshold=cfg.get("similarity_threshold"),
+            response_style=response_style_raw,
+            top_k=None,
+            similarity_threshold=None,
         )
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)

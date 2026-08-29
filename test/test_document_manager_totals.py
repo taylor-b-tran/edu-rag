@@ -18,10 +18,12 @@ T8-36 is meant to catch.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, "/workspace/apps/streamlit")
+_STREAMLIT_DIR = Path(__file__).resolve().parents[1] / "apps" / "streamlit"
+sys.path.insert(0, str(_STREAMLIT_DIR))
 
 
 @pytest.fixture(scope="module")
