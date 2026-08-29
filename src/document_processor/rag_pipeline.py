@@ -13,7 +13,11 @@ FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
 
-DEFAULT_RESPONSE_STYLE = "concise"
+# "concise" instructs the model to keep answers to a few sentences, which on a
+# real question produced about 400 characters — a correct answer too thin to
+# study from. The five styles all work; only the default was wrong. A student
+# who wants it shorter can still pick "concise" per question.
+DEFAULT_RESPONSE_STYLE = "detailed"
 
 RESPONSE_STYLES: dict[str, dict[str, str]] = {
     "concise": {
@@ -89,6 +93,21 @@ def resolve_response_style(style: str | None) -> str:
         return style
     return DEFAULT_RESPONSE_STYLE
 
+
+def _course_label(course_id: str | None) -> str:
+    """What the system prompt calls the course it is answering for.
+
+    Both prompts used to open with "for CSIT321 at UOW" no matter which course
+    was asked about, so a CSCI203 student was told, in the first line the model
+    reads, that it assists a subject they are not in. Retrieval was already
+    scoped correctly; only the prompt disagreed.
+
+    Falls back to the generic phrasing rather than to a course name, because
+    naming the wrong course is worse than naming none.
+    """
+    code = (course_id or "").strip()
+    return code if code else "your course"
+
 # Ollama generation settings — now adjustable without editing code 
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
 OLLAMA_TOP_P = float(os.getenv("OLLAMA_TOP_P", "0.9"))
@@ -154,20 +173,20 @@ class LLMResponseGeneration:
         # Which prompt version this instance uses (lets the benchmark script compare strategies without touching env vars)
         self.strategy = strategy or PROMPT_STRATEGY
 
-    def _build_prompt(self, query, chunks, history=None, style=None):
+    def _build_prompt(self, query, chunks, history=None, style=None, course_id=None):
         # Picks which prompt version to build, based on self.strategy
         style = resolve_response_style(style)
         if self.strategy == "baseline":
-            return self._build_prompt_baseline(query, chunks, history, style)
+            return self._build_prompt_baseline(query, chunks, history, style, course_id)
         if self.strategy == "few_shot_cited":
-            return self._build_prompt_few_shot_cited(query, chunks, history, style)
-        return self._build_prompt_evidence_cited(query, chunks, history, style)
+            return self._build_prompt_few_shot_cited(query, chunks, history, style, course_id)
+        return self._build_prompt_evidence_cited(query, chunks, history, style, course_id)
 
     # Original prompt (no forced citation format)
-    def _build_prompt_baseline(self, query, chunks, history=None, style=None):
+    def _build_prompt_baseline(self, query, chunks, history=None, style=None, course_id=None):
         style = resolve_response_style(style)
         sys_instr = (
-            "You are Paedia, a course assistant for CSIT321 at UOW.\n"
+            f"You are Paedia, a course assistant for {_course_label(course_id)} at UOW.\n"
             "Answer ONLY from the CONTEXT sections below.\n"
             "Always cite the source file and page number.\n"
             "If context is insufficient, say so clearly.\n"
@@ -193,10 +212,11 @@ class LLMResponseGeneration:
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
                 f"[STUDENT QUESTION]\n{query}\n\n[PAEDIA ANSWER]")
 
-    def _build_prompt_evidence_cited(self, query, chunks, history=None, style=None):
+    def _build_prompt_evidence_cited(self, query, chunks, history=None, style=None, course_id=None):
         style = resolve_response_style(style)
         sys_instr = (
-            "You are Paedia, a course-material-grounded assistant for CSIT321 at UOW.\n\n"
+            "You are Paedia, a course-material-grounded assistant for "
+            f"{_course_label(course_id)} at UOW.\n\n"
             "Rules:\n"
             "- Answer using only the provided course context below.\n"
             "- Cite every main claim inline with its source ID, e.g. [S1] or [S2].\n"
@@ -236,9 +256,9 @@ class LLMResponseGeneration:
         )
 
     # Same as evidence_cited, plus one worked example. Helps smaller models copy the citation format correctly instead of just being told the rule
-    def _build_prompt_few_shot_cited(self, query, chunks, history=None, style=None):
+    def _build_prompt_few_shot_cited(self, query, chunks, history=None, style=None, course_id=None):
         style = resolve_response_style(style)
-        base_prompt = self._build_prompt_evidence_cited(query, chunks, history, style)
+        base_prompt = self._build_prompt_evidence_cited(query, chunks, history, style, course_id)
         worked_example = (
             "Example of the required format:\n"
             "Question: What database does EduRAG use for vector storage?\n"
@@ -321,7 +341,7 @@ class LLMResponseGeneration:
         # Only keep chunks similar enough to be trustworthy
         good = [c for c in all_chunks if c.similarity >= threshold]
         is_fallback = len(good) == 0 # no good chunks -> answer from general knowledge instead
-        prompt = self._build_prompt(query, good, history, style)
+        prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good)
         answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         conf, cscore= self._confidence(good)
