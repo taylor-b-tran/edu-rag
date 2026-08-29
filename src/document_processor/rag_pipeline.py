@@ -125,7 +125,8 @@ class VectorRetriever:
         print(f"[Retriever] '{COLLECTION}' has {self._collection.count()} chunks  "
               f"(model: {self._model_name})")
 
-    def search(self, query: str, course_id=COURSE_ID, top_k=TOP_K) -> List[RetrievedChunk]:
+    def search(self, query: str, course_id=COURSE_ID, top_k=None) -> List[RetrievedChunk]:
+        top_k = TOP_K if top_k is None else top_k
 
         # Turn the question into a vector, then find the closest-matching chunks in ChromaDB
         q_emb = self._model.encode(query, normalize_embeddings=True)
@@ -307,12 +308,18 @@ class LLMResponseGeneration:
                              "similarity": round(ch.similarity, 3)})
         return refs
 
-    def generate(self, query, course_id=COURSE_ID, top_k=TOP_K,
-                 history=None, response_style=None) -> "GeneratedResponse":
+    def generate(self, query, course_id=COURSE_ID, top_k=None,
+                 history=None, response_style=None,
+                 similarity_threshold=None) -> "GeneratedResponse":
+        # Resolved per call rather than read from the module. These used to be
+        # default arguments, which Python evaluates once when the function is
+        # defined, so live config could never have reached them (T8-08).
+        top_k = TOP_K if top_k is None else top_k
+        threshold = SIMILARITY_THRESHOLD if similarity_threshold is None else similarity_threshold
         style = resolve_response_style(response_style)
         all_chunks  = self._retriever.search(query, course_id=course_id, top_k=top_k)
         # Only keep chunks similar enough to be trustworthy
-        good = [c for c in all_chunks if c.similarity >= SIMILARITY_THRESHOLD]
+        good = [c for c in all_chunks if c.similarity >= threshold]
         is_fallback = len(good) == 0 # no good chunks -> answer from general knowledge instead
         prompt = self._build_prompt(query, good, history, style)
         raw, ok = self._call_ollama(prompt, chunks=good)

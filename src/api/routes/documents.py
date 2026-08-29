@@ -191,6 +191,16 @@ def upload_document():
     uploaded_file.save(file_path)
     file_size = file_path.stat().st_size
 
+    # A zero-byte file used to be accepted with 202, queue an indexing job and
+    # fail in the background with "no extractable text". The uploader saw
+    # success and the document joined the pile of permanently failed rows.
+    if file_size == 0:
+        file_path.unlink(missing_ok=True)
+        return jsonify({
+            "error": "empty file",
+            "message": "That file is empty. Check it saved correctly and upload it again.",
+        }), 400
+
     import copy
     result = _state().queue_upload(
         filename=stored_name,

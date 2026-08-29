@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 
 from src.api.routes import register_routes
 from src.api.state import APIState
@@ -17,6 +17,23 @@ def create_app() -> Flask:
         os.environ.get("PAEDIA_MAX_UPLOAD_MB", "50")) * 1024 * 1024
     app.config["EDURAG_API_STATE"] = APIState()
     register_routes(app)
+
+    @app.errorhandler(413)
+    def _too_large(_err):
+        """Answer oversized uploads as JSON like every other error.
+
+        Werkzeug's default 413 is an HTML page, and a client that manages to
+        read it gets markup where it expected an error object. The client also
+        checks the size before sending, because past this limit the server
+        stops reading and the connection is often reset before this response
+        is ever seen.
+        """
+        limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        return jsonify({
+            "error": "file too large",
+            "message": f"Uploads are limited to {limit_mb} MB.",
+        }), 413
+
     return app
 
 

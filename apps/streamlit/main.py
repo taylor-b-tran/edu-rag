@@ -12,6 +12,12 @@ Sprint 5 updates:
 Sprint 6 updates:
   T05: Multi-subject selector — sidebar course dropdown, "My Courses" card page,
        course-scoped chat header. All backed by real /api/courses endpoints.
+
+Sprint 8 updates:
+  T8-06: Signup UI — tabbed Sign In / Sign Up on login page, POST /api/auth/signup,
+         auto-login on success, inline validation and API error display.
+  T8-07: Removed hardcoded content — suggested prompts are now course-aware and
+         built from indexed documents, UOW-specific placeholders replaced.
 """
 
 import streamlit as st
@@ -450,22 +456,37 @@ def _all_courses() -> list[dict]:
 
 
 def _course_options_for_user(user: dict) -> list[str]:
+    """Courses this user may query. Empty means enrolled in nothing.
+
+    An empty list used to fall back to COURSE_FALLBACKS, which put anyone who
+    signed up - and is therefore enrolled in nothing - into CSIT321. Every
+    question then came back 403 "Not enrolled in this course", rendered as if
+    the assistant had said it. The fallback only makes sense when the course
+    list itself could not be fetched; it must not paper over a real enrolment
+    of zero.
+    """
+    all_courses = _all_courses()
+    if not all_courses:
+        # The API is unreachable, not a user with no enrolments.
+        return [c for c in COURSE_FALLBACKS if c]
+
     enrolled = set(user.get("enrolled_courses", []) or [])
     role = str(user.get("role", "")).lower()
     options: list[str] = []
-    for course in _all_courses():
+    for course in all_courses:
         code = course.get("course_code")
         if not code or not course.get("is_active", True):
             continue
         if role == "admin" or code in enrolled:
             options.append(code)
-    if not options:
-        options = [c for c in COURSE_FALLBACKS if c]
     return list(dict.fromkeys(options))
 
 
 def _default_course_for_user(user: dict) -> str:
+    """The course to open on, or "" when the user is in none."""
     options = _course_options_for_user(user)
+    if not options:
+        return ""
     return DEFAULT_COURSE_ID if DEFAULT_COURSE_ID in options else options[0]
 
 
@@ -502,6 +523,7 @@ def init_session_state():
         "course_options": COURSE_FALLBACKS,
         "selected_course_id": DEFAULT_COURSE_ID,
         "login_error": None,
+        "signup_error": None,
         "last_login_nonce": None,
         "pending_send": False,
         "query_state": None,
@@ -570,9 +592,43 @@ def get_ai_response(query: str) -> dict:
 
 
 def get_suggested_prompts() -> list:
-    fallback = ["Explain normalization", "What's on Week 5?", "Summarize lecture 3", "Quiz me on indexing"]
-    prompts = data.get("suggested_prompts", fallback) if data else fallback
-    return random.sample(prompts, min(4, len(prompts)))
+    """Return context-aware prompt suggestions based on the active course.
+
+    T8-07: replaced the six hardcoded strings from fixtures with prompts
+    that reference the user's selected course and its indexed documents.
+    Cached per course so the buttons don't reshuffle on every re-run.
+    """
+    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+
+    # Return cached prompts if the course hasn't changed
+    cached = st.session_state.get("_cached_prompts_course")
+    if cached == course_id and st.session_state.get("_cached_prompts"):
+        return st.session_state["_cached_prompts"]
+
+    docs = api.get_documents(course_id)
+    # Use original_filename (T8-28: uploads store under a generated name)
+    doc_names = [
+        (d.get("original_filename") or d.get("filename") or d.get("name") or "")
+        for d in docs
+    ]
+    doc_names = [n for n in doc_names if n]
+
+    prompts: list[str] = []
+    if doc_names:
+        first_doc = doc_names[0].rsplit(".", 1)[0]
+        prompts.append(f"Summarise {first_doc}")
+    prompts.append(f"What topics are covered in {course_id}?")
+    prompts.append(f"Give me a quick quiz on {course_id}")
+    prompts.append(f"Explain the key concepts from the latest lecture")
+    if len(doc_names) > 1:
+        second_doc = doc_names[1].rsplit(".", 1)[0]
+        prompts.append(f"Compare themes in {first_doc} and {second_doc}")
+    prompts.append(f"What should I revise for {course_id}?")
+
+    picked = random.sample(prompts, min(4, len(prompts)))
+    st.session_state["_cached_prompts_course"] = course_id
+    st.session_state["_cached_prompts"] = picked
+    return picked
 
 
 def get_model_badge(model_used: str) -> str:
@@ -647,6 +703,39 @@ def handle_login_submit() -> None:
         st.session_state.login_error = login_result.get("error") or "Invalid email or password."
 
 
+def handle_signup_submit() -> None:
+    """Register a new user via POST /api/auth/signup, then auto-login on success."""
+    email = st.session_state.get("signup_email", "").strip()
+    username = st.session_state.get("signup_username", "").strip()
+    password = st.session_state.get("signup_password", "")
+    confirm = st.session_state.get("signup_confirm", "")
+    role = st.session_state.get("signup_role", "student").lower()
+
+    if not email or not username or not password:
+        st.session_state.signup_error = "All fields are required."
+        return
+    if password != confirm:
+        st.session_state.signup_error = "Passwords do not match."
+        return
+
+    result = api.signup(email, username, password, role)
+    if result.get("success"):
+        # Auto-login: the signup response already contains tokens + user
+        user = _normalise_user_for_ui(result.get("user", {}))
+        st.session_state.authenticated = True
+        st.session_state.jwt_token = result.get("jwt_token")
+        st.session_state.user = user
+        st.session_state.course_options = _course_options_for_user(user)
+        st.session_state.course_id = _default_course_for_user(user)
+        st.session_state.selected_course_id = st.session_state.course_id
+        st.session_state.signup_error = None
+        st.session_state.login_error = None
+        create_new_session("Welcome Chat")
+    else:
+        # Show the API error message as-is (it's already user-facing)
+        st.session_state.signup_error = result.get("error") or "Signup failed."
+
+
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
 
 def render_login_page():
@@ -663,45 +752,64 @@ def render_login_page():
         """, unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown("#### Welcome back!")
 
-        login_payload = login_form_component(
-            default_email=st.session_state.get("login_email", ""),
-            key="login_form_component",
-        )
+        # ── Toggle between Sign In and Sign Up ──
+        tab_login, tab_signup = st.tabs(["Sign In", "Sign Up"])
 
-        if st.session_state.login_error:
-            st.error(st.session_state.login_error)
+        # ──────────── SIGN IN TAB ────────────
+        with tab_login:
+            login_payload = login_form_component(
+                default_email=st.session_state.get("login_email", ""),
+                key="login_form_component",
+            )
 
-        if isinstance(login_payload, dict) and login_payload.get("submitted"):
-            nonce = login_payload.get("nonce")
-            if nonce != st.session_state.get("last_login_nonce"):
-                st.session_state.last_login_nonce = nonce
-                st.session_state.login_email = login_payload.get("email", "")
-                st.session_state.login_password = login_payload.get("password", "")
-                handle_login_submit()
-                st.rerun()
+            if st.session_state.login_error:
+                st.error(st.session_state.login_error)
 
-        st.markdown("""
-        <div style="text-align: center; margin: 16px 0;">
-            <span style="color: #94A3B8; font-size: 0.85rem;">OR</span>
-        </div>
-        """, unsafe_allow_html=True)
+            if isinstance(login_payload, dict) and login_payload.get("submitted"):
+                nonce = login_payload.get("nonce")
+                if nonce != st.session_state.get("last_login_nonce"):
+                    st.session_state.last_login_nonce = nonce
+                    st.session_state.login_email = login_payload.get("email", "")
+                    st.session_state.login_password = login_payload.get("password", "")
+                    handle_login_submit()
+                    st.rerun()
 
-        if st.button("Sign in with UOW SSO", use_container_width=True):
-            st.info("UOW SSO integration is not available in the prototype.")
+        # ──────────── SIGN UP TAB (T8-06) ────────────
+        with tab_signup:
+            with st.form("signup_form", clear_on_submit=False):
+                st.text_input("Email", placeholder="you@example.com",
+                              key="signup_email")
+                st.text_input("Username", placeholder="Choose a username",
+                              key="signup_username")
+                s1, s2 = st.columns(2)
+                with s1:
+                    st.text_input("Password", type="password",
+                                  placeholder="At least 10 characters",
+                                  key="signup_password")
+                with s2:
+                    st.text_input("Confirm Password", type="password",
+                                  placeholder="Re-enter password",
+                                  key="signup_confirm")
+                st.selectbox("I am a", ["Student", "Lecturer"],
+                             key="signup_role",
+                             format_func=lambda x: x)
+
+                submitted = st.form_submit_button("Create Account", type="primary",
+                                                   use_container_width=True)
+                if submitted:
+                    handle_signup_submit()
+                    if st.session_state.authenticated:
+                        st.rerun()
+
+            if st.session_state.get("signup_error"):
+                st.error(st.session_state.signup_error)
+
+            st.caption("Password must be at least 10 characters, not a common password, "
+                       "and different from your email or username.")
 
         st.markdown("---")
         st.caption("CSIT321 Project 37 · Group 19 — Aletheia's Zetetes")
-
-        # The demo credentials used to be printed here. On an instance the team
-        # can reach, that hands an admin login to anyone who opens the page.
-        st.markdown("""
-        <div style="background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 16px; margin-top: 16px; font-size: 0.82rem; color: #475569;">
-            Ask your lecturer or the team lead for an account, or sign up if
-            self-registration is open.
-        </div>
-        """, unsafe_allow_html=True)
 
 
 # ─── SIDEBAR (T09: readability + T11: session management) ─────────
@@ -877,8 +985,31 @@ def _send_message(text: str, append_user: bool = True):
         session["message_count"] = len(session["messages"])
 
 
+def _render_no_courses_notice() -> None:
+    """Shown instead of the chat when the account is enrolled in nothing.
+
+    Signup creates an account with no enrolments and self-enrolment (T8-05)
+    does not exist yet, so this is a real state a new user lands in. Saying so
+    is better than sending questions to a course they cannot read and printing
+    the 403 as an answer.
+    """
+    st.markdown("### 💬 Ask your course materials")
+    st.info(
+        "**You are not enrolled in any course yet.**"
+    )
+    st.write(
+        "Ask your lecturer or the unit coordinator to add you, and this "
+        "page will work as soon as they do."
+    )
+    st.caption("Nothing is wrong with your account - it just has no courses on it.")
+
+
 def render_chat_page():
     session = get_active_session()
+
+    if not _course_options_for_user(st.session_state.get("user") or {}):
+        _render_no_courses_notice()
+        return
 
     active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
 
@@ -995,7 +1126,7 @@ def render_chat_page():
                             section_str = f" · {section}" if section else ""
                             collection = src.get("collection_name", "")
                             collection_str = f" [{collection}]" if collection else ""
-                            sim_pct = int(src.get("similarity", 0) * 100)
+                            sim_pct = int((src.get("similarity") or 0) * 100)
                             sources_html += (
                                 f'<span class="source-chip">'
                                 f'📄 {filename} · p.{page_number}'
@@ -1091,7 +1222,11 @@ def render_history_page():
 
     col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
-        st.selectbox("Course", ["All courses", "CSIT321", "CSIT214", "ISIT312"], label_visibility="collapsed")
+        # Was hardcoded to ["All courses", "CSIT321", "CSIT214", "ISIT312"];
+        # ISIT312 is not a real course on this instance.
+        _user = st.session_state.get("user") or {}
+        st.selectbox("Course", ["All courses"] + _course_options_for_user(_user),
+                     label_visibility="collapsed")
     with col2:
         st.selectbox("Period", ["Last 7 days", "Last 30 days", "All time"], label_visibility="collapsed")
     with col3:
@@ -1101,13 +1236,9 @@ def render_history_page():
 
     # Combine real sessions with demo data
     real_sessions = st.session_state.get("sessions", [])
-    demo_sessions = [
-        {"session_id": "demo-1", "title": "RAG Pipeline Deep Dive", "course_id": "CSIT321", "created_at": "Today, 2:30 PM", "message_count": 8, "messages": [None]*8, "preview": "Asked about retrieval steps, embedding dimensions, and chunk overlap strategies..."},
-        {"session_id": "demo-2", "title": "Database Normalization", "course_id": "CSIT214", "created_at": "Today, 10:15 AM", "message_count": 5, "messages": [None]*5, "preview": "Explored 1NF through 3NF with examples, discussed denormalization trade-offs..."},
-        {"session_id": "demo-3", "title": "SQL Joins Overview", "course_id": "CSIT214", "created_at": "Yesterday, 4:45 PM", "message_count": 12, "messages": [None]*12, "preview": "Covered INNER, LEFT, RIGHT, FULL joins with visual diagrams and practice queries..."},
-        {"session_id": "demo-4", "title": "Week 5 Lecture Summary", "course_id": "CSIT214", "created_at": "Yesterday, 11:00 AM", "message_count": 3, "messages": [None]*3, "preview": "Quick summary of indexing concepts, B-trees, and hash indexes from Week 5..."},
-    ]
-    all_sessions = real_sessions + demo_sessions
+    # Four invented conversations used to be merged in here unconditionally,
+    # so every user saw the same fake history on their own account (T8-07).
+    all_sessions = real_sessions
     accent_colors = ["#0D9488", "#1B2A4A", "#D4A843", "#0D9488", "#64748B"]
 
     for i, session in enumerate(all_sessions[:8]):
@@ -1194,7 +1325,7 @@ def render_doc_manager_page():
 
     uploaded_files = st.file_uploader(
         "Upload course materials",
-        type=["pdf", "pptx", "docx", "txt", "md"],
+        type=["pdf", "pptx", "docx"],   # what the chunker supports; txt/md were refused by the API
         accept_multiple_files=True,
         help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here. Max 50 MB per file.",
     )
@@ -1215,12 +1346,29 @@ def render_doc_manager_page():
     _render_document_table(student_view=False)
 
 
+MAX_UPLOAD_MB = 50
+
+
 def _run_real_upload_and_indexing(f, course_id):
     filename = f.name
     file_bytes = f.getvalue()
     file_size = len(file_bytes)
 
     progress_placeholder = st.empty()
+
+    # Checked here rather than only server-side. Past MAX_CONTENT_LENGTH the
+    # server stops reading and closes the socket while the client is still
+    # sending, so the uploader sees a connection error instead of the 413 and
+    # retries the same file. Catching it before the request avoids the race.
+    if file_size == 0:
+        progress_placeholder.error(
+            f"{filename} is empty (0 bytes). Check it saved correctly.")
+        return
+    if file_size > MAX_UPLOAD_MB * 1024 * 1024:
+        progress_placeholder.error(
+            f"{filename} is {file_size / (1024*1024):.0f} MB. "
+            f"The limit is {MAX_UPLOAD_MB} MB - split it or compress it first.")
+        return
     progress_placeholder.info(f"Uploading {filename}...")
 
     res = api.upload_document(file_bytes, filename, course_id)
@@ -1261,6 +1409,21 @@ def _run_real_upload_and_indexing(f, course_id):
                 unsafe_allow_html=True
             )
             time.sleep(1.0)
+
+
+def _document_totals(docs) -> tuple[int, int]:
+    """Counts for the Document Manager summary line.
+
+    `chunks` is NULL for every document that failed to index, and
+    `.get("chunks", 0)` hands back that None rather than the default - the key
+    is present, it just has no value. Summing then raised TypeError and took
+    the whole page down, so one bad upload hid every good one. `file_size_bytes`
+    just above already had this right.
+    """
+    indexed = sum(1 for d in docs
+                  if str(d.get("status")).lower() in ("indexed", "completed"))
+    total_chunks = sum((d.get("chunks") or 0) for d in docs)
+    return indexed, total_chunks
 
 
 def _render_document_table(student_view: bool = False):
@@ -1307,8 +1470,7 @@ def _render_document_table(student_view: bool = False):
                 st.rerun()
 
     st.divider()
-    indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
-    total_chunks = sum(d.get("chunks", 0) for d in docs)
+    indexed, total_chunks = _document_totals(docs)
     st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
 
 

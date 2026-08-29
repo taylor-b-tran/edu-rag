@@ -348,13 +348,5 @@
       "role": "admin",
       "enrolled_courses": []
     }
-  ],
-  "suggested_prompts": [
-    "Explain normalization in databases",
-    "What's on Week 5?",
-    "Summarize lecture 3",
-    "What are SQL joins and when should I use each type?",
-    "Can you summarize the key steps in the RAG pipeline?",
-    "What is Retrieval-Augmented Generation and how does it differ from standard LLMs?"
   ]
 }

@@ -159,6 +159,18 @@ CREATE TABLE IF NOT EXISTS course_memberships (
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS owner_id UUID NULL
     REFERENCES users(id) ON DELETE SET NULL;
 
+-- Sprint 8 (T8-08): live-reloadable configuration. Scope is either the string
+-- 'global' or a course_code, so one table covers both tiers and a per-course
+-- row simply shadows the global one.
+CREATE TABLE IF NOT EXISTS settings (
+    scope      TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    value      JSONB NOT NULL,
+    updated_by TEXT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (scope, key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_courses_owner_id ON courses(owner_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_course_memberships_user_id ON course_memberships(user_id);
@@ -853,6 +865,38 @@ def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
             row["issued_at"] = row["issued_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
         tokens[token] = row
     return tokens
+
+
+def get_settings(scope: str) -> dict[str, Any]:
+    """Every stored setting for one scope ('global' or a course code)."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT key, value FROM settings WHERE scope = %s", (scope,))
+            rows = cur.fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def set_setting(scope: str, key: str, value: Any, updated_by: str | None = None) -> None:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO settings (scope, key, value, updated_by, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (scope, key)
+                DO UPDATE SET value = EXCLUDED.value,
+                              updated_by = EXCLUDED.updated_by,
+                              updated_at = NOW()
+                """,
+                (scope, key, json.dumps(value), updated_by),
+            )
+
+
+def delete_setting(scope: str, key: str) -> None:
+    """Remove an override so the next tier down applies again."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM settings WHERE scope = %s AND key = %s", (scope, key))
 
 
 def get_token(table: str, token: str) -> dict[str, Any] | None:
