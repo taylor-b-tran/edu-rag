@@ -5,9 +5,11 @@ sys.path.insert(0, os.path.abspath("."))
 
 from src.document_processor.rag_pipeline import VectorRetriever, SIMILARITY_THRESHOLD
 
+SPRINT = os.getenv("BENCHMARK_SPRINT", "8")
+
 EVAL_SET_PATH = Path("tests/retrieval_eval_set.json")
-OUT_JSON = Path("docs/retrieval_benchmark_sprint7.json")
-OUT_MD = Path("docs/retrieval_benchmark_sprint7.md")
+OUT_JSON = Path(f"docs/retrieval_benchmark_sprint{SPRINT}.json")
+OUT_MD = Path(f"docs/retrieval_benchmark_sprint{SPRINT}.md")
 
 P_AT_K = 5
 R_AT_K = 10
@@ -49,7 +51,12 @@ def run_benchmark(eval_set: list, retriever: VectorRetriever) -> list:
     max_k = max(P_AT_K, R_AT_K)
     for item in eval_set:
         relevant = set(item["relevant_chunk_ids"])
-        chunks = retriever.search(item["question"], top_k=max_k)
+        # T8-14: search now scopes by course_id, matching real usage (generate()
+        # always passes one) — previously this searched unscoped across all 4
+        # courses. Every current eval question is CSIT321 content, so that's the
+        # default; new questions for the other courses should set "course_id".
+        course_id = item.get("course_id", "CSIT321")
+        chunks = retriever.search(item["question"], course_id=course_id, top_k=max_k)
         retrieved_ids = [c.chunk_id for c in chunks]
         best_similarity = chunks[0].similarity if chunks else 0.0
         would_fallback = best_similarity < SIMILARITY_THRESHOLD
@@ -72,16 +79,16 @@ def run_benchmark(eval_set: list, retriever: VectorRetriever) -> list:
 
 def theoretical_max_precision_at_5(in_corpus: list) -> float:
     """The best possible Precision@5 given how many relevant chunks each
-    question actually has. If most questions only have 1 correct chunk in
-    an 18-chunk corpus, 1/5 = 0.2 is the ceiling -- no retrieval algorithm
-    can score higher than this, so it's not a fair 0.7 comparison on its own."""
+    question actually has. If most questions only have 1 correct chunk,
+    1/5 = 0.2 is the ceiling -- no retrieval algorithm can score higher
+    than this, so it's not a fair 0.7 comparison on its own."""
     if not in_corpus:
         return None
     per_query_max = [min(len(r["relevant_chunk_ids"]), P_AT_K) / P_AT_K for r in in_corpus]
     return round(sum(per_query_max) / len(per_query_max), 3)
 
 
-def summarise(results: list) -> dict:
+def summarise(results: list, corpus_size: int = None) -> dict:
     # Split into normal questions (have ground truth) vs off-topic controls (shouldn't match anything)
     in_corpus = [r for r in results if not r["is_off_topic_query"]]
     off_topic = [r for r in results if r["is_off_topic_query"]]
@@ -94,6 +101,7 @@ def summarise(results: list) -> dict:
     max_p5 = theoretical_max_precision_at_5(in_corpus)
 
     return {
+        "corpus_size": corpus_size,
         "n_queries": len(results),
         "n_in_corpus_queries": len(in_corpus),
         "n_off_topic_queries": len(off_topic),
@@ -122,6 +130,9 @@ def build_interpretation(summary: dict, results: list) -> list:
     misread as broken retrieval when it's actually a corpus-size ceiling."""
     lines = ["## Interpretation", ""]
 
+    corpus_size = summary.get("corpus_size")
+    corpus_desc = f"a {corpus_size}-chunk corpus" if corpus_size else "the current corpus"
+
     max_p5 = summary["theoretical_max_precision_at_5"]
     avg_p5 = summary["avg_precision_at_5"]
     if max_p5 is not None and max_p5 < TARGET_PRECISION_AT_5:
@@ -129,7 +140,7 @@ def build_interpretation(summary: dict, results: list) -> list:
         lines.append(
             f"**Precision@{P_AT_K} target not met, but this is a corpus-size ceiling, "
             f"not a retrieval failure.** Most questions in this labelled set have only "
-            f"1-2 truly relevant chunks in an 18-chunk corpus, so the best possible "
+            f"1-2 truly relevant chunks in {corpus_desc}, so the best possible "
             f"Precision@{P_AT_K} is {max_p5} (= relevant chunks / {P_AT_K}), well below "
             f"the {TARGET_PRECISION_AT_5} target from a corpus with 5+ relevant chunks "
             f"per question in mind. The pipeline scored {avg_p5}, which is "
@@ -177,10 +188,16 @@ def build_interpretation(summary: dict, results: list) -> list:
     return lines
 
 
-def write_markdown(summary: dict, results: list, path: Path):
+def write_markdown(summary: dict, results: list, path: Path, title: str = None):
+    if title is None:
+        title = f"Sprint {SPRINT} -- Formal Retrieval Accuracy Benchmark Report"
+    corpus_size = summary.get("corpus_size")
     lines = [
-        "# Sprint 7 -- Formal Retrieval Accuracy Benchmark Report",
+        f"# {title}",
         "",
+        f"**Corpus size at benchmark time: {corpus_size if corpus_size is not None else 'unknown'} chunks.** "
+        f"If this doesn't match what you expect, the collection wasn't reseeded before "
+        f"this ran -- see `ingest(force_reload=True)` in `src/document_processor/ingest_corpus.py`.",
         "",
         f"Labelled set: `tests/retrieval_eval_set.json` "
         f"({summary['n_in_corpus_queries']} in-corpus questions + "
@@ -217,7 +234,7 @@ def write_markdown(summary: dict, results: list, path: Path):
         rr  = "--" if r["reciprocal_rank"] is None else r["reciprocal_rank"]
         lines.append(f"| {r['id']} | {q_short} | {r['topic']} | {r['precision_at_5']} | {rec} | {rr} |")
     lines.append("")
-    lines.append("Raw per-query results: `docs/retrieval_benchmark_sprint7.json`")
+    lines.append(f"Raw per-query results: `{OUT_JSON}`")
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -231,10 +248,25 @@ def main():
 
     print("\nLoading retriever...")
     retriever = VectorRetriever()
+    try:
+        corpus_size = retriever._collection.count()
+    except Exception:
+        corpus_size = None
+
+    if not corpus_size:
+        print(
+            "\nERROR: the ChromaDB collection is empty (0 chunks). This usually means "
+            "the corpus hasn't been seeded yet. Run:\n"
+            "    python -c \"from src.document_processor.ingest_corpus import ingest; "
+            "print(ingest(force_reload=True))\"\n"
+            "and try again. Not writing a report against an empty collection."
+        )
+        sys.exit(1)
+    print(f"Collection has {corpus_size} chunks.")
 
     print("\nRunning retrieval benchmark (no LLM calls needed)...")
     results = run_benchmark(eval_set, retriever)
-    summary = summarise(results)
+    summary = summarise(results, corpus_size=corpus_size)
 
     print("\n=== Summary ===")
     print(json.dumps(summary, indent=2))
