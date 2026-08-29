@@ -456,22 +456,37 @@ def _all_courses() -> list[dict]:
 
 
 def _course_options_for_user(user: dict) -> list[str]:
+    """Courses this user may query. Empty means enrolled in nothing.
+
+    An empty list used to fall back to COURSE_FALLBACKS, which put anyone who
+    signed up - and is therefore enrolled in nothing - into CSIT321. Every
+    question then came back 403 "Not enrolled in this course", rendered as if
+    the assistant had said it. The fallback only makes sense when the course
+    list itself could not be fetched; it must not paper over a real enrolment
+    of zero.
+    """
+    all_courses = _all_courses()
+    if not all_courses:
+        # The API is unreachable, not a user with no enrolments.
+        return [c for c in COURSE_FALLBACKS if c]
+
     enrolled = set(user.get("enrolled_courses", []) or [])
     role = str(user.get("role", "")).lower()
     options: list[str] = []
-    for course in _all_courses():
+    for course in all_courses:
         code = course.get("course_code")
         if not code or not course.get("is_active", True):
             continue
         if role == "admin" or code in enrolled:
             options.append(code)
-    if not options:
-        options = [c for c in COURSE_FALLBACKS if c]
     return list(dict.fromkeys(options))
 
 
 def _default_course_for_user(user: dict) -> str:
+    """The course to open on, or "" when the user is in none."""
     options = _course_options_for_user(user)
+    if not options:
+        return ""
     return DEFAULT_COURSE_ID if DEFAULT_COURSE_ID in options else options[0]
 
 
@@ -739,7 +754,6 @@ def render_login_page():
         st.markdown("<hr>", unsafe_allow_html=True)
 
         # ── Toggle between Sign In and Sign Up ──
-        auth_mode = st.session_state.get("auth_mode", "login")
         tab_login, tab_signup = st.tabs(["Sign In", "Sign Up"])
 
         # ──────────── SIGN IN TAB ────────────
@@ -971,8 +985,31 @@ def _send_message(text: str, append_user: bool = True):
         session["message_count"] = len(session["messages"])
 
 
+def _render_no_courses_notice() -> None:
+    """Shown instead of the chat when the account is enrolled in nothing.
+
+    Signup creates an account with no enrolments and self-enrolment (T8-05)
+    does not exist yet, so this is a real state a new user lands in. Saying so
+    is better than sending questions to a course they cannot read and printing
+    the 403 as an answer.
+    """
+    st.markdown("### 💬 Ask your course materials")
+    st.info(
+        "**You are not enrolled in any course yet.**"
+    )
+    st.write(
+        "Ask your lecturer or the unit coordinator to add you, and this "
+        "page will work as soon as they do."
+    )
+    st.caption("Nothing is wrong with your account - it just has no courses on it.")
+
+
 def render_chat_page():
     session = get_active_session()
+
+    if not _course_options_for_user(st.session_state.get("user") or {}):
+        _render_no_courses_notice()
+        return
 
     active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
 
@@ -1089,7 +1126,7 @@ def render_chat_page():
                             section_str = f" · {section}" if section else ""
                             collection = src.get("collection_name", "")
                             collection_str = f" [{collection}]" if collection else ""
-                            sim_pct = int(src.get("similarity", 0) * 100)
+                            sim_pct = int((src.get("similarity") or 0) * 100)
                             sources_html += (
                                 f'<span class="source-chip">'
                                 f'📄 {filename} · p.{page_number}'
@@ -1185,7 +1222,11 @@ def render_history_page():
 
     col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
-        st.selectbox("Course", ["All courses", "CSIT321", "CSIT214", "ISIT312"], label_visibility="collapsed")
+        # Was hardcoded to ["All courses", "CSIT321", "CSIT214", "ISIT312"];
+        # ISIT312 is not a real course on this instance.
+        _user = st.session_state.get("user") or {}
+        st.selectbox("Course", ["All courses"] + _course_options_for_user(_user),
+                     label_visibility="collapsed")
     with col2:
         st.selectbox("Period", ["Last 7 days", "Last 30 days", "All time"], label_visibility="collapsed")
     with col3:
@@ -1195,13 +1236,9 @@ def render_history_page():
 
     # Combine real sessions with demo data
     real_sessions = st.session_state.get("sessions", [])
-    demo_sessions = [
-        {"session_id": "demo-1", "title": "RAG Pipeline Deep Dive", "course_id": "CSIT321", "created_at": "Today, 2:30 PM", "message_count": 8, "messages": [None]*8, "preview": "Asked about retrieval steps, embedding dimensions, and chunk overlap strategies..."},
-        {"session_id": "demo-2", "title": "Database Normalization", "course_id": "CSIT214", "created_at": "Today, 10:15 AM", "message_count": 5, "messages": [None]*5, "preview": "Explored 1NF through 3NF with examples, discussed denormalization trade-offs..."},
-        {"session_id": "demo-3", "title": "SQL Joins Overview", "course_id": "CSIT214", "created_at": "Yesterday, 4:45 PM", "message_count": 12, "messages": [None]*12, "preview": "Covered INNER, LEFT, RIGHT, FULL joins with visual diagrams and practice queries..."},
-        {"session_id": "demo-4", "title": "Week 5 Lecture Summary", "course_id": "CSIT214", "created_at": "Yesterday, 11:00 AM", "message_count": 3, "messages": [None]*3, "preview": "Quick summary of indexing concepts, B-trees, and hash indexes from Week 5..."},
-    ]
-    all_sessions = real_sessions + demo_sessions
+    # Four invented conversations used to be merged in here unconditionally,
+    # so every user saw the same fake history on their own account (T8-07).
+    all_sessions = real_sessions
     accent_colors = ["#0D9488", "#1B2A4A", "#D4A843", "#0D9488", "#64748B"]
 
     for i, session in enumerate(all_sessions[:8]):
@@ -1288,7 +1325,7 @@ def render_doc_manager_page():
 
     uploaded_files = st.file_uploader(
         "Upload course materials",
-        type=["pdf", "pptx", "docx", "txt", "md"],
+        type=["pdf", "pptx", "docx"],   # what the chunker supports; txt/md were refused by the API
         accept_multiple_files=True,
         help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here. Max 50 MB per file.",
     )
@@ -1309,12 +1346,29 @@ def render_doc_manager_page():
     _render_document_table(student_view=False)
 
 
+MAX_UPLOAD_MB = 50
+
+
 def _run_real_upload_and_indexing(f, course_id):
     filename = f.name
     file_bytes = f.getvalue()
     file_size = len(file_bytes)
 
     progress_placeholder = st.empty()
+
+    # Checked here rather than only server-side. Past MAX_CONTENT_LENGTH the
+    # server stops reading and closes the socket while the client is still
+    # sending, so the uploader sees a connection error instead of the 413 and
+    # retries the same file. Catching it before the request avoids the race.
+    if file_size == 0:
+        progress_placeholder.error(
+            f"{filename} is empty (0 bytes). Check it saved correctly.")
+        return
+    if file_size > MAX_UPLOAD_MB * 1024 * 1024:
+        progress_placeholder.error(
+            f"{filename} is {file_size / (1024*1024):.0f} MB. "
+            f"The limit is {MAX_UPLOAD_MB} MB - split it or compress it first.")
+        return
     progress_placeholder.info(f"Uploading {filename}...")
 
     res = api.upload_document(file_bytes, filename, course_id)
@@ -1355,6 +1409,21 @@ def _run_real_upload_and_indexing(f, course_id):
                 unsafe_allow_html=True
             )
             time.sleep(1.0)
+
+
+def _document_totals(docs) -> tuple[int, int]:
+    """Counts for the Document Manager summary line.
+
+    `chunks` is NULL for every document that failed to index, and
+    `.get("chunks", 0)` hands back that None rather than the default - the key
+    is present, it just has no value. Summing then raised TypeError and took
+    the whole page down, so one bad upload hid every good one. `file_size_bytes`
+    just above already had this right.
+    """
+    indexed = sum(1 for d in docs
+                  if str(d.get("status")).lower() in ("indexed", "completed"))
+    total_chunks = sum((d.get("chunks") or 0) for d in docs)
+    return indexed, total_chunks
 
 
 def _render_document_table(student_view: bool = False):
@@ -1401,8 +1470,7 @@ def _render_document_table(student_view: bool = False):
                 st.rerun()
 
     st.divider()
-    indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
-    total_chunks = sum(d.get("chunks", 0) for d in docs)
+    indexed, total_chunks = _document_totals(docs)
     st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
 
 
