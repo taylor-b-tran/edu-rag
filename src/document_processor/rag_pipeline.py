@@ -1,4 +1,4 @@
-import os, requests
+import os, re, requests
 from dataclasses import dataclass, field
 from typing import List, Optional
 from src.document_processor.ingest_corpus import (
@@ -9,6 +9,67 @@ TOP_K = int(os.getenv("TOP_K", "5"))
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course materials."
+
+# T8-18: matches inline citations like [S1], [S2] in the model's answer, and
+# the trailing "Sources: S1, S2" line the evidence_cited/few_shot_cited
+# prompts ask the model to produce.
+_INLINE_CITATION_RE = re.compile(r"\[S(\d+)\]")
+_SOURCES_LINE_RE = re.compile(r"(?im)^sources\s*:\s*(.+)$")
+
+
+def _extract_cited_source_indices(raw_answer: str, num_chunks: int) -> set:
+    """Which retrieved chunks (1-indexed, matching the S# labels in the
+    prompt) the model actually cited in its answer.
+
+    Before this, source_references always listed every chunk retrieval
+    surfaced above the similarity threshold -- including ones the model
+    never mentioned. A student clicking a source that isn't actually
+    referenced in the answer is misleading at best.
+    """
+    indices = set()
+    for m in _INLINE_CITATION_RE.finditer(raw_answer):
+        try:
+            n = int(m.group(1))
+        except ValueError:
+            continue
+        if 1 <= n <= num_chunks:
+            indices.add(n)
+    sources_match = _SOURCES_LINE_RE.search(raw_answer)
+    if sources_match:
+        for token in sources_match.group(1).split(","):
+            token = token.strip().upper().lstrip("S")
+            if token.isdigit():
+                n = int(token)
+                if 1 <= n <= num_chunks:
+                    indices.add(n)
+    return indices
+
+
+def _strip_invalid_citation_markers(text: str, num_chunks: int) -> str:
+    def _replace(m):
+        n = int(m.group(1))
+        return m.group(0) if 1 <= n <= num_chunks else ""
+
+    cleaned = _INLINE_CITATION_RE.sub(_replace, text)
+
+    # Also scrub the trailing "Sources: S1, S2" line down to only the
+    # tokens that are still valid; drop the whole line if none survive,
+    # rather than leaving a dangling "Sources: " with nothing after it.
+    def _clean_sources_line(m):
+        tokens = [t.strip() for t in m.group(1).split(",")]
+        kept = []
+        for t in tokens:
+            digits = t.upper().lstrip("S")
+            if digits.isdigit() and 1 <= int(digits) <= num_chunks:
+                kept.append(t)
+        return f"Sources: {', '.join(kept)}" if kept else ""
+
+    cleaned = _SOURCES_LINE_RE.sub(_clean_sources_line, cleaned)
+    cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
@@ -84,7 +145,6 @@ _STYLE_ANSWER_FORMAT: dict[str, str] = {
     ),
 }
 
-
 def resolve_response_style(style: str | None) -> str:
     """Normalises an incoming style value; unknown/missing falls back to the
     default rather than erroring — callers decide whether an invalid value
@@ -92,7 +152,6 @@ def resolve_response_style(style: str | None) -> str:
     if style in RESPONSE_STYLES:
         return style
     return DEFAULT_RESPONSE_STYLE
-
 
 def _course_label(course_id: str | None) -> str:
     """What the system prompt calls the course it is answering for.
@@ -270,6 +329,62 @@ class LLMResponseGeneration:
         marker = "[STUDENT QUESTION]"
         return base_prompt.replace(marker, worked_example + marker, 1)
 
+    def _resolve_query_for_retrieval(self, query: str, history) -> str:
+        """T8-18: rewrite the question into a standalone form before running
+        retrieval, so a follow-up like "how does it handle auth?" searches
+        for what "it" actually refers to instead of the literal word "it".
+
+        This only changes what's used for the *search* -- the prompt sent
+        to the model for the actual answer still shows the student's
+        question exactly as they typed it, so the answer still directly
+        addresses what was asked.
+        """
+        if not history:
+            return query
+        recent = history[-2:]
+        turns = "\n".join(
+            f"Student: {t.get('question', '')}\nPaedia: {t.get('answer', '')}"
+            for t in recent
+        )
+        rewrite_prompt = (
+            "Rewrite the student's latest question as a single, fully "
+            "self-contained question with no pronouns or references back to "
+            "the conversation (replace words like \"it\", \"that\", \"the "
+            "same thing\" with what they actually refer to). Keep it short. "
+            "Output ONLY the rewritten question, nothing else \u2014 no "
+            "preamble, no quotes.\n\n"
+            f"[RECENT CONVERSATION]\n{turns}\n\n"
+            f"[LATEST QUESTION]\n{query}\n\n[REWRITTEN QUESTION]"
+        )
+        rewritten, ok = self._call_ollama_lightweight(rewrite_prompt)
+        cleaned = rewritten.strip().strip('"').strip() if rewritten else ""
+        
+        # Guard against a failed call or a degenerate/empty/runaway rewrite
+        # silently making retrieval worse than just using the original text.
+        if not ok or not cleaned or len(cleaned) > 300:
+            return query
+        return cleaned
+
+    def _call_ollama_lightweight(self, prompt, num_predict=60, timeout=30):
+        """A short, fast Ollama call for internal steps like query rewriting
+        \u2014 not shown to the student, so a failure just means "skip this
+        step and fall back to the original query" rather than producing
+        user-facing error text like _call_ollama does.
+        """
+        try:
+            resp = requests.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
+                      "think": OLLAMA_THINK,
+                      "keep_alive": OLLAMA_KEEP_ALIVE,
+                      "options": {"temperature": 0.0, "num_predict": num_predict}},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip(), True
+        except Exception:
+            return "", False
+
     def _call_ollama(self, prompt, chunks=None):
         chunks = chunks or []
         try:
@@ -337,16 +452,27 @@ class LLMResponseGeneration:
         top_k = TOP_K if top_k is None else top_k
         threshold = SIMILARITY_THRESHOLD if similarity_threshold is None else similarity_threshold
         style = resolve_response_style(response_style)
-        all_chunks  = self._retriever.search(query, course_id=course_id, top_k=top_k)
+    
+        search_query = self._resolve_query_for_retrieval(query, history)
+        all_chunks  = self._retriever.search(search_query, course_id=course_id, top_k=top_k)
         # Only keep chunks similar enough to be trustworthy
         good = [c for c in all_chunks if c.similarity >= threshold]
         is_fallback = len(good) == 0 # no good chunks -> answer from general knowledge instead
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good)
+        if ok:
+            raw = _strip_invalid_citation_markers(raw, len(good))
         answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         conf, cscore= self._confidence(good)
+        
+        # T8-18: only report sources the model actually cited -- previously
+        # source_references listed every chunk retrieval surfaced, even ones
+        # the model never mentioned in its answer. If nothing can be confidently
+        # extracted, keep the full list rather than guessing and hiding a real citation.
+        cited = _extract_cited_source_indices(raw, len(good)) if ok else set()
+        used_chunks = [good[i - 1] for i in sorted(cited)] if cited else good
         return GeneratedResponse(
-            answer=answer, source_refs=self._source_refs(good),
+            answer=answer, source_refs=self._source_refs(used_chunks),
             is_fallback=is_fallback, model_used=OLLAMA_MODEL,
             top_chunks=good, confidence=conf, confidence_score=cscore,
             response_style=style)
