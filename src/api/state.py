@@ -509,6 +509,39 @@ class APIState:
                                 type(exc).__name__, exc)
         return session_id
 
+    def get_live_session(self, session_id: str,
+                         message_limit: int | None = None) -> dict[str, Any] | None:
+        """A session as it exists across all workers, not just this one.
+
+        `self.sessions` is hydrated once at start-up and only ever mutated
+        locally afterwards, so with --workers=2 a session created on one
+        worker is missing from the other. Measured on the host: the same
+        session id returned 200 five times and 404 five times over ten reads.
+
+        Postgres is authoritative when it answers, for the same reason as
+        `_live_token`: falling back to this worker's copy would resurrect a
+        session that was archived elsewhere. The dictionary remains the source
+        of truth when there is no database, which is how the tests run.
+        """
+        if not session_id:
+            return None
+        if self._db_available:
+            try:
+                from src.api import db
+                session = db.get_chat_session(session_id, message_limit=message_limit)
+                if session is None:
+                    self.sessions.pop(session_id, None)
+                    return None
+                # Keep this worker's copy in step, so the next read is local
+                # even if Postgres goes away in between.
+                if message_limit is None:
+                    self.sessions[session_id] = session
+                return session
+            except Exception as exc:
+                logger.warning("Session lookup failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+        return self.sessions.get(session_id)
+
     def archive_session(self, session_id: str) -> None:
         """Used by DELETE /api/sessions/<id>. In-memory flag is set
         immediately for callers that read self.sessions right after; the
