@@ -166,6 +166,15 @@ def query():
     from src.api.routes.settings import effective_settings
     cfg = effective_settings(course_id)
 
+    # T8-18: last 3 turns of this session, so follow-ups have context.
+    history = None
+    if session_id:
+        existing_session = state.sessions.get(session_id)
+        if existing_session:
+            if existing_session.get("user_id") != user.get("user_id"):
+                return jsonify({"error": "Access denied."}), 403
+            history = existing_session.get("messages", [])[-3:]
+
     started = time.time()
     try:
         generated = state.get_generator().generate(
@@ -174,6 +183,7 @@ def query():
             response_style=response_style_raw or cfg.get("response_style"),
             top_k=cfg.get("top_k"),
             similarity_threshold=cfg.get("similarity_threshold"),
+            history=history,
         )
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
