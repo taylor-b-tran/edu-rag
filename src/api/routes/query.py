@@ -13,6 +13,10 @@ _RATE_STORE: dict[str, list[float]] = {}
 _RATE_MAX = 10
 _RATE_WINDOW = 60
 
+# How many previous turns reach the prompt. _build_prompt renders the last
+# three, so reading more only widens the query for nothing.
+HISTORY_TURNS = 3
+
 _AMBIGUOUS_PATTERNS = (
     "tell me everything",
     "explain everything",
@@ -167,13 +171,23 @@ def query():
     cfg = effective_settings(course_id)
 
     # T8-18: last 3 turns of this session, so follow-ups have context.
+    #
+    # Read through get_live_session, not state.sessions. gunicorn runs two
+    # workers and each has its own dictionary, so the local lookup found the
+    # session only when the request happened to land on the worker that
+    # created it — measured 2 of 3 follow-ups resolving the pronoun and the
+    # third falling back to general knowledge, from identical input. It also
+    # meant the ownership check below never ran on the other worker, so a
+    # second user's questions were appended into the first user's
+    # conversation: six of eight cross-user posts landed in the session.
     history = None
     if session_id:
-        existing_session = state.sessions.get(session_id)
+        existing_session = state.get_live_session(session_id,
+                                                  message_limit=HISTORY_TURNS)
         if existing_session:
             if existing_session.get("user_id") != user.get("user_id"):
                 return jsonify({"error": "Access denied."}), 403
-            history = existing_session.get("messages", [])[-3:]
+            history = existing_session.get("messages", [])[-HISTORY_TURNS:]
 
     started = time.time()
     try:
