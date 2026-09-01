@@ -258,9 +258,6 @@ def main() -> int:
     print(f"Logging in as admin ({args.admin_email}) ...")
     admin_token = _login(args.base_url, args.admin_email, args.admin_password)
 
-    print(f"Provisioning {args.num_users} test student accounts enrolled in {args.course} ...")
-    users = _provision_users(args.base_url, admin_token, args.course, args.num_users)
-
     summary = {
         "base_url": args.base_url,
         "course": args.course,
@@ -274,6 +271,14 @@ def main() -> int:
           f"{'p50(ms)':>8} | {'p95(ms)':>8} | {'p99(ms)':>8} | Status counts")
     print("-" * 100)
     for level in concurrency_levels:
+        # Fresh users per level, not reused across levels. Levels run back-to-back
+        # (often within seconds of each other once concurrency is high), and the
+        # /api/query rate limit is a 60-second ROLLING window per user - reusing
+        # the same accounts across levels lets one level's tail requests fall
+        # inside the next level's window and get counted against it, producing
+        # 429s that reflect this script's timing, not the server's real ceiling.
+        print(f"Provisioning {args.num_users} fresh test accounts for concurrency={level} ...")
+        users = _provision_users(args.base_url, admin_token, args.course, args.num_users)
         result = _run_level(args.base_url, users, args.course, level, args.requests_per_user, DEFAULT_QUESTIONS)
         summary["levels"].append(result)
         lat = result["latency_ms"]
