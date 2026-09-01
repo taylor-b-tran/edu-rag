@@ -1039,6 +1039,71 @@ def load_all_sessions() -> dict[str, dict[str, Any]]:
     return sessions
 
 
+def get_chat_session(session_id: str, message_limit: int | None = None) -> dict[str, Any] | None:
+    """One session with its messages, or None if there is no such session.
+
+    Same reason as `get_token`: gunicorn runs more than one worker and each
+    has its own APIState, so a session created on one worker is absent from
+    the other's dictionary. `load_all_sessions` only runs at start-up, so
+    without a per-session read the follow-up turn sees no history roughly
+    half the time — and non-deterministically, which is the worst way for it
+    to fail.
+
+    `message_limit` returns the most recent N messages, still in chronological
+    order, because the prompt only renders the last few turns.
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_id, user_id, course_id, archived,
+                       created_at, updated_at
+                  FROM chat_sessions
+                 WHERE session_id = %s
+                """,
+                (session_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+
+            # Newest first for the LIMIT, then reversed below, so a long
+            # session does not have to come back in full to read three turns.
+            cur.execute(
+                """
+                SELECT message_id, question, answer, sources, created_at
+                  FROM chat_messages
+                 WHERE session_id = %s
+                 ORDER BY created_at DESC
+                 LIMIT %s
+                """,
+                (session_id, message_limit if message_limit else None),
+            )
+            message_rows = cur.fetchall()
+
+    session = {
+        "session_id": row["session_id"],
+        "user_id": row.get("user_id"),
+        "course_id": row.get("course_id"),
+        "archived": row.get("archived", False),
+        "created_at": row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            if row.get("created_at") else None,
+        "updated_at": row["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            if row.get("updated_at") else None,
+        "messages": [],
+    }
+    for message_row in reversed(message_rows):
+        session["messages"].append({
+            "message_id": message_row["message_id"],
+            "question": message_row.get("question", ""),
+            "answer": message_row.get("answer", ""),
+            "sources": message_row.get("sources") or [],
+            "created_at": message_row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                if message_row.get("created_at") else None,
+        })
+    return session
+
+
 def check_and_record_rate(rate_key: str, window_seconds: int, max_hits: int) -> bool:
     """Atomically: prune hits older than the window, count what's left, and
     — only if under the limit — record this hit. Returns True if the caller
