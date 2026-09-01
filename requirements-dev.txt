@@ -3,3 +3,6 @@ python-pptx
 python-docx
 pytest>=8.0.0
 pytest-cov>=5.0.0
+# T8-12: real Postgres-grammar SQL parser used to validate db/seed/*.sql and
+# db/migrations/*.sql without needing a live Postgres instance in CI.
+pglast>=6.0
