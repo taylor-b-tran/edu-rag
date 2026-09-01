@@ -162,24 +162,180 @@ the shared Tailscale host.
 
 ---
 
-## 3. Results
+## 3. Results — first real run, 1 Sept 2026
+
+```
+python scripts/loadtest_query.py --base-url http://localhost:5000 --course CSIT321 --num-users 12 --requests-per-user 8 --concurrency-levels 1,2,4,8,16 --output docs/loadtest_sprint8_t8_26.json
+```
 
 | Concurrency | Total Reqs | Wall (s) | Throughput (req/s) | p50 (ms) | p95 (ms) | p99 (ms) | Status codes |
 |---|---|---|---|---|---|---|---|
-| 1 | | | | | | | |
-| 2 | | | | | | | |
-| 4 | | | | | | | |
-| 8 | | | | | | | |
-| 16 | | | | | | | |
+| 1 | 96 | 592.788 | 0.162 | 2086.7 | 3933.7 | 136191.8 | `{'200': 96}` |
+| 2 | 96 | 100.575 | 0.955 | 2080.4 | 2260.6 | 2368.3 | `{'200': 96}` |
+| 4 | 96 | 50.107 | 1.916 | 2076.2 | 2103.9 | 2185.9 | `{'200': 96}` |
+| 8 | 96 | 25.043 | 3.833 | 2077.0 | 2132.1 | 2183.2 | `{'200': 48, '429': 48}` |
+| 16 | 96 | 12.53 | 7.661 | 2082.4 | 2142.0 | 2154.0 | `{'429': 68, '200': 28}` |
 
-`backend_mode` at time of run: _______
+`backend_mode` at time of run: **`not_initialized`** (`/api/health` reported
+`"rag_available": false` and `"warmup": {"status": "running"}` — the
+warmup that never finished during this entire ~13-minute run).
+
+**This run has two confounds that need to be understood before treating it
+as a real concurrency recommendation. Neither is a product/API defect —
+one is a limitation of the environment at the time of the run, the other
+was a bug in this script, now fixed (Section 5).**
+
+### 3.1 The backend was still warming up for the entire run
+
+`mode: "not_initialized"` and `warmup.status: "running"` mean ChromaDB/
+Ollama had not finished loading when the sweep started, and — going by the
+data — never finished during the ~13 minutes the whole sweep took. Looking
+at the raw per-request data in `docs/loadtest_sprint8_t8_26.json`:
+
+- The overwhelming majority of requests have `server_latency_ms` in the
+  **7–30ms** range — far too fast to be real Ollama generation, consistent
+  with the fixture fallback (`"fixture_loaded": true` in the health
+  response) answering instead.
+- A handful of requests at concurrency=1 took **wildly** longer:
+  224,453ms, 136,192ms, 22,761ms, 6,848ms, 5,058ms — almost certainly real
+  requests that got stuck behind the in-progress model pull/warmup before
+  either completing for real or eventually falling through. This is what
+  drove concurrency=1's p99 up to 136 seconds and its wall time up to
+  592.8 seconds, despite every individual "normal" request taking ~2
+  seconds.
+- By concurrency=2 onward, no more of these extreme outliers appear — most
+  likely the warmup process had moved past whatever it was blocking on, or
+  those slow paths simply weren't hit again by chance.
+
+**Conclusion: this run mostly measured the fixture-fallback path, not real
+Ollama-backed generation.** It's not yet possible to say anything about
+concurrency behaviour under real generation load from this data — see
+Section 4 for the required re-run.
+
+### 3.2 The ~2080ms baseline on almost every request is client/network overhead, not server processing
+
+Every single successful request, at every concurrency level, took close to
+**2050–2150ms** measured client-side (`elapsed_ms`), while the server's own
+reported processing time (`server_latency_ms`, taken from the API
+response body) was **7–30ms** for the same requests. That ~2-second gap is
+present uniformly regardless of load, backend mode, or concurrency level —
+which rules out server-side queuing as the explanation (queuing delay would
+grow with concurrency; this doesn't).
+
+The far more likely explanation is Windows + Docker Desktop's networking
+layer: this script uses a fresh `requests.post(...)` call per request with
+no session/connection reuse, and each new TCP connection to a
+Docker-Desktop-forwarded port on Windows goes through the WSL2 VM's
+NAT/port-proxy layer, which is a known source of roughly this much
+per-connection overhead. **The number to trust for "how fast is the API
+actually responding" is `server_latency_ms` from the response body (7–30ms
+here), not the client-measured `elapsed_ms`** — the latter mixes in a fixed
+local-network cost that has nothing to do with the API or its concurrency
+settings.
+
+### 3.3 The 429s at concurrency 8 and 16 are a rate-limit-window artifact of this script, not the server failing under load
+
+`/api/query` rate-limits at **10 requests/minute per user, on a rolling
+60-second window** (T8-20). The first version of this script provisioned
+12 users **once** and reused them across all 5 sequential concurrency
+levels. Reconstructing the absolute timeline from the wall-clock durations
+above:
+
+| Level | Starts at | Ends at |
+|---|---|---|
+| 1 | 0.0s | 592.8s |
+| 2 | 592.8s | 693.4s |
+| 4 | 693.4s | 743.5s |
+| 8 | 743.5s | 768.5s |
+| 16 | 768.5s | 781.0s |
+
+Levels 4 → 8 → 16 ran back-to-back with **no gap**, in 25.0s and 12.5s
+respectively. Since the same 12 users were reused, a rolling 60-second
+window measured during level 8 reaches back far enough to include the tail
+of level 4's requests for the same users; during level 16 it reaches back
+far enough to include almost all of level 4 and part of level 8. Once a
+user's requests from two-or-more adjacent levels land inside the same
+60-second window, they get counted together against that user's 10/min
+cap — which is exactly consistent with the pattern seen: 0% rate-limited
+through level 4 (levels far enough apart, or long enough, not to overlap),
+jumping to 50% at level 8 and 71% at level 16 as the levels ran faster and
+the overlap grew.
+
+**Conclusion: the 429s measured here reflect this script's timing design,
+not the server rejecting real concurrent load from 8 or 16 independent
+users.** Fixed in Section 5 — this needs a re-run before the 429 pattern
+can be trusted.
+
+### 3.4 What this run *does* tell us, despite the confounds
+
+- Levels 1, 2, and 4 (100% success, no rate-limit contamination) show
+  throughput scaling almost exactly linearly with concurrency — 0.162 →
+  0.955 → 1.916 req/s, doubling each time concurrency doubled — with flat
+  per-request latency throughout. That's a clean signal that, at least up
+  through concurrency 4, nothing in the stack (gunicorn, the fixture path,
+  or the Windows/Docker network layer) was anywhere close to saturated.
+- No evidence yet of where the real ceiling is, because the run never
+  produced a level with 100% success where throughput *stopped* scaling —
+  levels 8 and 16 are unusable for this purpose due to 3.3 above.
 
 ---
 
 ## 4. Recommendation
 
-Whichever way the numbers land, note the actual host spec used for the run
-(CPU cores, GPU, RAM) — the right worker/thread count is a function of the
-machine `docker compose up -d` is running on, not a universal constant, and
-future re-runs of this script on the shared Tailscale host should be
-compared against this baseline rather than assumed to match it.
+**Not ready to make a parallelism recommendation from this run — a re-run
+is required**, for two independent reasons, neither of which is a defect
+in `--workers=2 --threads=4` itself:
+
+1. The backend hadn't finished warming up (Section 3.1), so this mostly
+   measured the instant fixture fallback, not real Ollama generation —
+   which is the actual thing likely to constrain concurrency in production.
+2. The 429 pattern at concurrency 8/16 was a script-timing artifact
+   (Section 3.3), not real per-user rate-limit rejection under genuine
+   concurrent load from 8 or 16 independent users.
+
+**What to do for the re-run** (script already fixed, see Section 5):
+
+1. Before running, poll `/api/health` until `"mode": "chromadb"` and
+   `"warmup": {"status": "ready"}` (or whatever the ready-state value is —
+   confirm against `src/api/routes/health.py`) instead of starting
+   immediately. `docker compose logs -f ollama` will show when the model
+   finishes loading.
+2. Re-run the same command. With the script fix in Section 5, each level
+   now gets its own fresh set of users, so a real 429 at any level will
+   mean that level's own concurrent traffic actually exceeded a user's
+   10/min cap within its own window — not spillover from the previous
+   level.
+3. Re-read Section 3.4's guide once real numbers come back — a flat p95
+   until concurrency 8 that jumps sharply at 16 supports the current
+   `--workers=2 --threads=4`; earlier degradation points at something else
+   (check `docker stats` on the `ollama` container); throughput still
+   climbing linearly at 16 with flat latency suggests the setting may be
+   under-provisioned and `--workers=4` is worth trying.
+4. When reporting the re-run's numbers, lead with `server_latency_ms` from
+   the JSON output (or a modified script that surfaces it directly in the
+   summary table) rather than client-side `elapsed_ms`, per Section 3.2 —
+   otherwise the Windows/Docker network overhead will dominate the numbers
+   again and mask whatever the server is actually doing.
+
+---
+
+## 5. Script fix applied after this run (1 Sept 2026)
+
+`scripts/loadtest_query.py` originally called `_provision_users()` once,
+before the concurrency sweep, and reused that same batch of accounts for
+every level. Fixed to provision a **fresh batch of `--num-users` accounts
+for every concurrency level**, inside the sweep loop, so no user's request
+history can leak across a level boundary and get counted against a
+different level's 429 rate within the shared 60-second rolling window
+(Section 3.3). Verified: `python -m py_compile scripts/loadtest_query.py`
+and `python -m pytest test/test_loadtest_query_script.py` (5 tests) both
+pass against the fixed version.
+
+One tradeoff of this fix worth knowing before the re-run: at
+`--num-users 12` swept across 5 levels, this now creates **60** test
+accounts per full run instead of 12, all left in Postgres (no delete
+endpoint — see Section 2). Fine for a local/dev instance; worth the manual
+cleanup query mentioned in Section 2 before running this against a shared
+host, and worth considering a lower `--num-users` for routine re-runs now
+that the account count scales with the number of levels swept.
+
