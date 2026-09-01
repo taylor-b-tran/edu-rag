@@ -52,11 +52,18 @@ jobs:
           import json
           from pathlib import Path
 
+          # T8-12: docs/rag_config_benchmark_2026-04-22.json and
+          # docs/rag_config_benchmark_31q.json were removed here. Neither file
+          # exists anywhere in the repo (confirmed via full-repo grep) and
+          # nothing generates them, so this step failed with
+          # FileNotFoundError on every run before pytest ever started.
+          # Replaced with the benchmark JSON files that actually exist and
+          # are still produced by scripts/benchmark_retrieval.py.
           paths = [
               Path("fixtures/sample_responses.json"),
               Path("tests/test_queries.json"),
-              Path("docs/rag_config_benchmark_2026-04-22.json"),
-              Path("docs/rag_config_benchmark_31q.json"),
+              Path("docs/retrieval_benchmark_sprint7.json"),
+              Path("docs/retrieval_benchmark_sprint8.json"),
           ]
           for path in paths:
               with path.open(encoding="utf-8") as handle:
