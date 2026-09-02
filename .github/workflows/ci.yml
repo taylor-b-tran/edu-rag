@@ -62,6 +62,8 @@ jobs:
           paths = [
               Path("fixtures/sample_responses.json"),
               Path("tests/test_queries.json"),
+              Path("docs/rag_config_benchmark_2026-04-22.json"),
+              Path("docs/rag_config_benchmark_31q.json"),
               Path("docs/retrieval_benchmark_sprint7.json"),
               Path("docs/retrieval_benchmark_sprint8.json"),
           ]

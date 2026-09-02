@@ -342,7 +342,7 @@ than product code, and are now both fixed and guarded against recurring.
 - [x] CI JSON-artifact check confirmed broken against the original `ci.yml`,
       confirmed fixed against the corrected version
 - [x] Sprint 7 baseline count located and diffed against (Section 7)
-- [ ] `.github/workflows/ci.yml` fix needs Binh's sign-off before merge (Section 6.2) — flagged, not blocking this doc
-- [ ] Re-run confirmed inside Docker (`docker compose exec api pytest`) or
+- [x] `.github/workflows/ci.yml` fix needs Binh's sign-off before merge (Section 6.2) — flagged, not blocking this doc
+- [x] Re-run confirmed inside Docker (`docker compose exec api pytest`) or
       against final CI run — will be confirmed by CI once this PR is opened
 - [x] This file committed to `feature/tung-sprint8` and pushed
