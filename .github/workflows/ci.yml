@@ -52,13 +52,19 @@ jobs:
           import json
           from pathlib import Path
 
-          # T8-12: docs/rag_config_benchmark_2026-04-22.json and
-          # docs/rag_config_benchmark_31q.json were removed here. Neither file
-          # exists anywhere in the repo (confirmed via full-repo grep) and
-          # nothing generates them, so this step failed with
-          # FileNotFoundError on every run before pytest ever started.
-          # Replaced with the benchmark JSON files that actually exist and
-          # are still produced by scripts/benchmark_retrieval.py.
+          # T9-18 (corrects T8-12): docs/rag_config_benchmark_2026-04-22.json
+          # and docs/rag_config_benchmark_31q.json ARE in the repo - they've
+          # been committed since April/May 2026. The T8-12 note above used to
+          # say they didn't exist "anywhere in the repo"; that was checked
+          # against an exported zip, not a git checkout. Both files are
+          # marked `export-ignore` in .gitattributes (see the "Sprint 3/4/5
+          # internal working docs, out of scope for A4" block), which trims
+          # them out of `git archive`/zip exports only. `actions/checkout@v4`
+          # above does a normal clone, which export-ignore does not affect,
+          # so both files are present when this step actually runs in CI.
+          # docs/retrieval_benchmark_sprint7.json and
+          # docs/retrieval_benchmark_sprint8.json are the current, in-scope
+          # retrieval benchmarks and are validated alongside them below.
           paths = [
               Path("fixtures/sample_responses.json"),
               Path("tests/test_queries.json"),

@@ -14,14 +14,18 @@ so neither can silently come back:
    pglast - a real Postgres-grammar parser - instead of eyeballing them, and
    without needing a live Postgres instance (there isn't one in CI).
 
-2. .github/workflows/ci.yml's "Validate JSON artifacts" step referenced two
-   files - docs/rag_config_benchmark_2026-04-22.json and
-   docs/rag_config_benchmark_31q.json - that do not exist anywhere in the
-   repo, so that CI step failed with FileNotFoundError on every run before
-   pytest ever started. Caught here by parsing the same `paths = [...]`
-   block CI runs and asserting every path it lists actually exists, so this
-   class of drift (a file referenced in CI gets renamed/deleted without
-   updating CI) fails locally and in review, not silently in Actions.
+2. (T9-18 correction) .github/workflows/ci.yml's "Validate JSON artifacts"
+   step lists docs/rag_config_benchmark_2026-04-22.json and
+   docs/rag_config_benchmark_31q.json. A T8-12 note here previously claimed
+   these "do not exist anywhere in the repo" - that was wrong. Both files
+   have been committed since April/May 2026; they're only marked
+   `export-ignore` in .gitattributes, which trims them from `git archive`/
+   zip exports, not from the actual repo that CI checks out. The tests below
+   still guard against real drift (a file referenced in CI genuinely being
+   renamed/deleted without CI being updated) by parsing the same
+   `paths = [...]` block CI runs and asserting every path it lists exists in
+   this checkout, so that class of bug fails locally and in review, not
+   silently in Actions.
 """
 
 from __future__ import annotations
@@ -32,9 +36,17 @@ from pathlib import Path
 
 import pytest
 
-pglast = pytest.importorskip(
-    "pglast", reason="pglast not installed - see requirements-dev.txt"
-)
+# T9-18: this used to be a module-level `pytest.importorskip("pglast")`,
+# which skipped every test in this file - including
+# test_ci_json_artifact_paths_all_exist and test_ci_json_artifact_paths_are_
+# valid_json, neither of which touches pglast - whenever pglast wasn't
+# installed. Import it defensively instead, and only skip the one test that
+# actually needs it (below), so a missing dependency no longer hides the
+# CI-artifact-path checks too.
+try:
+    import pglast
+except ImportError:
+    pglast = None
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,6 +56,9 @@ _SQL_FILES = sorted(
 )
 
 
+@pytest.mark.skipif(
+    pglast is None, reason="pglast not installed - see requirements-dev.txt"
+)
 @pytest.mark.parametrize("sql_path", _SQL_FILES, ids=lambda p: str(p.relative_to(REPO_ROOT)))
 def test_seed_and_migration_sql_files_parse_cleanly(sql_path: Path):
     """Every committed seed/migration file must be valid Postgres SQL.
@@ -85,10 +100,11 @@ def _ci_json_artifact_paths() -> list[str]:
 def test_ci_json_artifact_paths_all_exist():
     """Every file CI's 'Validate JSON artifacts' step checks must exist.
 
-    Regression case: this previously listed
-    docs/rag_config_benchmark_2026-04-22.json and
-    docs/rag_config_benchmark_31q.json, neither of which existed anywhere in
-    the repo, so the CI job failed with FileNotFoundError before pytest ran.
+    Guards against a file referenced in ci.yml's paths list being renamed or
+    deleted without ci.yml being updated. (It does not guard against
+    export-ignore in .gitattributes trimming a file from a zip export - that
+    is expected and is not a bug; see the module docstring and the T9-18
+    correction to ci.yml's comment above.)
     """
     paths = _ci_json_artifact_paths()
     assert paths, "expected at least one path in ci.yml's JSON validation list"
