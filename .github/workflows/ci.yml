@@ -34,6 +34,20 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # requirements.txt deliberately doesn't pin torch (see the comment
+          # there) so teammates can install a CPU, CUDA, or lab-image build
+          # to match their own machine. On this runner there's no GPU and,
+          # as of the current torch release, `pip install torch` with no
+          # index hint resolves the default PyPI wheel, which pulls in the
+          # full CUDA 13 stack as separate nvidia-*-cu13 packages (cuBLAS,
+          # cuDNN, cuSPARSE, cuFFT, cuSOLVER, NCCL, Triton, etc. - several GB
+          # combined). That's what was blowing past this runner's ~14GB free
+          # disk with "OSError: [Errno 28] No space left on device" before
+          # sentence-transformers or anything else got installed. Installing
+          # the CPU-only build first satisfies sentence-transformers'
+          # `torch>=1.11.0` dependency directly, so pip never reaches for
+          # the CUDA build afterwards.
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -r requirements-dev.txt
 
       - name: Compile runtime modules
