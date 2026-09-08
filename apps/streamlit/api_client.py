@@ -412,7 +412,29 @@ class PaediaAPIClient:
         return self._fixture_query(query_text)
 
     def clear_auth(self) -> None:
-        """Clear cached tokens after UI logout."""
+        """Sign out: revoke the token on the server, then forget it locally.
+
+        This used to drop the two local variables and nothing else, so the
+        token stayed valid until it expired — the server-side revocation built
+        in T8-22/T8-24 existed and the UI never called it. That was invisible
+        while the token lived only in Streamlit's memory and died with the tab.
+        It stopped being invisible once the token moved into a cookie (T9-14):
+        signing out cleared the screen, the cookie survived, the token still
+        resolved to a user, and the next page load signed you straight back in.
+
+        Best effort on the network call. If revocation cannot be reached the
+        local state is still cleared, which is no worse than the old behaviour.
+        """
+        if self._jwt_token and HAS_REQUESTS:
+            try:
+                requests.post(
+                    f"{self.config.base_url}/api/auth/logout",
+                    json={"refresh_token": self._refresh_token},
+                    headers=self._headers(),
+                    timeout=self.config.timeout,
+                )
+            except Exception as e:
+                logger.warning("Logout could not reach the API: %s", e)
         self._jwt_token = None
         self._refresh_token = None
 
@@ -651,3 +673,109 @@ class PaediaAPIClient:
         if result and result.get("status") == "unenrolled":
             return {"success": True, "error": None}
         return {"success": False, "error": "Course management is unavailable right now."}
+
+    # ─── Live configuration (T8-08 backend, T8-09 UI) ─────────────────
+
+    def get_global_settings(self) -> dict:
+        """
+        Global settings as stored, plus what the pipeline would use with
+        nothing stored.
+
+        Live API: GET /api/settings
+        Fixture fallback: empty, so the UI shows defaults and disables editing.
+        """
+        result = self._get("/api/settings")
+        if result and isinstance(result, dict):
+            return result
+        return {"scope": "global", "settings": {}, "_unavailable": True}
+
+    def get_course_settings(self, course_code: str) -> dict:
+        """
+        One course's stored overrides and the values actually in effect for it.
+
+        Live API: GET /api/courses/<code>/settings
+        The `effective` block resolves course override -> global -> default,
+        which is what the page needs to show provenance honestly.
+        """
+        result = self._get(f"/api/courses/{course_code}/settings")
+        if result and isinstance(result, dict):
+            return result
+        return {"scope": course_code, "settings": {}, "effective": {}, "_unavailable": True}
+
+    def update_global_settings(self, changes: dict) -> dict:
+        """
+        Change global settings. Admin only; a null value clears an override.
+
+        Live API: PATCH /api/settings
+        """
+        result = self._patch("/api/settings", changes)
+        if result is None:
+            return {"success": False, "error": "Settings are unavailable right now."}
+        if result.get("_api_error"):
+            return {"success": False, "error": result.get("message") or result.get("error")}
+        return {"success": True, "error": None, "settings": result.get("settings", {})}
+
+    def update_course_settings(self, course_code: str, changes: dict) -> dict:
+        """
+        Change one course's settings. Admin, or the lecturer who owns it.
+
+        Live API: PATCH /api/courses/<code>/settings
+        Sending null for a key clears that course's override so the value falls
+        back to the global setting rather than to a hardcoded default.
+        """
+        result = self._patch(f"/api/courses/{course_code}/settings", changes)
+        if result is None:
+            return {"success": False, "error": "Settings are unavailable right now."}
+        if result.get("_api_error"):
+            return {"success": False, "error": result.get("message") or result.get("error")}
+        return {
+            "success": True, "error": None,
+            "settings": result.get("settings", {}),
+            "effective": result.get("effective", {}),
+        }
+
+    def get_response_styles(self) -> dict:
+        """
+        The five answering styles and which one is the default.
+
+        Live API: GET /api/response-styles
+        Kept out of the UI as literals on purpose — T8-07 removed one set of
+        hardcoded strings from this app and putting the style names back would
+        be the same mistake.
+        """
+        result = self._get("/api/response-styles")
+        if result and isinstance(result, dict) and result.get("styles"):
+            return result
+        return {"styles": [], "default": None}
+
+    def get_health(self) -> dict:
+        """
+        What the backend is actually running: retrieval mode and which embedder
+        is loaded.
+
+        Live API: GET /api/health  (open — no token needed)
+        Fixture fallback: an explicit "unknown" rather than a cheerful default,
+        because the caller uses this to tell the user whether semantic search
+        is really on.
+        """
+        result = self._get("/api/health")
+        if result and isinstance(result, dict):
+            return result
+        return {"status": "unknown", "rag_available": False,
+                "embedder": {"status": "unknown"}, "_unavailable": True}
+
+    def get_current_user(self, token: Optional[str] = None) -> dict:
+        """
+        Turn a bearer token back into a user (T9-14).
+
+        Live API: GET /api/auth/me
+        Used when restoring a session from the browser cookie after a refresh.
+        A dead or expired token returns {"success": False}, which is the signal
+        to clear the cookie and show the login form.
+        """
+        if token:
+            self._jwt_token = token
+        result = self._get("/api/auth/me")
+        if result and isinstance(result, dict) and result.get("email"):
+            return {"success": True, "user": result}
+        return {"success": False, "user": None}

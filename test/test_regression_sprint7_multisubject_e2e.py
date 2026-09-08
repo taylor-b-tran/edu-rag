@@ -206,22 +206,27 @@ def test_e2e_documents_scoped_to_demo_courses_do_not_leak():
     """
     Regression guard for the Sprint 6 known limitation (enrolled_courses
     UUID vs course_code string mismatch, see docs/t22_t28_zip_verification.md).
-    Confirms that resolving CSIT321 vs CSIT214 through the current
+    Confirms that resolving CSIT321 vs CSCI203 through the current
     APIState.resolve_course()/is_enrolled() logic keeps document lists
     correctly separated between two real, pre-seeded courses.
+
+    The second subject was CSIT214 until Sprint 9. It was dropped because it
+    never held any indexed material, which made this a scoping test between
+    one real course and an empty one; CSCI203 has 888 chunks of its own, so
+    the guard now runs against two subjects that actually contain documents.
     """
     c = _client()
     token = _login(c, "admin@uow.edu.au", "admin123")  # admin bypasses enrollment checks
 
     csit321_docs = c.get("/api/documents?course_id=CSIT321", headers=_auth(token))
-    csit214_docs = c.get("/api/documents?course_id=CSIT214", headers=_auth(token))
+    csci203_docs = c.get("/api/documents?course_id=CSCI203", headers=_auth(token))
     assert csit321_docs.status_code == 200
-    assert csit214_docs.status_code == 200
+    assert csci203_docs.status_code == 200
 
     ids_321 = {d.get("document_id") for d in csit321_docs.get_json()["documents"]}
-    ids_214 = {d.get("document_id") for d in csit214_docs.get_json()["documents"]}
-    assert ids_321.isdisjoint(ids_214), (
-        "Documents leaked across CSIT321/CSIT214 course scoping."
+    ids_203 = {d.get("document_id") for d in csci203_docs.get_json()["documents"]}
+    assert ids_321.isdisjoint(ids_203), (
+        "Documents leaked across CSIT321/CSCI203 course scoping."
     )
 
 

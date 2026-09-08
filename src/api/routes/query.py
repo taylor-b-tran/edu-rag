@@ -88,9 +88,18 @@ def _check_rate(key: str, state=None) -> bool:
 
 
 def _is_ambiguous(question: str) -> bool:
-    """Return True if the question is too vague for meaningful RAG retrieval."""
+    """Return True if the question is too vague for meaningful RAG retrieval.
+
+    The floor used to be three words, which rejected the app's own suggestions:
+    the first prompt offered to a new student is "Summarise <document name>",
+    two words, and clicking it returned an error banner instead of an answer.
+
+    Two words is enough to separate a real request from "hi" or "help". Breadth
+    is what this check is actually for, and the pattern list below is what
+    detects it -- a short question naming a document is specific, not vague.
+    """
     lowered = question.lower()
-    if len(question.split()) < 3:
+    if len(question.split()) < 2:
         return True
     return any(pat in lowered for pat in _AMBIGUOUS_PATTERNS)
 
@@ -198,6 +207,14 @@ def query():
             top_k=cfg.get("top_k"),
             similarity_threshold=cfg.get("similarity_threshold"),
             history=history,
+            # The global tier of T8-08. These were resolved and reported as
+            # "effective" but never handed to the pipeline, which read them
+            # from module constants fixed at import - so an admin could change
+            # the model, temperature or answer length, see it confirmed, and
+            # change nothing at all.
+            model=cfg.get("ollama_model"),
+            temperature=cfg.get("temperature"),
+            num_predict=cfg.get("num_predict"),
         )
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)

@@ -170,7 +170,12 @@ def _course_label(course_id: str | None) -> str:
 # Ollama generation settings — now adjustable without editing code 
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
 OLLAMA_TOP_P = float(os.getenv("OLLAMA_TOP_P", "0.9"))
-OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "220"))
+# 220 was sized for the old "concise" default. F2 made "detailed" the default
+# -- which asks the model for multiple paragraphs -- and left this alone, so
+# answers were guillotined mid-sentence and never reached the "Sources:" line
+# the prompt requires. Measured on this host with the same question: 220 cut at
+# 986 characters, 800 finished cleanly at 1,315.
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "700"))
 
 OLLAMA_THINK = os.getenv("OLLAMA_THINK", "false").strip().lower() in {"1", "true", "yes"}
 OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
@@ -385,17 +390,31 @@ class LLMResponseGeneration:
         except Exception:
             return "", False
 
-    def _call_ollama(self, prompt, chunks=None):
+    def _call_ollama(self, prompt, chunks=None,
+                     model=None, temperature=None, num_predict=None):
+        """Ask Ollama for an answer.
+
+        The three generation settings are arguments rather than module
+        constants because T8-08 lets an admin change them at runtime. Read from
+        the module, they were fixed at import: the settings endpoint accepted a
+        new value, stored it, reported it back under "effective", and the
+        pipeline went on using the old one - the same silent lie that PR #88
+        reintroduced for the per-course settings. None means "use the value the
+        environment started with".
+        """
         chunks = chunks or []
+        model = model or OLLAMA_MODEL
+        temperature = OLLAMA_TEMPERATURE if temperature is None else temperature
+        num_predict = OLLAMA_NUM_PREDICT if num_predict is None else num_predict
         try:
             resp = requests.post(
                 f"{OLLAMA_HOST}/api/generate",
-                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
+                json={"model": model, "prompt": prompt, "stream": False,
                       "think": OLLAMA_THINK,
                       "keep_alive": OLLAMA_KEEP_ALIVE,
-                      "options": {"temperature": OLLAMA_TEMPERATURE,
+                      "options": {"temperature": temperature,
                                   "top_p": OLLAMA_TOP_P,
-                                  "num_predict": OLLAMA_NUM_PREDICT}},
+                                  "num_predict": num_predict}},
                 timeout=240)
             resp.raise_for_status()
             return resp.json().get("response","").strip(), True
@@ -445,7 +464,8 @@ class LLMResponseGeneration:
 
     def generate(self, query, course_id=COURSE_ID, top_k=None,
                  history=None, response_style=None,
-                 similarity_threshold=None) -> "GeneratedResponse":
+                 similarity_threshold=None,
+                 model=None, temperature=None, num_predict=None) -> "GeneratedResponse":
         # Resolved per call rather than read from the module. These used to be
         # default arguments, which Python evaluates once when the function is
         # defined, so live config could never have reached them (T8-08).
@@ -459,7 +479,8 @@ class LLMResponseGeneration:
         good = [c for c in all_chunks if c.similarity >= threshold]
         is_fallback = len(good) == 0 # no good chunks -> answer from general knowledge instead
         prompt = self._build_prompt(query, good, history, style, course_id)
-        raw, ok = self._call_ollama(prompt, chunks=good)
+        raw, ok = self._call_ollama(prompt, chunks=good, model=model,
+                                    temperature=temperature, num_predict=num_predict)
         if ok:
             raw = _strip_invalid_citation_markers(raw, len(good))
         answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
@@ -473,7 +494,7 @@ class LLMResponseGeneration:
         used_chunks = [good[i - 1] for i in sorted(cited)] if cited else good
         return GeneratedResponse(
             answer=answer, source_refs=self._source_refs(used_chunks),
-            is_fallback=is_fallback, model_used=OLLAMA_MODEL,
+            is_fallback=is_fallback, model_used=(model or OLLAMA_MODEL),
             top_chunks=good, confidence=conf, confidence_score=cscore,
             response_style=style)
 

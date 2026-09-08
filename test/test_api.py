@@ -123,6 +123,24 @@ def test_query_returns_422_for_single_word_question():
     assert body["error"] == "ambiguous_query"
 
 
+def test_query_accepts_the_two_word_prompts_the_app_itself_suggests():
+    """The suggested-prompt buttons offer "Summarise <document>", which is two
+    words. With a three-word floor the first thing a new student clicked came
+    back as an "Ambiguous Query" error banner — the app rejecting its own
+    suggestion. Breadth is what the check is for, and a question naming a
+    document is not broad."""
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.post(
+        "/api/query",
+        json={"query": "Summarise RAG_Pipeline_Overview", "course_id": "CSIT321"},
+        headers=_auth(token),
+    )
+
+    assert response.status_code != 422, response.get_json()
+
+
 def test_query_off_topic_question_does_not_fabricate_citations():
     """Off-topic queries that pass the ambiguity gate must either return is_fallback=True
     OR drop to Low confidence with no citations -- they must NOT fabricate sources from
@@ -173,7 +191,7 @@ def test_query_rejects_non_object_json_body():
 
 def test_query_returns_403_for_unenrolled_course():
     c = _client()
-    # lecturer@uow.edu.au teaches CSIT214 and CSIT321; CSIT999 is unknown.
+    # lecturer@uow.edu.au teaches CSCI203 and CSIT321; CSIT999 is unknown.
     token = _login(c, "lecturer@uow.edu.au", "lecturer123")
 
     response = c.post(
@@ -195,7 +213,7 @@ def test_upload_queues_document_when_lecturer_authenticated():
     response = c.post(
         "/api/upload",
         data={
-            "course_id": "CSIT214",
+            "course_id": "CSCI203",
             "file": (io.BytesIO(b"demo content"), "demo.pdf"),
         },
         content_type="multipart/form-data",
@@ -292,7 +310,7 @@ def test_courses_list_returns_known_course_codes():
     assert response.status_code == 200
     courses = response.get_json()["courses"]
     codes = {course["course_code"] for course in courses}
-    assert {"CSIT321", "CSIT214"}.issubset(codes)
+    assert {"CSIT321", "CSCI203"}.issubset(codes)
 
 
 def test_create_course_returns_401_without_token():
@@ -376,3 +394,56 @@ def test_add_course_member_rejects_invalid_role():
     )
 
     assert response.status_code == 400
+
+
+# ─── GET /api/auth/me (T9-14) ──────────────────────────────────────────
+#
+# The UI keeps the access token in a browser cookie so a refresh no longer
+# throws the user back to the login screen, and exchanges it for a user here on
+# the next load. That makes this endpoint the thing standing between a cookie
+# and a signed-in session, so it gets the same scrutiny as login.
+
+
+def test_me_returns_the_user_behind_the_token():
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+
+    response = c.get("/api/auth/me", headers=_auth(token))
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["email"] == "student@uow.edu.au"
+    assert body["role"] == "student"
+    assert "enrolled_courses" in body
+
+
+def test_me_rejects_a_request_with_no_token():
+    assert _client().get("/api/auth/me").status_code == 401
+
+
+def test_me_rejects_a_token_that_was_never_issued():
+    c = _client()
+    assert c.get("/api/auth/me", headers=_auth("dev_access_not-a-real-token")).status_code == 401
+
+
+def test_me_stops_working_after_logout():
+    """A cookie outlives the tab it was written in. If a revoked token still
+    resolved to a user here, signing out on one machine would leave the session
+    restorable on another."""
+    c = _client()
+    token = _login(c, "student@uow.edu.au", "student123")
+    assert c.get("/api/auth/me", headers=_auth(token)).status_code == 200
+
+    c.post("/api/auth/logout", headers=_auth(token))
+
+    assert c.get("/api/auth/me", headers=_auth(token)).status_code == 401
+
+
+def test_me_never_returns_a_password_or_a_token():
+    c = _client()
+    token = _login(c, "lecturer@uow.edu.au", "lecturer123")
+
+    body = c.get("/api/auth/me", headers=_auth(token)).get_json()
+
+    leaked = {"password", "password_hash", "access_token", "refresh_token"} & set(body)
+    assert not leaked, f"/api/auth/me leaked {leaked}"

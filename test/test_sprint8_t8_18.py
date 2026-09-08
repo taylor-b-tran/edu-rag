@@ -90,7 +90,7 @@ def test_exact_repro_zero_chunks_still_cited(monkeypatch):
     gen = LLMResponseGeneration(retriever=_StubRetriever(chunks=[]))
     monkeypatch.setattr(
         gen, "_call_ollama",
-        lambda prompt, chunks=None: (
+        lambda prompt, chunks=None, **kwargs: (
             "Backprop updates weights using gradients [S2], as covered before [S3].\n\nSources: S2, S3",
             True,
         ),
@@ -109,7 +109,7 @@ def test_valid_citations_survive_when_chunks_exist(two_chunks, monkeypatch):
     gen = LLMResponseGeneration(retriever=_StubRetriever(chunks=two_chunks))
     monkeypatch.setattr(
         gen, "_call_ollama",
-        lambda prompt, chunks=None: (
+        lambda prompt, chunks=None, **kwargs: (
             "A neuron sums weighted inputs [S1]. Training uses backprop [S2].\n\nSources: S1, S2",
             True,
         ),
@@ -126,7 +126,7 @@ def test_mixed_valid_and_stale_citations(two_chunks, monkeypatch):
     gen = LLMResponseGeneration(retriever=_StubRetriever(chunks=two_chunks))
     monkeypatch.setattr(
         gen, "_call_ollama",
-        lambda prompt, chunks=None: (
+        lambda prompt, chunks=None, **kwargs: (
             "Neurons sum inputs [S1]. Backprop trains the network [S2]. Covered in week 3 [S5].\n\nSources: S1, S2, S5",
             True,
         ),
@@ -159,7 +159,7 @@ def test_extract_cited_indices_ignores_stale_out_of_range():
 def test_no_history_retrieval_uses_literal_question(two_chunks, monkeypatch):
     retriever = _StubRetriever(chunks=two_chunks)
     gen = LLMResponseGeneration(retriever=retriever)
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
     gen.generate("What is a neuron?")
     assert retriever.calls == ["What is a neuron?"]
 
@@ -172,7 +172,7 @@ def test_follow_up_is_rewritten_before_retrieval(two_chunks, monkeypatch):
         gen, "_call_ollama_lightweight",
         lambda prompt, **kw: ("Explain how neural networks work in depth", True),
     )
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
 
     history = [{"question": "what is neuron network", "answer": "A model of connected neurons."}]
     gen.generate("explain it deeply", history=history)
@@ -191,7 +191,7 @@ def test_rewrite_uses_a_real_llm_call_not_a_shortcut(two_chunks, monkeypatch):
         gen, "_call_ollama_lightweight",
         lambda prompt, **kw: (calls.append(prompt), ("resolved question", True))[1],
     )
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
     gen.generate("explain it deeply", history=SAMPLE_HISTORY_3_TURNS)
     assert len(calls) == 1
     assert "REWRITTEN QUESTION" in calls[0] or "rewrite" in calls[0].lower()
@@ -201,7 +201,7 @@ def test_rewrite_failure_falls_back_to_original_question(two_chunks, monkeypatch
     retriever = _StubRetriever(chunks=two_chunks)
     gen = LLMResponseGeneration(retriever=retriever)
     monkeypatch.setattr(gen, "_call_ollama_lightweight", lambda prompt, **kw: ("", False))
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
     gen.generate("explain it deeply", history=SAMPLE_HISTORY_3_TURNS)
     assert retriever.calls == ["explain it deeply"]
 
@@ -219,7 +219,7 @@ def test_original_question_still_shown_to_model_for_the_answer(two_chunks, monke
     captured = []
     monkeypatch.setattr(
         gen, "_call_ollama",
-        lambda prompt, chunks=None: (captured.append(prompt), ("answer", True))[1],
+        lambda prompt, chunks=None, **kwargs: (captured.append(prompt), ("answer", True))[1],
     )
     gen.generate("explain it deeply", history=SAMPLE_HISTORY_3_TURNS)
     assert "explain it deeply" in captured[0]

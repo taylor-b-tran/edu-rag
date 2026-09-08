@@ -260,9 +260,14 @@ _DEMO_USERS = [
     ("student_demo", "student@uow.edu.au", "student",
      *_demo_password("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")),
 ]
+# The two subjects that carry real, indexed course material. CSIT214, CSCI369
+# and MATH202 were seeded here and in the fixtures but never received any:
+# CSIT214's 21 "documents" were 17 failed uploads of the same demo.pdf, and the
+# other two had none at all. Every question asked of them fell back to general
+# knowledge, which reads as the assistant not knowing its own syllabus.
 _DEMO_COURSES = [
     ("CSIT321", "Project"),
-    ("CSIT214", "Database Systems"),
+    ("CSCI203", "Algorithms and Data Structure"),
 ]
 
 
@@ -306,6 +311,23 @@ def _seed_demo_auth_data() -> None:
                  WHERE u.role IN ('student', 'lecturer')
                 ON CONFLICT (user_id, course_id) DO NOTHING
                 """
+            )
+            # T8-04/T8-09: the demo courses were seeded with no owner, so no
+            # lecturer could manage them and the per-course tuning screen was
+            # empty for the only lecturer account that exists. A lecturer who
+            # teaches a subject should own it.
+            #
+            # Only fills nulls: a course that already has a real owner is left
+            # exactly as it is, so this can never take a course off someone.
+            cur.execute(
+                """
+                UPDATE courses
+                   SET owner_id = (SELECT id FROM users WHERE role = 'lecturer'
+                                    ORDER BY created_at LIMIT 1)
+                 WHERE owner_id IS NULL
+                   AND course_code = ANY(%s)
+                """,
+                ([code for code, _name in _DEMO_COURSES],),
             )
 
 
@@ -651,6 +673,29 @@ def get_course_by_code(course_code: str) -> dict[str, Any] | None:
             )
             row = cur.fetchone()
     return _normalize_course_row(row) if row is not None else None
+
+
+def list_courses_owned_by(user_id: str | None) -> list[dict[str, Any]]:
+    """Courses this lecturer owns, for GET /api/courses' `can_manage` flag.
+
+    A null user id returns nothing rather than every unowned course — courses
+    that predate ownership have a null owner_id and stay admin-only, which is
+    the safe reading of a null and matches _require_course_manager.
+    """
+    if not user_id:
+        return []
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {_COURSE_COLUMNS}
+                  FROM courses
+                 WHERE owner_id = %s
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+    return [_normalize_course_row(row) for row in rows]
 
 
 def create_course(course_code: str, course_name: str,

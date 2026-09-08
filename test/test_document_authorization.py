@@ -8,7 +8,7 @@ held a role, and never that the document belonged to a course they are in:
   GET    /api/indexing-jobs/<id>  no check at all, and its error field can
                                   quote server-side file paths
 
-The demo fixtures enroll student@ and lecturer@ in CSIT321 and CSIT214, so a
+The demo fixtures enroll student@ and lecturer@ in CSIT321 and CSCI203, so a
 course outside that set is what an outsider looks like.
 """
 from __future__ import annotations
