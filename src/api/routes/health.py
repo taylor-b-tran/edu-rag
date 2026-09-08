@@ -55,11 +55,16 @@ def metrics():
     state = _state()
     fixture_users = state.fixtures.get("demo_users", []) if state.fixture_loaded else []
     total_messages = sum(len(s.get("messages", [])) for s in state.sessions.values())
+    # Read through to Postgres first, so these are the deployment's numbers and
+    # not whichever worker answered. Bound to names rather than called inside
+    # the literal, so the counts do not depend on evaluation order.
+    documents = state.list_documents()
+    jobs = state.list_indexing_jobs()
     return jsonify(
         {
-            "documents": len(state.list_documents()),
+            "documents": len(documents),
             "uploaded_documents": len(state.uploaded_documents),
-            "indexing_jobs": len(state.indexing_jobs),
+            "indexing_jobs": len(jobs),
             "sessions": len(state.sessions),
             "queries_total": total_messages,
             "users": len(fixture_users),

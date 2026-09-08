@@ -557,8 +557,89 @@ class APIState:
                 logger.warning("Failed to persist session archive to Postgres (%s: %s).",
                                 type(exc).__name__, exc)
 
+    def _refresh_documents(self) -> list[dict[str, Any]]:
+        """This worker's uploaded documents, brought up to date with Postgres.
+
+        `uploaded_documents` is filled once in __post_init__ and only mutated
+        locally afterwards, so with --workers=2 a document uploaded through one
+        worker simply does not exist for the other. Before this change, after
+        an upload that returned 202 and really had indexed its chunks, sixteen
+        reads of the same document id gave 404 twelve times, and its indexing
+        job fourteen times out of sixteen. The lecturer saw "upload complete"
+        and a document that was not there.
+
+        Postgres is authoritative when it answers, for the same reason as
+        `_live_token`: keeping this worker's extra rows would resurrect a
+        document deleted on the other one, and deleting a document also removes
+        its chunks, so the row would point at nothing. The dictionary remains
+        the source of truth when there is no database, which is how the tests
+        run.
+
+        The table holds one row per upload -- tens of them, not thousands -- so
+        re-reading it is cheaper than the second code path a query-by-id would
+        add, and it reuses the row shaping that start-up already depends on.
+        """
+        if self._db_available:
+            try:
+                from src.api import db
+                self.uploaded_documents = db.load_all_documents()
+            except Exception as exc:
+                logger.warning("Document reload failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+        return self.uploaded_documents
+
+    def list_indexing_jobs(self) -> dict[str, dict[str, Any]]:
+        """The same, for indexing jobs -- merged rather than replaced.
+
+        Nothing ever deletes a job row, so there is no deleted-elsewhere case
+        to respect here, and merging keeps a job whose insert did not reach
+        Postgres pollable on the worker that created it.
+        """
+        if self._db_available:
+            try:
+                from src.api import db
+                self.indexing_jobs.update(db.load_all_jobs())
+            except Exception as exc:
+                logger.warning("Job reload failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+        return self.indexing_jobs
+
+    def find_document(self, document_id: str | None) -> dict[str, Any] | None:
+        """One document by id, wherever it was uploaded from.
+
+        Searches the merged list rather than querying Postgres by id, because
+        fixture documents are part of what callers can see and have no row.
+        """
+        if not document_id:
+            return None
+        for document in self.list_documents():
+            if (document.get("document_id") == document_id
+                    or document.get("id") == document_id):
+                return document
+        return None
+
+    def find_uploaded_document(self, document_id: str | None) -> dict[str, Any] | None:
+        """Only real uploads, excluding fixtures.
+
+        Deletion needs this narrower search: a fixture document has no file and
+        no chunks of its own, so treating one as deletable would remove another
+        document's chunks from ChromaDB by filename.
+        """
+        if not document_id:
+            return None
+        for document in self._refresh_documents():
+            if (document.get("document_id") == document_id
+                    or document.get("id") == document_id):
+                return document
+        return None
+
+    def get_indexing_job(self, job_id: str | None) -> dict[str, Any] | None:
+        if not job_id:
+            return None
+        return self.list_indexing_jobs().get(job_id)
+
     def list_documents(self, course_id: str | None = None) -> list[dict[str, Any]]:
-        documents = list(self.fixtures.get("documents", [])) + self.uploaded_documents
+        documents = list(self.fixtures.get("documents", [])) + self._refresh_documents()
         if course_id:
             uuid_form, code_form = self.resolve_course(course_id)
             targets = {course_id}
@@ -658,7 +739,9 @@ class APIState:
                                job_id, exc)
 
     def delete_uploaded_document(self, document_id: str) -> bool:
-        before = len(self.uploaded_documents)
+        # Refresh first, or deleting a document that was uploaded through the
+        # other worker reports "not found" while the row and its chunks stay.
+        before = len(self._refresh_documents())
         self.uploaded_documents = [
             doc for doc in self.uploaded_documents
             if doc.get("document_id") != document_id and doc.get("id") != document_id
