@@ -125,7 +125,16 @@ class APIState:
                 self._backend_mode = "fixture"
         return self._generator
 
-    def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
+    def issue_tokens(self, user: dict[str, Any],
+                     family_id: str | None = None) -> dict[str, Any]:
+        """Issue an access/refresh pair for one login.
+
+        `family_id` ties the pair together so logout can end the login rather
+        than one credential of it. /auth/refresh passes the previous token's
+        family back in, so rotating a refresh token stays inside the same
+        login and a logout afterwards still reaches it. Omitting it starts a
+        new login, which is what /auth/login wants.
+        """
         access_token = f"dev_access_{secrets.token_urlsafe(24)}"
         refresh_token = f"dev_refresh_{secrets.token_urlsafe(24)}"
         now = time.time()
@@ -134,6 +143,7 @@ class APIState:
             "email": user.get("email"),
             "role": user.get("role", "student"),
             "enrolled_courses": user.get("enrolled_courses", []),
+            "family_id": family_id or f"fam_{secrets.token_urlsafe(16)}",
             "issued_at": _utc_now(),
         }
         # expires_in was reported to clients but never enforced, so every token
@@ -338,8 +348,56 @@ class APIState:
         return self.find_demo_user(email)
 
     def revoke_access_token(self, token: str) -> None:
-        """Log a token out everywhere."""
+        """Retire one access token everywhere. Prefer `revoke_login`."""
         self._retire_token(self.access_tokens, token, "access_tokens")
+
+    def revoke_login(self, access_token: str | None,
+                     refresh_token: str | None = None) -> None:
+        """End the whole login behind this access token.
+
+        Retiring only the access token left the refresh token beside it alive,
+        so the session that had just been logged out could be rebuilt from a
+        credential logout was supposed to have ended. Before this change the
+        old access token gave 401, but its refresh token still returned 200
+        and the new token worked.
+
+        The family covers that without depending on what the client remembers
+        to send, which matters because after a page reload the browser holds
+        only the access token -- the refresh token is deliberately not put in
+        a cookie. `refresh_token` is still accepted for credentials issued
+        before families existed, whose rows carry no family_id; passing a
+        token is proof enough of holding it, so no extra authorisation applies.
+        """
+        payload = None
+        if access_token:
+            payload = (self._live_token(self.access_tokens, access_token, "access_tokens")
+                       or self.access_tokens.get(access_token))
+            self._retire_token(self.access_tokens, access_token, "access_tokens")
+
+        family_id = (payload or {}).get("family_id")
+        if family_id:
+            self._retire_token_family(family_id)
+
+        if refresh_token:
+            # A no-op once the family has been swept, and the only thing that
+            # works for a pre-family token.
+            self._retire_token(self.refresh_tokens, refresh_token, "refresh_tokens")
+
+    def _retire_token_family(self, family_id: str) -> None:
+        """Drop every token of one login, here and in Postgres."""
+        for store in (self.access_tokens, self.refresh_tokens):
+            for token in [t for t, p in store.items()
+                          if (p or {}).get("family_id") == family_id]:
+                store.pop(token, None)
+        if self._db_available:
+            try:
+                from src.api import db
+                db.delete_token_family(family_id)
+            except Exception as exc:
+                logger.warning("Could not delete token family from Postgres "
+                               "(%s: %s); credentials from this login may still "
+                               "be accepted elsewhere until they expire.",
+                               type(exc).__name__, exc)
 
     def refresh_enrolled_courses(self, user_id: str | None) -> list[str] | None:
         """Re-read one user's enrollments and update every live token they hold.

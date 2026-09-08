@@ -205,6 +205,23 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     expires_at        TIMESTAMPTZ NOT NULL
 );
 
+-- Sprint 9: the access token and the refresh token handed out together
+-- are one login, and need a shared id to say so. Without it, logout could only
+-- retire the credential it was given -- the access token -- and the refresh
+-- token beside it went on minting new access tokens for the session that had
+-- just been ended: old access token 401, refresh token 200 with a working
+-- new token.
+--
+-- Added as an ALTER for the same reason as courses.owner_id above: this file
+-- is replayed on every start and there is still no migration runner. Nullable
+-- so tokens issued before this keep working; they simply have no family, and
+-- logout falls back to retiring what it was handed.
+ALTER TABLE access_tokens  ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
+
+CREATE INDEX IF NOT EXISTS access_tokens_family_idx  ON access_tokens(family_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_family_idx ON refresh_tokens(family_id);
+
 CREATE TABLE IF NOT EXISTS chat_sessions (
     session_id  TEXT PRIMARY KEY,
     user_id     TEXT,
@@ -847,8 +864,10 @@ def _insert_token(table: str, token: str, payload: dict[str, Any],
             cur.execute(
                 f"""
                 INSERT INTO {table}
-                  (token, user_id, email, role, enrolled_courses, expires_at)
-                VALUES (%s, %s, %s, %s, %s, NOW() + %s * INTERVAL '1 second')
+                  (token, user_id, email, role, enrolled_courses, family_id,
+                   expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s,
+                        NOW() + %s * INTERVAL '1 second')
                 ON CONFLICT (token) DO NOTHING
                 """,
                 (
@@ -857,6 +876,7 @@ def _insert_token(table: str, token: str, payload: dict[str, Any],
                     payload.get("email"),
                     payload.get("role"),
                     json.dumps(payload.get("enrolled_courses", [])),
+                    payload.get("family_id"),
                     expires_in_seconds,
                 ),
             )
@@ -895,7 +915,8 @@ def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT token, user_id, email, role, enrolled_courses, issued_at, "
+                f"SELECT token, user_id, email, role, enrolled_courses, "
+                f"       family_id, issued_at, "
                 f"       EXTRACT(EPOCH FROM expires_at) AS expires_at "
                 f"FROM {table}"
             )
@@ -952,7 +973,8 @@ def get_token(table: str, token: str) -> dict[str, Any] | None:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                SELECT user_id, email, role, enrolled_courses, issued_at,
+                SELECT user_id, email, role, enrolled_courses, family_id,
+                       issued_at,
                        EXTRACT(EPOCH FROM expires_at) AS expires_at
                   FROM {table}
                  WHERE token = %s
@@ -976,6 +998,23 @@ def delete_token(table: str, token: str) -> None:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(f"DELETE FROM {table} WHERE token = %s", (token,))
+
+
+def delete_token_family(family_id: str) -> int:
+    """Retire every credential issued under one login.
+
+    Both tables, one statement each, because a login is an access token and a
+    refresh token and ending it has to mean both. Returns how many rows went,
+    which is what lets the caller tell a real revocation from a token that had
+    no family and needs the single-token fallback.
+    """
+    removed = 0
+    with connect() as conn:
+        with conn.cursor() as cur:
+            for table in ("access_tokens", "refresh_tokens"):
+                cur.execute(f"DELETE FROM {table} WHERE family_id = %s", (family_id,))
+                removed += cur.rowcount or 0
+    return removed
 
 
 def load_all_access_tokens() -> dict[str, dict[str, Any]]:

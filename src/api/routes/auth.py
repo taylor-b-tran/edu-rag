@@ -126,7 +126,9 @@ def refresh():
     user = _state().find_user_any_source(token_state.get("email", ""))
     if not user:
         return jsonify({"error": "user no longer available"}), 401
-    return jsonify(_state().issue_tokens(user))
+    # Rotation stays inside the same login, so a logout later still reaches
+    # every credential this session has been through.
+    return jsonify(_state().issue_tokens(user, family_id=token_state.get("family_id")))
 
 
 @auth_bp.get("/me")
@@ -157,10 +159,24 @@ def me():
 
 @auth_bp.post("/logout")
 def logout():
+    """End the login, not just the credential that was presented.
+
+    This used to retire the access token alone, which read as a successful
+    logout while the refresh token beside it still issued new access tokens.
+    Both now go, via the family they share.
+
+    The refresh token is read from the body as well, because tokens issued
+    before families existed have no family to sweep -- the UI already sends it.
+    """
     auth_header = request.headers.get("Authorization")
     token = auth_header.partition(" ")[2] if auth_header else ""
-    if token:
-        # Must reach Postgres: the row outlives the worker that issued it, and
-        # every other worker would keep honouring the token.
-        _state().revoke_access_token(token)
+    try:
+        body = request.get_json(silent=True) or {}
+    except Exception:
+        body = {}
+    refresh_token = body.get("refresh_token") if isinstance(body, dict) else None
+    if token or refresh_token:
+        # Must reach Postgres: the rows outlive the worker that issued them,
+        # and every other worker would keep honouring them.
+        _state().revoke_login(token, refresh_token)
     return jsonify({"status": "success", "message": "Logged out successfully."})
