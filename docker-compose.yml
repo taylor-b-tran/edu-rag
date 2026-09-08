@@ -2,6 +2,12 @@ name: edurag
 
 services:
   api:
+    # T9-12: the host rebooted twice in early September and the stack never
+    # came back - the app sat dead until somebody noticed. This is a 24/7
+    # shared instance behind Tailscale, so it has to come up with the
+    # machine. 'unless-stopped' rather than 'always', so a deliberate
+    # 'docker compose stop' stays stopped.
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/Dockerfile.demo
@@ -80,6 +86,7 @@ services:
       - edurag-net
 
   streamlit:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: docker/Dockerfile.demo
@@ -153,6 +160,7 @@ services:
       - edurag-net
 
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-edurag}
@@ -175,6 +183,7 @@ services:
       - edurag-net
 
   chromadb:
+    restart: unless-stopped
     image: chromadb/chroma@sha256:607103123fbd79794e3cd8029e16137031a464551e3a61df77191627a9d23c72
     environment:
       IS_PERSISTENT: "TRUE"
@@ -192,6 +201,7 @@ services:
       - edurag-net
 
   ollama:
+    restart: unless-stopped
     image: ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
