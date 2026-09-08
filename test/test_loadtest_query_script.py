@@ -95,7 +95,7 @@ def test_run_level_all_errors_reports_none_latencies_not_crash():
 
 def test_default_questions_are_not_ambiguous():
     """None of the built-in sample questions should trip
-    src/api/routes/query.py's _is_ambiguous() check (>=3 words, no
+    src/api/routes/query.py's _is_ambiguous() check (>=2 words, no
     ambiguous-pattern substring), or every real run would get 422s."""
     from src.api.routes.query import _is_ambiguous
 

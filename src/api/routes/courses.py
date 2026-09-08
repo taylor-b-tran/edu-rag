@@ -79,10 +79,44 @@ def _require_course_manager(course_code: str):
 
 @courses_bp.get("/courses")
 def list_courses():
-    _, err = _require_auth()
+    """Every course, each tagged with whether this caller may manage it.
+
+    `can_manage` mirrors _require_course_manager exactly: an admin manages all,
+    a lecturer manages only what they own, a student manages none. Without it
+    the live-config UI (T8-09) has no way to tell which courses a lecturer may
+    tune, so it would offer controls on every course and only discover the
+    answer when saving failed with a 403 — a screen that lies until you use it.
+
+    The owner id itself is deliberately not exposed: the UI needs the decision,
+    not the identity behind it.
+    """
+    user, err = _require_auth()
     if err:
         return err
-    return jsonify({"courses": _state().list_courses()})
+
+    role = user.get("role")
+    owned: set[str] = set()
+    if role == "lecturer" and _state().db_available:
+        try:
+            from src.api import db
+            owned = {
+                c.get("course_code")
+                for c in db.list_courses_owned_by(user.get("user_id"))
+            }
+        except Exception:
+            current_app.logger.warning(
+                "Could not resolve course ownership; treating none as managed.",
+                exc_info=True,
+            )
+
+    courses = []
+    for course in _state().list_courses():
+        code = course.get("course_code")
+        courses.append({
+            **course,
+            "can_manage": role == "admin" or (role == "lecturer" and code in owned),
+        })
+    return jsonify({"courses": courses})
 
 
 @courses_bp.post("/courses")

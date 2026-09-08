@@ -93,6 +93,9 @@ def stub_db(monkeypatch):
                             **{k: v for k, v in kw.items() if v is not None}})
     monkeypatch.setattr(db, "set_course_owner",
                         lambda code, owner: {**_COURSES[code], "owner_id": owner})
+    monkeypatch.setattr(
+        db, "list_courses_owned_by",
+        lambda uid: [c for c in _COURSES.values() if c.get("owner_id") == uid])
     return created
 
 
@@ -293,3 +296,71 @@ def test_a_failed_write_does_not_break_the_request(app, monkeypatch):
 
     assert state.refresh_enrolled_courses("lect-1") == ["NEW101"]
     assert state.access_tokens["tok"]["enrolled_courses"] == ["NEW101"]
+
+
+# --- can_manage on the course list (T8-09) ----------------------------
+#
+# The live-config screen decides which courses to offer controls for from this
+# flag alone. If it disagreed with _require_course_manager, the page would show
+# a lecturer settings they cannot save — the same shape of lie as an API that
+# accepts a setting and ignores it. These pin the two together.
+
+
+def _codes(resp):
+    return {c["course_code"]: c["can_manage"] for c in resp.get_json()["courses"]}
+
+
+@pytest.fixture(autouse=True)
+def stub_course_list(monkeypatch):
+    """The list endpoint reads APIState.list_courses, not db directly."""
+    from src.api.state import APIState
+    monkeypatch.setattr(
+        APIState, "list_courses",
+        lambda self: [{"course_code": c["course_code"], "name": c["course_name"]}
+                      for c in _COURSES.values()])
+
+
+def test_an_admin_may_manage_every_course(client):
+    client.as_user(ADMIN)
+    assert _codes(client.get("/api/courses", headers=AUTH)) == {
+        "OWNED101": True, "FOREIGN101": True, "LEGACY101": True}
+
+
+def test_a_lecturer_may_manage_only_what_they_own(client):
+    client.as_user(LECTURER)
+    assert _codes(client.get("/api/courses", headers=AUTH)) == {
+        "OWNED101": True, "FOREIGN101": False, "LEGACY101": False}
+
+
+def test_a_student_may_manage_nothing(client):
+    client.as_user(STUDENT)
+    assert set(_codes(client.get("/api/courses", headers=AUTH)).values()) == {False}
+
+
+def test_an_ownerless_course_is_not_managed_by_any_lecturer(client):
+    """A null owner is read as admin-only, matching _require_course_manager."""
+    client.as_user(OTHER_LECTURER)
+    assert _codes(client.get("/api/courses", headers=AUTH))["LEGACY101"] is False
+
+
+def test_can_manage_agrees_with_what_a_write_actually_does(client):
+    """The flag has to predict the PATCH, or the screen misleads."""
+    client.as_user(LECTURER)
+    flags = _codes(client.get("/api/courses", headers=AUTH))
+    for code, may in flags.items():
+        resp = client.patch(f"/api/courses/{code}",
+                            json={"course_name": "renamed"}, headers=AUTH)
+        allowed = resp.status_code == 200
+        assert allowed == may, (
+            f"{code}: can_manage={may} but PATCH returned {resp.status_code}")
+
+
+def test_the_list_still_works_without_a_database(client, monkeypatch, app):
+    """No Postgres means no ownership lookup; nobody is offered controls
+    rather than everybody being offered them."""
+    state = app.config["EDURAG_API_STATE"]
+    monkeypatch.setattr(type(state), "db_available", property(lambda self: False))
+    client.as_user(LECTURER)
+    resp = client.get("/api/courses", headers=AUTH)
+    assert resp.status_code == 200
+    assert set(_codes(resp).values()) == {False}

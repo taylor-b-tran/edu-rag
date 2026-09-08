@@ -129,6 +129,32 @@ def refresh():
     return jsonify(_state().issue_tokens(user))
 
 
+@auth_bp.get("/me")
+def me():
+    """Who this bearer token belongs to.
+
+    Added for T9-14. The UI keeps the access token in a browser cookie so a
+    page refresh no longer throws the user back to the login screen, and on
+    reload it needs to turn that token back into a user. Asking the server
+    rather than storing the user in the cookie alongside the token keeps one
+    copy of the truth: role and enrolled courses are whatever they are now,
+    not whatever they were when the cookie was written.
+
+    A dead or expired token is a plain 401, which is the signal to clear the
+    cookie and show the login form.
+    """
+    user = _state().validate_bearer(request.headers.get("Authorization"))
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+    return jsonify({
+        "id": user.get("user_id"),
+        "email": user.get("email"),
+        "username": user.get("username"),
+        "role": user.get("role", "student"),
+        "enrolled_courses": user.get("enrolled_courses", []),
+    })
+
+
 @auth_bp.post("/logout")
 def logout():
     auth_header = request.headers.get("Authorization")

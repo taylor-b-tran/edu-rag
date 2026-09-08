@@ -24,11 +24,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 import os
+import html as _html
 import re
 import time
 import uuid
 from datetime import datetime
-import random
 
 from api_client import PaediaAPIClient, APIConfig
 
@@ -539,6 +539,61 @@ init_session_state()
 
 # ─── HELPER: SESSION MANAGEMENT (T11) ─────────────────────────────
 
+def _hydrate_sessions_from_server() -> None:
+    """Load this user's saved conversations back into the UI (T9-14).
+
+    Conversations have been persisted in Postgres since T8-24, and readable
+    from any gunicorn worker since PR #90 -- but nothing ever read them back
+    for the person who owned them. The sidebar and Session History both render
+    `st.session_state.sessions`, which only holds conversations created in the
+    current browser tab. Close the tab and your history looked deleted while
+    every message was still on disk; 103 sessions were sitting there unread.
+
+    Best effort on purpose: a failure here costs the old conversations, not the
+    login. The user still gets a working, empty chat.
+    """
+    if not api.is_live:
+        return
+    try:
+        remote = api.get_sessions()
+    except Exception:
+        return
+    if not remote:
+        return
+
+    restored = []
+    for item in sorted(remote, key=lambda s: s.get("updated_at") or "", reverse=False):
+        if item.get("archived"):
+            continue
+        sid = item.get("session_id")
+        turns = item.get("messages") or []
+        if not sid or not turns:
+            continue
+
+        messages = []
+        for turn in turns:
+            stamp = turn.get("created_at") or ""
+            messages.append({"role": "user", "content": turn.get("question", ""),
+                             "timestamp": "", "timestamp_full": stamp})
+            messages.append({"role": "assistant", "content": turn.get("answer", ""),
+                             "source_references": turn.get("sources") or [],
+                             "timestamp": "", "timestamp_full": stamp})
+
+        first = turns[0].get("question") or "Chat"
+        restored.append({
+            "session_id": sid,
+            "backend_session_id": sid,
+            "title": first[:40] + ("..." if len(first) > 40 else ""),
+            "messages": messages,
+            "course_id": item.get("course_id") or DEFAULT_COURSE_ID,
+            "created_at": (item.get("created_at") or "")[:16].replace("T", " "),
+            "message_count": len(messages),
+        })
+
+    if restored:
+        st.session_state.sessions = restored
+
+
 def create_new_session(title="New Chat"):
     """Create a new chat session and make it active."""
     course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
@@ -625,7 +680,13 @@ def get_suggested_prompts() -> list:
         prompts.append(f"Compare themes in {first_doc} and {second_doc}")
     prompts.append(f"What should I revise for {course_id}?")
 
-    picked = random.sample(prompts, min(4, len(prompts)))
+    # T8-07: these used to be random.sample(). Streamlit re-runs the whole
+    # script on every interaction, so a reshuffled list meant the button a
+    # student clicked was not necessarily the question that got submitted --
+    # the label came from the previous run, the action from the current one.
+    # The order these were appended in is already most-specific-first, so
+    # taking the first four is both stable and the better selection.
+    picked = prompts[:4]
     st.session_state["_cached_prompts_course"] = course_id
     st.session_state["_cached_prompts"] = picked
     return picked
@@ -633,6 +694,7 @@ def get_suggested_prompts() -> list:
 
 def get_model_badge(model_used: str) -> str:
     """Return HTML badge for the LLM model used (T10)."""
+    model_used = _html.escape(str(model_used or "unknown"))
     if "ollama" in model_used.lower():
         return f'<span class="model-badge model-ollama">🦙 {model_used}</span>'
     elif "openai" in model_used.lower() or "gpt" in model_used.lower():
@@ -685,7 +747,10 @@ def handle_login_submit() -> None:
         st.session_state.course_id = _default_course_for_user(user)
         st.session_state.selected_course_id = st.session_state.course_id
         st.session_state.login_error = None
-        create_new_session("Welcome Chat")
+        _remember_session(st.session_state.jwt_token)
+        _hydrate_sessions_from_server()
+        if not st.session_state.sessions:
+            create_new_session("Welcome Chat")
     elif login_result.get("use_demo_auth"):
         user = DEMO_USERS.get(email)
         if user and user["password"] == password:
@@ -730,6 +795,7 @@ def handle_signup_submit() -> None:
         st.session_state.selected_course_id = st.session_state.course_id
         st.session_state.signup_error = None
         st.session_state.login_error = None
+        _remember_session(st.session_state.jwt_token)
         create_new_session("Welcome Chat")
     else:
         # Show the API error message as-is (it's already user-facing)
@@ -828,8 +894,10 @@ def render_sidebar():
             pages["doc_manager"] = ("📁", "Document Manager")
         else:
             pages["uploads"] = ("📁", "My Uploads")
+        if role in ("Lecturer", "Admin"):
+            pages["settings"] = ("⚙️", "Tuning")
         if role == "Admin":
-            pages["admin"] = ("⚙️", "Admin Dashboard")
+            pages["admin"] = ("🛠️", "Admin Dashboard")
 
         for key, (icon, label) in pages.items():
             if st.button(
@@ -891,7 +959,20 @@ def render_sidebar():
         docs_count = len(docs)
         indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
         api_icon = "🟢" if api.is_live else "🟡"
-        st.caption(f"{docs_count} docs loaded · {indexed} indexed · Semantic search ON")
+        # T8-07: this line used to end with a flat "Semantic search ON", printed
+        # whether or not it was. If the embedder fails to load the backend falls
+        # back to keyword matching and answers get noticeably worse -- the one
+        # moment the caption mattered was the one moment it lied. /api/health
+        # reports what is actually loaded, so ask it.
+        health = api.get_health()
+        embedder_ok = (health.get("embedder") or {}).get("status") == "ok"
+        if health.get("rag_available") and embedder_ok:
+            search_label = "Semantic search on"
+        elif health.get("_unavailable"):
+            search_label = "Search state unknown"
+        else:
+            search_label = "⚠️ Semantic search unavailable"
+        st.caption(f"{docs_count} docs loaded · {indexed} indexed · {search_label}")
         st.caption(f"{api_icon} {api.mode_label}")
 
         # ── User info + logout ──
@@ -908,6 +989,7 @@ def render_sidebar():
             st.caption(role)
 
         if st.button("🚪 Sign Out", use_container_width=True):
+            _forget_session()
             api.clear_auth()
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
@@ -966,7 +1048,9 @@ def _send_message(text: str, append_user: bool = True):
         "source_references": response.get("source_references", []),
         "confidence": response.get("confidence", 0),
         "confidence_score": response.get("confidence_score"),
-        "model_used": response.get("model_used", "ollama/llama3"),
+        # T8-07: defaulting to a model name the host stopped using in Sprint 8
+        # meant a failed answer was labelled as if llama3 had produced it.
+        "model_used": response.get("model_used") or "unknown",
         "token_count": response.get("token_count", 0),
         "latency_ms": response.get("latency_ms"),
         "is_fallback": response.get("is_fallback", False),
@@ -1024,7 +1108,16 @@ def render_chat_page():
             1 for d in live_docs
             if str(d.get("status") or d.get("indexing_status") or "").lower() in ("indexed", "completed")
         )
-        model_label = "ollama/llama3" if not api.is_live else "Live API"
+        # T8-07: this said "ollama/llama3" whenever the API was unreachable,
+        # which stopped being true in Sprint 8 -- the host runs qwen3:14b. Every
+        # answer already reports the model that produced it, so the badge shows
+        # the last real one rather than a guess, and only falls back to a
+        # neutral label when nothing has been answered yet.
+        model_label = "Live API" if api.is_live else "Offline"
+        for _msg in reversed(st.session_state.get("messages", [])):
+            if _msg.get("role") == "assistant" and _msg.get("model_used"):
+                model_label = _msg["model_used"]
+                break
         st.markdown(
             f"<span class='status-badge badge-ready'>{indexed_live} docs indexed</span> "
             f"{get_model_badge(model_label)}",
@@ -1089,7 +1182,7 @@ def render_chat_page():
                 if msg["role"] == "user":
                     st.markdown(
                         f'<div class="clearfix"><div class="user-msg">'
-                        f'{msg["content"]}'
+                        f'{_html.escape(msg["content"])}'
                         f'<div class="msg-time">{timestamp_str}</div>'
                         f'</div></div>',
                         unsafe_allow_html=True,
@@ -1100,13 +1193,19 @@ def render_chat_page():
                         st.markdown(
                             f'<div class="error-card">'
                             f'<strong>⚠️ {msg["error_type"].replace("_", " ").title()}</strong><br>'
-                            f'{msg.get("error_message", "An error occurred.")}'
+                            f'{_html.escape(str(msg.get("error_message") or "An error occurred."))}'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
                         continue
 
-                    answer_html = msg["content"].replace("\n", "<br>")
+                    # Escaped before any markup is added. The answer text comes
+                    # from the model, which is fed the contents of uploaded
+                    # documents, so a document carrying an injection could
+                    # otherwise put working script into every reader's page.
+                    # Bold and code spans are re-applied afterwards so the
+                    # intended formatting still renders.
+                    answer_html = _html.escape(msg["content"]).replace("\n", "<br>")
                     answer_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', answer_html)
                     answer_html = re.sub(r'`([^`]+)`', r'<code>\1</code>', answer_html)
 
@@ -1120,11 +1219,17 @@ def render_chat_page():
                     if msg.get("source_references"):
                         sources_html = '<div class="source-label">📄 Retrieved from:</div>'
                         for src in msg["source_references"]:
-                            filename = src.get("filename") or src.get("source_file") or src.get("source") or "Document"
-                            page_number = src.get("page_number") or src.get("page") or "?"
-                            section = src.get("section") or src.get("topic") or ""
+                            # Filenames, sections and collection names come from
+                            # uploaded material, so they are attacker-chosen in
+                            # the same way the answer text is.
+                            filename = _html.escape(str(
+                                src.get("filename") or src.get("source_file")
+                                or src.get("source") or "Document"))
+                            page_number = _html.escape(str(
+                                src.get("page_number") or src.get("page") or "?"))
+                            section = _html.escape(str(src.get("section") or src.get("topic") or ""))
                             section_str = f" · {section}" if section else ""
-                            collection = src.get("collection_name", "")
+                            collection = _html.escape(str(src.get("collection_name", "")))
                             collection_str = f" [{collection}]" if collection else ""
                             sim_pct = int((src.get("similarity") or 0) * 100)
                             sources_html += (
@@ -1474,6 +1579,284 @@ def _render_document_table(student_view: bool = False):
     st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
 
 
+# ─── SETTINGS / LIVE CONFIG (Lecturer / Admin view) ────────────────
+
+# T8-09. The backend (T8-08) resolves every value as
+#     course override  ->  global setting  ->  environment default
+# and this page has to show which of those three a number came from. Without
+# that, a lecturer reads an inherited global value as their own course's
+# setting, changes something else, and cannot explain why the first number
+# moved. The badge next to each control is the whole point of the screen.
+
+_COURSE_SCOPED_KEYS = ("top_k", "similarity_threshold", "response_style", "prompt_strategy")
+_GLOBAL_ONLY_KEYS = ("ollama_model", "temperature", "num_predict")
+_PROMPT_STRATEGIES = ("baseline", "evidence_cited", "few_shot_cited")
+
+_KEY_HELP = {
+    "top_k": "How many chunks retrieval hands the model. Measured on this host: "
+             "5 to 8 moved an answer by about ten characters.",
+    "similarity_threshold": "How close a chunk must be to count as relevant. "
+                            "Raise it for fewer, safer sources; lower it if good "
+                            "material is being missed. Above roughly 0.9 nothing "
+                            "qualifies and every answer falls back.",
+    "response_style": "How answers are written for this course. Students can still "
+                      "pick their own per question.",
+    "prompt_strategy": "Which prompt template builds the request. evidence_cited "
+                       "forces inline [S#] citations; few_shot_cited adds one "
+                       "worked example, which helps smaller models copy the format.",
+    "ollama_model": "Which model is resident in the shared 16 GB of VRAM. Changing "
+                    "this evicts the current one for everybody, which is why it is "
+                    "admin-only and not per course.",
+    "temperature": "Higher is more varied, lower is more repeatable. 0.2 is the "
+                   "current default and suits factual answering.",
+    "num_predict": "Maximum tokens in an answer. Raising it did not lengthen "
+                   "answers on this host; response_style is what changes length.",
+}
+
+
+def _setting_source(key: str, course_stored: dict, global_stored: dict) -> tuple[str, bool]:
+    """Where the value in effect for `key` actually comes from.
+
+    Returns (label, is_course_override).
+    """
+    if key in course_stored:
+        return "this course", True
+    if key in global_stored:
+        return "global", False
+    return "default", False
+
+
+def _source_badge(label: str) -> str:
+    colour = {"this course": "#0F766E", "global": "#6366F1", "default": "#94A3B8"}[label]
+    return (f'<span style="background:{colour}1A;color:{colour};font-size:0.7rem;'
+            f'padding:1px 7px;border-radius:3px;letter-spacing:.03em;">{label}</span>')
+
+
+def _render_course_tuning(course_code: str, styles: list, style_default: str | None):
+    """Per-course retrieval settings, for the lecturer who owns this course."""
+    course_cfg = api.get_course_settings(course_code)
+    global_cfg = api.get_global_settings()
+
+    if course_cfg.get("_unavailable") or global_cfg.get("_unavailable"):
+        st.warning(
+            "Settings need the database backend, which is not reachable right now. "
+            "Values below would not save."
+        )
+        return
+
+    stored = course_cfg.get("settings") or {}
+    effective = course_cfg.get("effective") or {}
+    global_stored = global_cfg.get("settings") or {}
+
+    style_ids = [s.get("id") for s in styles] or [
+        "concise", "detailed", "simple", "exam_prep", "socratic"
+    ]
+    style_labels = {s.get("id"): s.get("label", s.get("id")) for s in styles}
+
+    # Deliberately not st.form: inside a form a checkbox does not trigger a
+    # rerun until submit, so "Set for this course" could not enable the
+    # control beside it -- the page rendered controls that stayed greyed
+    # out no matter what you clicked. Plain widgets rerun on change; the
+    # Save button below still sends everything in one request.
+    changes: dict = {}
+    with st.container():
+
+        for key in _COURSE_SCOPED_KEYS:
+            label, _is_override = _setting_source(key, stored, global_stored)
+            current = effective.get(key)
+
+            head, badge = st.columns([3, 1])
+            head.markdown(f"**{key.replace('_', ' ').title()}**")
+            badge.markdown(_source_badge(label), unsafe_allow_html=True)
+            st.caption(_KEY_HELP[key])
+
+            override = st.checkbox(
+                "Set for this course",
+                value=key in stored,
+                key=f"ovr_{course_code}_{key}",
+                help="Unticked, this course follows the global setting.",
+            )
+
+            if key == "top_k":
+                value = st.number_input(
+                    "Chunks retrieved", min_value=1, max_value=20,
+                    value=int(current if current is not None else 5), step=1,
+                    disabled=not override, key=f"val_{course_code}_{key}",
+                    label_visibility="collapsed",
+                )
+            elif key == "similarity_threshold":
+                value = st.slider(
+                    "Similarity threshold", min_value=0.0, max_value=1.0,
+                    value=float(current if current is not None else 0.35), step=0.01,
+                    disabled=not override, key=f"val_{course_code}_{key}",
+                    label_visibility="collapsed",
+                )
+            elif key == "response_style":
+                options = style_ids
+                idx = options.index(current) if current in options else 0
+                value = st.selectbox(
+                    "Response style", options, index=idx,
+                    format_func=lambda s: style_labels.get(s, s),
+                    disabled=not override, key=f"val_{course_code}_{key}",
+                    label_visibility="collapsed",
+                )
+            else:  # prompt_strategy
+                options = list(_PROMPT_STRATEGIES)
+                idx = options.index(current) if current in options else 0
+                value = st.selectbox(
+                    "Prompt strategy", options, index=idx,
+                    disabled=not override, key=f"val_{course_code}_{key}",
+                    label_visibility="collapsed",
+                )
+
+            if override:
+                changes[key] = value
+            elif key in stored:
+                # Was overridden, now unticked: null clears it so the value
+                # falls back to the global setting, not to a hardcoded default.
+                changes[key] = None
+
+            st.divider()
+
+        if st.button(f"Save {course_code} settings", type="primary", key=f"save_{course_code}"):
+            if not changes:
+                st.info("Nothing changed.")
+            else:
+                result = api.update_course_settings(course_code, changes)
+                if result.get("success"):
+                    cleared = [k for k, v in changes.items() if v is None]
+                    msg = f"Saved. In effect for {course_code} from the next question."
+                    if cleared:
+                        msg += f" Cleared: {', '.join(cleared)}."
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(result.get("error") or "Could not save these settings.")
+
+
+def _render_global_tuning(styles: list):
+    """Global settings. Admin only — these apply to every course at once, and
+    the model choice decides what is resident in shared VRAM."""
+    global_cfg = api.get_global_settings()
+    if global_cfg.get("_unavailable"):
+        st.warning("Settings need the database backend, which is not reachable right now.")
+        return
+
+    stored = global_cfg.get("settings") or {}
+
+    st.caption(
+        "These apply everywhere. A course can override retrieval settings for "
+        "itself; model, temperature and answer length stay global because they "
+        "decide what sits in the shared GPU."
+    )
+
+    # Same reason as the per-course panel above.
+    changes: dict = {}
+    with st.container():
+
+        for key in _GLOBAL_ONLY_KEYS:
+            in_effect = key in stored
+            head, badge = st.columns([3, 1])
+            head.markdown(f"**{key.replace('_', ' ').title()}**")
+            badge.markdown(
+                _source_badge("global" if in_effect else "default"),
+                unsafe_allow_html=True,
+            )
+            st.caption(_KEY_HELP[key])
+
+            override = st.checkbox(
+                "Set globally", value=in_effect, key=f"govr_{key}",
+                help="Unticked, the value from the environment is used.",
+            )
+
+            if key == "ollama_model":
+                value = st.text_input(
+                    "Model", value=str(stored.get(key, "qwen3:14b")),
+                    disabled=not override, key=f"gval_{key}",
+                    label_visibility="collapsed",
+                )
+            elif key == "temperature":
+                value = st.slider(
+                    "Temperature", min_value=0.0, max_value=2.0,
+                    value=float(stored.get(key, 0.2)), step=0.05,
+                    disabled=not override, key=f"gval_{key}",
+                    label_visibility="collapsed",
+                )
+            else:  # num_predict
+                value = st.number_input(
+                    "Max answer tokens", min_value=64, max_value=4096,
+                    value=int(stored.get(key, 220)), step=32,
+                    disabled=not override, key=f"gval_{key}",
+                    label_visibility="collapsed",
+                )
+
+            if override:
+                changes[key] = value
+            elif in_effect:
+                changes[key] = None
+
+            st.divider()
+
+        if st.button("Save global settings", type="primary", key="save_global"):
+            if not changes:
+                st.info("Nothing changed.")
+            else:
+                result = api.update_global_settings(changes)
+                if result.get("success"):
+                    st.success("Saved. Applies to every course from the next question.")
+                    st.rerun()
+                else:
+                    st.error(result.get("error") or "Could not save these settings.")
+
+
+def render_settings_page():
+    """T8-09 — the screen for T8-08's live configuration.
+
+    Nothing here needs a restart: the backend resolves settings per request, so
+    a change is in effect for the next question asked. That matters because a
+    restart on this host logs everyone out and drops the model out of VRAM,
+    which is a 40-second wait for whoever asks next.
+    """
+    st.markdown("### ⚙️ Tuning")
+    st.caption(
+        "Retrieval and answering settings, applied without restarting anything. "
+        "Changes take effect on the next question."
+    )
+
+    user = st.session_state.get("user") or {}
+    role = user.get("role", "Student")
+    styles_payload = api.get_response_styles()
+    styles = styles_payload.get("styles") or []
+
+    manageable = [c for c in _all_courses() if c.get("can_manage")]
+
+    if role == "Admin":
+        tab_course, tab_global = st.tabs(["Per course", "Global"])
+    else:
+        tab_course, tab_global = st.container(), None
+
+    with tab_course:
+        if not manageable:
+            st.info(
+                "You do not own any courses yet, so there is nothing to tune here. "
+                "Courses you create are yours to configure; ask an admin to hand "
+                "over one that already exists."
+            )
+        else:
+            codes = [c.get("course_code") for c in manageable]
+            picked = st.selectbox(
+                "Course", codes,
+                format_func=lambda code: _course_display_label(code),
+                key="tuning_course",
+            )
+            if picked:
+                _render_course_tuning(picked, styles, styles_payload.get("default"))
+
+    if tab_global is not None:
+        with tab_global:
+            _render_global_tuning(styles)
+
+
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
 
 def render_courses_page():
@@ -1493,8 +1876,22 @@ def render_courses_page():
     # Filter to enrolled courses for students, show all for admins
     user_options = set(_course_options_for_user(user))
     visible = [c for c in courses if c.get("course_code") in user_options]
+
+    # T8-07: this used to fall back to showing every course to anyone enrolled
+    # in nothing. The card's only action is "Switch to X", which changes which
+    # course the UI queries but does not enrol anybody -- so the button invited
+    # a new student into a course whose every question then returned 403,
+    # rendered in the chat as though the assistant had said it. Saying plainly
+    # that there is nothing yet is worse-looking and more honest, and it stops
+    # being the empty case at all once T8-05 adds a Join action to these cards.
     if not visible:
-        visible = courses  # fallback: show everything
+        st.info(
+            "You are not enrolled in any course yet, so there is nothing to show here. "
+            "Ask your lecturer to add you, or an admin to enrol you."
+        )
+        if role == "Admin":
+            st.caption("Admins see every course; this list being empty means none exist.")
+        return
 
     cols = st.columns(2, gap="medium")
     for idx, course in enumerate(visible):
@@ -1755,8 +2152,115 @@ def render_admin_page():
 
 # ─── MAIN APP ───────────────────────────────────────────────────────
 
+# ─── SESSION PERSISTENCE (T9-14) ──────────────────────────────────
+
+# Streamlit keeps everything in st.session_state, which the browser discards on
+# reload - so pressing F5 threw the user back to the login screen with their
+# conversations apparently gone. The access token now lives in a cookie on the
+# app's own origin instead, and is exchanged for a user through /api/auth/me on
+# the next load.
+#
+# The cookie is readable by scripts on this origin (Streamlit components set
+# cookies through the browser, so HttpOnly is not available). That is only
+# defensible because the answer, filename and metadata strings rendered into
+# this page are HTML-escaped - before that, a poisoned document could have read
+# it. The two changes belong together.
+
+_AUTH_COOKIE = "paedia_session"
+_AUTH_COOKIE_MAX_AGE = 3600  # matches PAEDIA_ACCESS_TOKEN_TTL
+
+
+def _cookies():
+    """A controller for this script run; None if the component is unavailable.
+
+    Constructed fresh every time on purpose. The controller reads the browser's
+    cookies once, in its constructor, and a Streamlit component returns its
+    default -- an empty dict -- on the run that mounts it, with the real value
+    arriving on the next. Caching the controller in session_state therefore
+    froze that first empty snapshot forever, and the cookie was written
+    correctly but never read back. The library already caches the cookie dict
+    itself in session_state under its own key; the object must not be cached
+    on top of that.
+    """
+    try:
+        from streamlit_cookies_controller import CookieController
+    except ImportError:
+        return None
+    try:
+        return CookieController()
+    except Exception:
+        return None
+
+
+def _remember_session(token: str | None) -> None:
+    """Persist the access token for this browser, or clear it."""
+    controller = _cookies()
+    if controller is None or not token:
+        return
+    try:
+        controller.set(_AUTH_COOKIE, token, max_age=_AUTH_COOKIE_MAX_AGE, same_site="strict")
+    except Exception:
+        pass  # A browser that refuses the cookie costs persistence, not the login.
+
+
+def _forget_session() -> None:
+    controller = _cookies()
+    if controller is None:
+        return
+    try:
+        controller.remove(_AUTH_COOKIE)
+    except Exception:
+        pass
+
+
+def _restore_session_from_cookie() -> bool:
+    """Sign the user back in from the cookie, if it still resolves to a user.
+
+    Returns True when the session was restored. An expired or revoked token
+    gets a 401 from the server, and the stale cookie is dropped rather than
+    left to fail again on every load.
+    """
+    controller = _cookies()
+    if controller is None or not api.is_live:
+        return False
+    try:
+        token = controller.get(_AUTH_COOKIE)
+    except Exception:
+        return False
+    if not token:
+        # An empty read on the run that mounts the component is not "no
+        # cookie" -- it is "the component has not answered yet". Let the script
+        # finish so the component actually renders; it reruns the app itself
+        # once the browser sends the cookies back, and the restore succeeds on
+        # that pass.
+        #
+        # Do not "help" this along with st.rerun(): that aborts the run before
+        # the component is rendered, while leaving Streamlit's default {} in
+        # session_state under the library's key -- after which the library
+        # never declares the component again and the cookie is never read.
+        return False
+
+    result = api.get_current_user(token)
+    if not result.get("success"):
+        _forget_session()
+        return False
+
+    user = _normalise_user_for_ui(result.get("user", {}))
+    st.session_state.authenticated = True
+    st.session_state.jwt_token = token
+    st.session_state.user = user
+    st.session_state.course_options = _course_options_for_user(user)
+    st.session_state.course_id = _default_course_for_user(user)
+    st.session_state.selected_course_id = st.session_state.course_id
+    st.session_state.login_error = None
+    _hydrate_sessions_from_server()
+    if not st.session_state.sessions:
+        create_new_session("Welcome Chat")
+    return True
+
+
 def main():
-    if not st.session_state.authenticated:
+    if not st.session_state.authenticated and not _restore_session_from_cookie():
         render_login_page()
         return
 
@@ -1775,6 +2279,8 @@ def main():
         render_uploads_page()
     elif page == "doc_manager" and role in ("Lecturer", "Admin"):
         render_doc_manager_page()
+    elif page == "settings" and role in ("Lecturer", "Admin"):
+        render_settings_page()
     elif page == "admin" and role == "Admin":
         render_admin_page()
     else:
