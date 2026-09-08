@@ -173,7 +173,7 @@ def test_query_rejects_non_object_json_body():
 
 def test_query_returns_403_for_unenrolled_course():
     c = _client()
-    # lecturer@uow.edu.au teaches CSIT214 and CSIT321; CSIT999 is unknown.
+    # lecturer@uow.edu.au teaches CSCI203 and CSIT321; CSIT999 is unknown.
     token = _login(c, "lecturer@uow.edu.au", "lecturer123")
 
     response = c.post(
@@ -195,7 +195,7 @@ def test_upload_queues_document_when_lecturer_authenticated():
     response = c.post(
         "/api/upload",
         data={
-            "course_id": "CSIT214",
+            "course_id": "CSCI203",
             "file": (io.BytesIO(b"demo content"), "demo.pdf"),
         },
         content_type="multipart/form-data",
@@ -292,7 +292,7 @@ def test_courses_list_returns_known_course_codes():
     assert response.status_code == 200
     courses = response.get_json()["courses"]
     codes = {course["course_code"] for course in courses}
-    assert {"CSIT321", "CSIT214"}.issubset(codes)
+    assert {"CSIT321", "CSCI203"}.issubset(codes)
 
 
 def test_create_course_returns_401_without_token():

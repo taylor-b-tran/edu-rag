@@ -260,9 +260,14 @@ _DEMO_USERS = [
     ("student_demo", "student@uow.edu.au", "student",
      *_demo_password("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")),
 ]
+# The two subjects that carry real, indexed course material. CSIT214, CSCI369
+# and MATH202 were seeded here and in the fixtures but never received any:
+# CSIT214's 21 "documents" were 17 failed uploads of the same demo.pdf, and the
+# other two had none at all. Every question asked of them fell back to general
+# knowledge, which reads as the assistant not knowing its own syllabus.
 _DEMO_COURSES = [
     ("CSIT321", "Project"),
-    ("CSIT214", "Database Systems"),
+    ("CSCI203", "Algorithms and Data Structure"),
 ]
 
 

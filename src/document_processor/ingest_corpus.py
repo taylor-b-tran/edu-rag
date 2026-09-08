@@ -8,10 +8,18 @@ CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_data")
  
 # Collection / course config
-# T8-13 (Sprint 8): renamed from "csit321_course" now that the corpus holds
-# four subjects (CSIT321, CSIT214, CSCI369, MATH202). On a shared
-# host this rename means the old collection is orphaned, so `ingest --force`
-# (or POST /api/ingest with force=true) must be re-run once after upgrading 
+# T8-13 (Sprint 8): renamed from "csit321_course" when the corpus was meant to
+# hold four subjects. On a shared host this rename means the old collection is
+# orphaned, so `ingest --force` (or POST /api/ingest with force=true) must be
+# re-run once after upgrading.
+#
+# Sprint 9: the corpus carries two subjects, CSIT321 and CSCI203. CSIT214,
+# CSCI369 and MATH202 were dropped — they only ever held the hand-written seed
+# snippets below, never real course material, so every question asked of them
+# fell back to general knowledge. The seed entries for them are still in
+# seed_documents.py; re-running ingest with --force would bring them back
+# (and, more seriously, would rebuild the collection from seed data and lose
+# everything uploaded through /api/upload).
 COLLECTION  = "edurag_course"
 # Default course_id used only as a fallback for legacy seed entries that
 # don't specify their own "course_id", and as the default course_id for
