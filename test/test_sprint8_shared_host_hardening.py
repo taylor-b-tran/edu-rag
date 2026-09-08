@@ -77,14 +77,14 @@ def test_socratic_style_asks_for_guiding_questions(sample_chunks):
 
 def test_generate_echoes_requested_style_on_response(monkeypatch, sample_chunks):
     gen = LLMResponseGeneration(retriever=_StubRetriever())
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
     result = gen.generate("What is RAG?", response_style="detailed")
     assert result.response_style == "detailed"
 
 
 def test_generate_defaults_style_when_not_given(monkeypatch, sample_chunks):
     gen = LLMResponseGeneration(retriever=_StubRetriever())
-    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None: ("answer", True))
+    monkeypatch.setattr(gen, "_call_ollama", lambda prompt, chunks=None, **kwargs: ("answer", True))
     result = gen.generate("What is RAG?")
     assert result.response_style == DEFAULT_RESPONSE_STYLE
 

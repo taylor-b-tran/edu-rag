@@ -50,7 +50,7 @@ services:
       PAEDIA_DEMO_STUDENT_PASSWORD: ${PAEDIA_DEMO_STUDENT_PASSWORD:-}
       # Generation settings. These were only readable inside the container, so
       # tuning them meant editing the image rather than .env (T8-17).
-      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-220}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-700}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.2}
       OLLAMA_TOP_P: ${OLLAMA_TOP_P:-0.9}
       OLLAMA_THINK: ${OLLAMA_THINK:-false}

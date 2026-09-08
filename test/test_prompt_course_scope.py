@@ -77,7 +77,7 @@ def test_generate_passes_the_course_into_the_prompt(monkeypatch, builder):
     builder.strategy = "evidence_cited"
     builder._retriever = _Retriever()
     monkeypatch.setattr(LLMResponseGeneration, "_call_ollama",
-                        lambda self, prompt, chunks=None: (seen.setdefault("prompt", prompt), True))
+                        lambda self, prompt, chunks=None, **kwargs: (seen.setdefault("prompt", prompt), True))
 
     builder.generate("q", course_id="MATH202")
     assert "MATH202" in seen["prompt"]

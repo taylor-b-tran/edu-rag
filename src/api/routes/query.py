@@ -198,6 +198,14 @@ def query():
             top_k=cfg.get("top_k"),
             similarity_threshold=cfg.get("similarity_threshold"),
             history=history,
+            # The global tier of T8-08. These were resolved and reported as
+            # "effective" but never handed to the pipeline, which read them
+            # from module constants fixed at import - so an admin could change
+            # the model, temperature or answer length, see it confirmed, and
+            # change nothing at all.
+            model=cfg.get("ollama_model"),
+            temperature=cfg.get("temperature"),
+            num_predict=cfg.get("num_predict"),
         )
     except Exception as exc:
         logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)

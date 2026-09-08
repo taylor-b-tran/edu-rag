@@ -176,10 +176,17 @@ def test_an_explicit_style_in_the_body_beats_the_course_setting(client, store, g
 
 
 def test_a_global_only_key_cannot_be_smuggled_in_through_a_course_row(client, store, generator):
-    """Course scope must not move weights in and out of shared VRAM."""
+    """Course scope must not move weights in and out of shared VRAM.
+
+    Asserts on `model`, the argument generate() actually takes. It used to
+    check `ollama_model`, a key that was never a parameter at all -- so the
+    test passed whatever the code did, including while the global tier was
+    being ignored entirely.
+    """
     store[("OWNED101", "ollama_model")] = "sneaky"
     _ask(client)
-    assert generator.last.get("ollama_model") != "sneaky"
+    assert generator.last.get("model") != "sneaky"
+    assert generator.last.get("ollama_model") is None, "not a parameter of generate()"
 
 
 # --- it must not become a new way for queries to fail -----------------
@@ -197,3 +204,61 @@ def test_a_settings_read_failure_does_not_break_answering(client, monkeypatch, g
 
     assert _ask(client).status_code == 200
     assert generator.last["top_k"] == rp.TOP_K
+
+
+# --- the global tier reaches the model too ----------------------------
+#
+# top_k, similarity_threshold and response_style were wired up and guarded
+# above. The other three settings the API accepts -- ollama_model, temperature
+# and num_predict -- were not: _call_ollama read them from module constants
+# fixed at import, so an admin could raise the answer length, watch the
+# endpoint confirm it and report it under "effective", and get an identically
+# truncated answer. Measured on the host before the fix: the same question
+# returned byte-identical output at num_predict 220, 400, 600 and 900.
+#
+# That mattered beyond the setting itself. F2 made "detailed" the default
+# response style without raising the 220-token budget sized for "concise", so
+# answers were being cut mid-sentence and never reached the "Sources:" line the
+# prompt asks for -- and the one control that could have fixed it did nothing.
+
+
+def test_a_global_num_predict_reaches_the_model(client, store, generator):
+    store[("global", "num_predict")] = 900
+    _ask(client)
+    assert generator.last["num_predict"] == 900
+
+
+def test_a_global_temperature_reaches_the_model(client, store, generator):
+    store[("global", "temperature")] = 0.7
+    _ask(client)
+    assert generator.last["temperature"] == 0.7
+
+
+def test_a_global_model_choice_reaches_the_model(client, store, generator):
+    store[("global", "ollama_model")] = "llama3.2"
+    _ask(client)
+    assert generator.last["model"] == "llama3.2"
+
+
+def test_with_nothing_stored_the_environment_generation_defaults_arrive(client, generator):
+    from src.document_processor import rag_pipeline as rp
+    _ask(client)
+    assert generator.last["num_predict"] == rp.OLLAMA_NUM_PREDICT
+    assert generator.last["temperature"] == rp.OLLAMA_TEMPERATURE
+    assert generator.last["model"] == rp.OLLAMA_MODEL
+
+
+def test_the_token_budget_is_big_enough_for_the_default_style():
+    """A guard on the pairing, not on either number alone.
+
+    "detailed" asks the model for multiple paragraphs. 220 tokens is roughly
+    165 words, which truncated real answers mid-sentence on the host. If the
+    default style is ever moved back to a verbose one, or the budget cut, this
+    should fail rather than quietly shipping guillotined answers again.
+    """
+    from src.document_processor import rag_pipeline as rp
+    if rp.DEFAULT_RESPONSE_STYLE in ("detailed", "exam_prep"):
+        assert rp.OLLAMA_NUM_PREDICT >= 600, (
+            f"{rp.DEFAULT_RESPONSE_STYLE!r} answers need room; "
+            f"num_predict is {rp.OLLAMA_NUM_PREDICT}"
+        )
