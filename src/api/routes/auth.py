@@ -90,7 +90,11 @@ def signup():
         }), 409
 
     logger.info("New %s account created: %s", role, email)
-    return jsonify(state.issue_tokens(user)), 201
+    try:
+        return jsonify(state.issue_tokens(user)), 201
+    except Exception:
+        logger.exception("Could not persist signup session")
+        return jsonify({"error": "Session store unavailable; sign in again when available."}), 503
 
 
 @auth_bp.post("/login")
@@ -107,7 +111,11 @@ def login():
     user = _state().authenticate_user(email, password)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify(_state().issue_tokens(user))
+    try:
+        return jsonify(_state().issue_tokens(user))
+    except Exception:
+        logger.exception("Could not persist login session")
+        return jsonify({"error": "Session store unavailable."}), 503
 
 
 @auth_bp.post("/refresh")
@@ -117,18 +125,14 @@ def refresh():
     except Exception:
         return jsonify({"error": "invalid JSON body"}), 400
     refresh_token = body.get("refresh_token")
-    # Retires the token as it is read, so a captured refresh token cannot be
-    # replayed after the legitimate holder has already used it.
-    token_state = _state().consume_refresh_token(refresh_token)
-    if not token_state:
+    try:
+        tokens = _state().refresh_login(refresh_token)
+    except Exception:
+        logger.exception("Could not rotate login session")
+        return jsonify({"error": "Session store unavailable."}), 503
+    if not tokens:
         return jsonify({"error": "invalid or expired refresh token"}), 401
-
-    user = _state().find_user_any_source(token_state.get("email", ""))
-    if not user:
-        return jsonify({"error": "user no longer available"}), 401
-    # Rotation stays inside the same login, so a logout later still reaches
-    # every credential this session has been through.
-    return jsonify(_state().issue_tokens(user, family_id=token_state.get("family_id")))
+    return jsonify(tokens)
 
 
 @auth_bp.get("/me")
@@ -178,5 +182,9 @@ def logout():
     if token or refresh_token:
         # Must reach Postgres: the rows outlive the worker that issued them,
         # and every other worker would keep honouring them.
-        _state().revoke_login(token, refresh_token)
+        try:
+            _state().revoke_login(token, refresh_token)
+        except Exception:
+            logger.exception("Could not revoke login session")
+            return jsonify({"error": "Session store unavailable; logout was not confirmed."}), 503
     return jsonify({"status": "success", "message": "Logged out successfully."})

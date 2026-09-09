@@ -52,12 +52,17 @@ class FakeTokenStore:
     def insert(self, table, token, payload):
         self.rows[(table, token)] = dict(payload)
 
+    def consume_refresh_token(self, token):
+        row = self.rows.pop(("refresh_tokens", token), None)
+        return row if row and row["expires_at"] > time.time() else None
+
 
 @pytest.fixture
 def shared(monkeypatch):
     store = FakeTokenStore()
     monkeypatch.setattr(db_mod, "get_token", store.get_token)
     monkeypatch.setattr(db_mod, "delete_token", store.delete_token)
+    monkeypatch.setattr(db_mod, "consume_refresh_token", store.consume_refresh_token)
     return store
 
 
@@ -134,11 +139,10 @@ def test_an_expired_row_is_rejected(shared):
     assert _worker(shared).validate_bearer("Bearer tok-1") is None
 
 
-def test_an_expired_row_is_deleted_not_just_ignored(shared):
+def test_expired_access_is_retained_only_as_a_logout_family_handle(shared):
     _issue(shared, ttl=-1)
-    _worker(shared).validate_bearer("Bearer tok-1")
-
-    assert shared.rows.get(("access_tokens", "tok-1")) is None
+    assert _worker(shared).validate_bearer("Bearer tok-1") is None
+    assert shared.rows.get(("access_tokens", "tok-1")) is not None
 
 
 def test_loaded_rows_carry_an_expiry(shared):
@@ -173,9 +177,8 @@ def test_without_a_database_the_dictionary_is_still_used(shared):
     assert shared.lookups == 0, "Postgres must not be consulted when it is absent"
 
 
-def test_a_database_error_falls_back_to_the_local_copy(monkeypatch, shared):
-    """A failed lookup is not evidence that the token was revoked, so an
-    outage should not log everybody out."""
+def test_a_database_error_cannot_resurrect_a_cached_credential(monkeypatch, shared):
+    """Revocation on another worker must survive a later DB outage."""
     payload = _issue(shared)
     worker = _worker(shared, {"tok-1": payload})
 
@@ -184,4 +187,4 @@ def test_a_database_error_falls_back_to_the_local_copy(monkeypatch, shared):
 
     monkeypatch.setattr(db_mod, "get_token", boom)
 
-    assert worker.validate_bearer("Bearer tok-1") is not None
+    assert worker.validate_bearer("Bearer tok-1") is None

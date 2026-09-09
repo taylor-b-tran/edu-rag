@@ -56,15 +56,18 @@ def test_an_expired_token_is_rejected(api_state):
     assert api_state.validate_bearer(_bearer(token)) is None
 
 
-def test_an_expired_token_is_dropped_from_the_store(api_state):
-    """Otherwise the store keeps every token ever issued."""
+def test_expired_access_remains_a_logout_handle_but_cannot_authenticate(api_state):
+    """Expiry denies access without losing the link needed to revoke refresh."""
     tokens = api_state.issue_tokens(USER)
     token = tokens["access_token"]
     api_state.access_tokens[token]["expires_at"] = time.time() - 1
 
     api_state.validate_bearer(_bearer(token))
 
+    assert token in api_state.access_tokens
+    api_state.revoke_login(token)
     assert token not in api_state.access_tokens
+    assert tokens["refresh_token"] not in api_state.refresh_tokens
 
 
 def test_expires_in_matches_the_configured_lifetime(api_state):

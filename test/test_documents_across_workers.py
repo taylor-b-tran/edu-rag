@@ -223,16 +223,29 @@ def test_without_postgres_this_workers_own_upload_still_answers(client, monkeypa
     assert client.get("/api/document/local", headers=AUTH).status_code == 200
 
 
-def test_a_job_that_never_reached_postgres_stays_pollable(client):
-    """Job rows are never deleted, so there is no deleted-elsewhere case for
-    them, and the local copy is merged rather than replaced. Otherwise a
-    best-effort insert that failed would leave the uploader polling a 404 on
-    the very worker running the job."""
+def test_a_job_absent_from_postgres_is_not_resurrected(client):
+    """A local copy cannot override a cascade delete on another worker."""
     client.state.indexing_jobs["job-local"] = dict(REMOTE_JOB, job_id="job-local",
                                                    id="job-local", status="running")
     resp = client.get("/api/indexing-jobs/job-local", headers=AUTH)
-    assert resp.status_code == 200
-    assert resp.get_json()["status"] == "running"
+    assert resp.status_code == 404
+    assert "job-local" not in client.state.indexing_jobs
+
+
+def test_deleted_document_and_job_disappear_on_another_worker(client):
+    assert client.get("/api/indexing-jobs/job-remote", headers=AUTH).status_code == 200
+    client.postgres["documents"].clear()
+    client.postgres["jobs"].clear()
+    assert client.get("/api/document/doc-remote", headers=AUTH).status_code == 404
+    assert client.get("/api/indexing-jobs/job-remote", headers=AUTH).status_code == 404
+
+
+@pytest.mark.parametrize("user", [OUTSIDER, ADMIN])
+def test_orphan_job_fails_closed_even_without_database(client, current, monkeypatch, user):
+    current["user"] = user
+    monkeypatch.setattr(client.state, "_db_available", False)
+    client.state.indexing_jobs["orphan"] = dict(REMOTE_JOB, document_id="missing")
+    assert client.get("/api/indexing-jobs/orphan", headers=AUTH).status_code == 404
 
 
 # --- what the admin dashboard reports -----------------------------------

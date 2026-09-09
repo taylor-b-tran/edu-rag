@@ -411,7 +411,7 @@ class PaediaAPIClient:
         # Fixture fallback
         return self._fixture_query(query_text)
 
-    def clear_auth(self) -> None:
+    def clear_auth(self) -> bool:
         """Sign out: revoke the token on the server, then forget it locally.
 
         This used to drop the two local variables and nothing else, so the
@@ -422,21 +422,26 @@ class PaediaAPIClient:
         signing out cleared the screen, the cookie survived, the token still
         resolved to a user, and the next page load signed you straight back in.
 
-        Best effort on the network call. If revocation cannot be reached the
-        local state is still cleared, which is no worse than the old behaviour.
+        Keep credentials for a retry if the server cannot confirm revocation.
         """
-        if self._jwt_token and HAS_REQUESTS:
+        if self._jwt_token or self._refresh_token:
+            if not HAS_REQUESTS:
+                return False
             try:
-                requests.post(
+                response = requests.post(
                     f"{self.config.base_url}/api/auth/logout",
                     json={"refresh_token": self._refresh_token},
                     headers=self._headers(),
                     timeout=self.config.timeout,
                 )
+                if response.status_code != 200:
+                    return False
             except Exception as e:
                 logger.warning("Logout could not reach the API: %s", e)
+                return False
         self._jwt_token = None
         self._refresh_token = None
+        return True
 
     def _fixture_query(self, query_text: str) -> dict:
         """Match query against fixture responses."""

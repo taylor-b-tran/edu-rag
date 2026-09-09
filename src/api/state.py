@@ -5,11 +5,13 @@ import logging
 import os
 import secrets
 import time
+import threading
 import uuid
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,14 @@ def _load_fixtures() -> dict[str, Any]:
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
+def _auth_synchronized(fn):
+    @wraps(fn)
+    def run(self, *args, **kwargs):
+        with self._auth_lock:
+            return fn(self, *args, **kwargs)
+    return run
+
+
 @dataclass
 class APIState:
     """In-memory Sprint 4 API state backed by the shared fixture file."""
@@ -61,6 +71,7 @@ class APIState:
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
     _db_available: bool = field(default=False, init=False, repr=False)
+    _auth_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
     warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
                                           init=False, repr=False)
 
@@ -125,8 +136,10 @@ class APIState:
                 self._backend_mode = "fixture"
         return self._generator
 
+    @_auth_synchronized
     def issue_tokens(self, user: dict[str, Any],
-                     family_id: str | None = None) -> dict[str, Any]:
+                     family_id: str | None = None,
+                     refresh_token_to_rotate: str | None = None) -> dict[str, Any] | None:
         """Issue an access/refresh pair for one login.
 
         `family_id` ties the pair together so logout can end the login rather
@@ -146,25 +159,25 @@ class APIState:
             "family_id": family_id or f"fam_{secrets.token_urlsafe(16)}",
             "issued_at": _utc_now(),
         }
-        # expires_in was reported to clients but never enforced, so every token
-        # ever issued stayed valid for the life of the process.
+        # Persist the pair atomically before reporting a successful login.
+        # On rotation the consume and insert share the logout family lock.
+        if self._db_available:
+            from src.api import db
+            args = (access_token, refresh_token, payload,
+                    ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS)
+            if refresh_token_to_rotate:
+                if not db.rotate_token_pair(refresh_token_to_rotate, *args):
+                    return None
+            else:
+                db.insert_token_pair(*args)
+        elif refresh_token_to_rotate:
+            # The caller holds _auth_lock across validation, consume and issue.
+            if self.consume_refresh_token(refresh_token_to_rotate) is None:
+                return None
+        if refresh_token_to_rotate:
+            self.refresh_tokens.pop(refresh_token_to_rotate, None)
         self.access_tokens[access_token] = {**payload, "expires_at": now + ACCESS_TOKEN_TTL_SECONDS}
         self.refresh_tokens[refresh_token] = {**payload, "expires_at": now + REFRESH_TOKEN_TTL_SECONDS}
-
-        # T8-24: best-effort persist. A failed write here shouldn't fail the
-        # login — the in-memory dicts above already make this token work for
-        # the life of this process, same as before this task existed. It's
-        # only a restart that loses it if this write didn't land.
-        if self._db_available:
-            try:
-                from src.api import db
-                db.insert_access_token(access_token, payload,
-                                        expires_in_seconds=ACCESS_TOKEN_TTL_SECONDS)
-                db.insert_refresh_token(refresh_token, payload,
-                                         expires_in_seconds=REFRESH_TOKEN_TTL_SECONDS)
-            except Exception as exc:
-                logger.warning("Failed to persist tokens to Postgres (%s: %s).",
-                                type(exc).__name__, exc)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -214,9 +227,9 @@ class APIState:
                     store.pop(token, None)
                     return None
             except Exception as exc:
-                logger.warning("Token lookup failed (%s: %s); falling back to "
-                               "this worker's cache.", type(exc).__name__, exc)
-                payload = store.get(token)
+                logger.warning("Token lookup failed (%s: %s); refusing cached credentials.",
+                               type(exc).__name__, exc)
+                return None
         else:
             payload = store.get(token)
         if payload is None:
@@ -224,7 +237,8 @@ class APIState:
 
         expires_at = payload.get("expires_at")
         if expires_at is not None and time.time() >= expires_at:
-            self._retire_token(store, token, table)
+            # Keep the expired access row as a family handle for logout after
+            # cookie restore/expiry. It cannot authenticate; logout removes it.
             return None
         return payload
 
@@ -240,16 +254,35 @@ class APIState:
                                "may still be accepted elsewhere until it expires.",
                                table, type(exc).__name__, exc)
 
+    @_auth_synchronized
     def consume_refresh_token(self, token: str | None) -> dict[str, Any] | None:
         """Validate a refresh token and retire it, so each one is used once."""
         if not token:
             return None
+        if self._db_available:
+            from src.api import db
+            payload = db.consume_refresh_token(token)
+            self.refresh_tokens.pop(token, None)
+            return payload
         payload = self._live_token(self.refresh_tokens, token, "refresh_tokens")
         if payload is not None:
             # Retiring it in Postgres is what makes "used once" hold across
             # workers; popping the local dictionary alone does not.
             self._retire_token(self.refresh_tokens, token, "refresh_tokens")
         return payload
+
+    @_auth_synchronized
+    def refresh_login(self, token: str | None) -> dict[str, Any] | None:
+        if not token:
+            return None
+        payload = self._live_token(self.refresh_tokens, token, "refresh_tokens")
+        if not payload or not payload.get("family_id"):
+            return None
+        user = self.find_user_any_source(payload.get("email", ""))
+        if not user:
+            return None
+        return self.issue_tokens(user, family_id=payload["family_id"],
+                                 refresh_token_to_rotate=token)
 
     def find_demo_user(self, email: str) -> dict[str, Any] | None:
         users = self.fixtures.get("demo_users", [])
@@ -351,6 +384,7 @@ class APIState:
         """Retire one access token everywhere. Prefer `revoke_login`."""
         self._retire_token(self.access_tokens, token, "access_tokens")
 
+    @_auth_synchronized
     def revoke_login(self, access_token: str | None,
                      refresh_token: str | None = None) -> None:
         """End the whole login behind this access token.
@@ -364,18 +398,26 @@ class APIState:
         The family covers that without depending on what the client remembers
         to send, which matters because after a page reload the browser holds
         only the access token -- the refresh token is deliberately not put in
-        a cookie. `refresh_token` is still accepted for credentials issued
-        before families existed, whose rows carry no family_id; passing a
-        token is proof enough of holding it, so no extra authorisation applies.
+        a cookie. Either credential can identify a family. Pre-family database
+        credentials are invalidated by the idempotent schema upgrade.
         """
+        if self._db_available:
+            from src.api import db
+            # Resolve and revoke in one transaction, including refresh-only
+            # logout and expired access tokens. Errors must reach the route.
+            db.revoke_login(access_token, refresh_token)
+            # Reads always consult DB; stale local copies cannot revive a login.
+            self.access_tokens.clear()
+            self.refresh_tokens.clear()
+            return
         payload = None
         if access_token:
-            payload = (self._live_token(self.access_tokens, access_token, "access_tokens")
-                       or self.access_tokens.get(access_token))
+            payload = self.access_tokens.get(access_token)
             self._retire_token(self.access_tokens, access_token, "access_tokens")
 
-        family_id = (payload or {}).get("family_id")
-        if family_id:
+        families = {(payload or {}).get("family_id"),
+                    (self.refresh_tokens.get(refresh_token) or {}).get("family_id")}
+        for family_id in families - {None}:
             self._retire_token_family(family_id)
 
         if refresh_token:
@@ -647,16 +689,11 @@ class APIState:
         return self.uploaded_documents
 
     def list_indexing_jobs(self) -> dict[str, dict[str, Any]]:
-        """The same, for indexing jobs -- merged rather than replaced.
-
-        Nothing ever deletes a job row, so there is no deleted-elsewhere case
-        to respect here, and merging keeps a job whose insert did not reach
-        Postgres pollable on the worker that created it.
-        """
+        """Read authoritative jobs; deleting a document cascades to its jobs."""
         if self._db_available:
             try:
                 from src.api import db
-                self.indexing_jobs.update(db.load_all_jobs())
+                self.indexing_jobs = db.load_all_jobs()
             except Exception as exc:
                 logger.warning("Job reload failed (%s: %s); falling back to "
                                "this worker's cache.", type(exc).__name__, exc)

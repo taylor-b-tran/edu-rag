@@ -1022,11 +1022,13 @@ def render_sidebar():
             st.caption(role)
 
         if st.button("🚪 Sign Out", use_container_width=True):
-            _forget_session()
-            api.clear_auth()
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+            if api.clear_auth():
+                _forget_session()
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+            else:
+                st.error("Sign out could not be confirmed. Please try again.")
 
 
 # ─── CHAT PAGE (T09+T10+T11: full overhaul) ───────────────────────

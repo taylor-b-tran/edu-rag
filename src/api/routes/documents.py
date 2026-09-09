@@ -301,7 +301,9 @@ def get_indexing_job(job_id: str):
     # A job carries the document it belongs to, and its `error` field can quote
     # server-side file paths, so it is gated on the same enrollment test.
     document = _find_document(job.get("document_id") or "")
-    if document is not None and not _may_see_document(user, document):
+    if document is None:
+        return jsonify({"error": "indexing job not found"}), 404
+    if not _may_see_document(user, document):
         logger.warning("User %s requested indexing job %s for unauthorised course %s",
                        user.get("user_id"), job_id, _document_course(document))
         return jsonify({"error": "indexing job not found"}), 404

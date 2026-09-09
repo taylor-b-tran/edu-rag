@@ -214,10 +214,12 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 --
 -- Added as an ALTER for the same reason as courses.owner_id above: this file
 -- is replayed on every start and there is still no migration runner. Nullable
--- so tokens issued before this keep working; they simply have no family, and
--- logout falls back to retiring what it was handed.
+-- legacy credentials cannot be paired safely; invalidate them below.
 ALTER TABLE access_tokens  ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
 ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
+
+DELETE FROM access_tokens WHERE family_id IS NULL;
+DELETE FROM refresh_tokens WHERE family_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS access_tokens_family_idx  ON access_tokens(family_id);
 CREATE INDEX IF NOT EXISTS refresh_tokens_family_idx ON refresh_tokens(family_id);
@@ -1009,12 +1011,87 @@ def delete_token_family(family_id: str) -> int:
     no family and needs the single-token fallback.
     """
     removed = 0
-    with connect() as conn:
+    with connect() as conn, conn.transaction():
         with conn.cursor() as cur:
+            _lock_token_family(cur, family_id)
             for table in ("access_tokens", "refresh_tokens"):
                 cur.execute(f"DELETE FROM {table} WHERE family_id = %s", (family_id,))
                 removed += cur.rowcount or 0
     return removed
+
+
+def _lock_token_family(cur, family_id: str) -> None:
+    # All rotation and revocation paths take this transaction-scoped lock.
+    # A refresh waiting behind logout rechecks its row after acquiring it.
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (family_id,))
+
+
+def _insert_pair(cur, access: str, refresh: str, payload: dict,
+                 access_ttl: int, refresh_ttl: int) -> None:
+    for table, token, ttl in (("access_tokens", access, access_ttl),
+                              ("refresh_tokens", refresh, refresh_ttl)):
+        cur.execute(
+            f"""INSERT INTO {table}
+                (token, user_id, email, role, enrolled_courses, family_id, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW() + %s * INTERVAL '1 second')""",
+            (token, str(payload["user_id"]), payload.get("email"), payload.get("role"),
+             json.dumps(payload.get("enrolled_courses", [])), payload["family_id"], ttl),
+        )
+
+
+def insert_token_pair(access: str, refresh: str, payload: dict,
+                      access_ttl: int, refresh_ttl: int) -> None:
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            _insert_pair(cur, access, refresh, payload, access_ttl, refresh_ttl)
+
+
+def rotate_token_pair(old_refresh: str, access: str, refresh: str, payload: dict,
+                      access_ttl: int, refresh_ttl: int) -> bool:
+    """Consume and replace while holding the same family lock as logout."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            _lock_token_family(cur, payload["family_id"])
+            cur.execute(
+                """DELETE FROM refresh_tokens
+                   WHERE token = %s AND family_id = %s AND expires_at > NOW()
+                   RETURNING token""", (old_refresh, payload["family_id"]),
+            )
+            if cur.fetchone() is None:
+                return False
+            _insert_pair(cur, access, refresh, payload, access_ttl, refresh_ttl)
+            return True
+
+
+def consume_refresh_token(token: str) -> dict | None:
+    """Atomic single-use consumption for callers which do not issue a new pair."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                """DELETE FROM refresh_tokens WHERE token = %s AND expires_at > NOW()
+                   RETURNING user_id, email, role, enrolled_courses, family_id,
+                   EXTRACT(EPOCH FROM expires_at) AS expires_at""", (token,),
+            )
+            return cur.fetchone()
+
+
+def revoke_login(access: str | None, refresh: str | None) -> None:
+    """Resolve either credential (including expired access) and revoke its family."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT family_id FROM access_tokens WHERE token = %s
+                   UNION SELECT family_id FROM refresh_tokens WHERE token = %s""",
+                (access, refresh),
+            )
+            families = sorted({r["family_id"] for r in cur.fetchall() if r["family_id"]})
+            for family in families:
+                _lock_token_family(cur, family)
+                for table in ("access_tokens", "refresh_tokens"):
+                    cur.execute(f"DELETE FROM {table} WHERE family_id = %s", (family,))
+            # Defensive cleanup for an unmigrated store; no credential is issued here.
+            cur.execute("DELETE FROM access_tokens WHERE token = %s", (access,))
+            cur.execute("DELETE FROM refresh_tokens WHERE token = %s", (refresh,))
 
 
 def load_all_access_tokens() -> dict[str, dict[str, Any]]:

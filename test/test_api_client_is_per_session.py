@@ -205,3 +205,16 @@ def test_the_module_level_api_name_resolves_per_session(main, browser):
 
     browser("alice")
     assert main.api._jwt_token == "alice-token"
+
+
+def test_failed_logout_keeps_credentials_for_retry(main, browser, monkeypatch):
+    import api_client
+    client = _client_for(main, browser, "alice", token="alice-token")
+    client._refresh_token = "alice-refresh"
+    class Unavailable:
+        def post(self, *args, **kwargs):
+            return type("Response", (), {"status_code": 503})()
+    monkeypatch.setattr(api_client, "requests", Unavailable())
+    assert client.clear_auth() is False
+    assert client._jwt_token == "alice-token"
+    assert client._refresh_token == "alice-refresh"

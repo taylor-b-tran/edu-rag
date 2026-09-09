@@ -249,6 +249,15 @@ class FakeTokenStore:
     def insert(self, table, token, payload):
         self.rows[(table, token)] = dict(payload)
 
+    def consume_refresh_token(self, token):
+        return self.rows.pop(("refresh_tokens", token), None)
+
+    def revoke_login(self, access, refresh):
+        families = {self.rows.get((table, token), {}).get("family_id")
+                    for table, token in (("access_tokens", access), ("refresh_tokens", refresh))}
+        for family in families - {None}:
+            self.delete_token_family(family)
+
 
 @pytest.fixture
 def shared(monkeypatch):
@@ -256,6 +265,8 @@ def shared(monkeypatch):
     monkeypatch.setattr(db_mod, "get_token", store.get_token)
     monkeypatch.setattr(db_mod, "delete_token", store.delete_token)
     monkeypatch.setattr(db_mod, "delete_token_family", store.delete_token_family)
+    monkeypatch.setattr(db_mod, "revoke_login", store.revoke_login)
+    monkeypatch.setattr(db_mod, "consume_refresh_token", store.consume_refresh_token)
     return store
 
 
@@ -310,3 +321,24 @@ def test_a_different_familys_tokens_are_left_alone(shared):
 
     assert worker.validate_bearer("Bearer acc-2") is not None
     assert worker.consume_refresh_token("ref-2") is not None
+
+
+def test_refresh_only_logout_also_revokes_access(client):
+    session = _login(client)
+    client.post("/api/auth/logout", json={"refresh_token": session["refresh_token"]})
+    assert _me(client, session["access_token"]) == 401
+
+
+def test_expired_access_can_still_revoke_its_refresh(client):
+    session = _login(client)
+    state = client.application.config["EDURAG_API_STATE"]
+    state.access_tokens[session["access_token"]]["expires_at"] = time.time() - 1
+    assert _me(client, session["access_token"]) == 401
+    client.post("/api/auth/logout", headers=_auth(session["access_token"]))
+    assert _refresh(client, session["refresh_token"]).status_code == 401
+
+
+def test_failed_revoke_is_not_reported_as_success(client, monkeypatch):
+    state = client.application.config["EDURAG_API_STATE"]
+    monkeypatch.setattr(state, "revoke_login", lambda *args: (_ for _ in ()).throw(RuntimeError("DB down")))
+    assert client.post("/api/auth/logout", headers=_auth("some-token")).status_code == 503
