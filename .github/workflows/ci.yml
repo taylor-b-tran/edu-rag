@@ -17,6 +17,18 @@ jobs:
   python-test:
     name: Python tests and fixture validation
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: edurag_test
+          POSTGRES_PASSWORD: ci_disposable_password
+          POSTGRES_DB: edurag_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edurag_test -d edurag_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
       - name: Check out repository
@@ -98,6 +110,14 @@ jobs:
 
       - name: Run pytest
         run: python -m pytest -q
+
+      - name: Verify token transactions on isolated PostgreSQL schemas
+        env:
+          PAEDIA_TEST_POSTGRES_HOST: 127.0.0.1
+          POSTGRES_USER: edurag_test
+          POSTGRES_PASSWORD: ci_disposable_password
+          POSTGRES_DB: edurag_test
+        run: python -m pytest test/test_token_transactions_postgres.py -q
 
   docker-compose-validate:
     name: Docker Compose validation

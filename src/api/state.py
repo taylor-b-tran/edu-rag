@@ -5,11 +5,13 @@ import logging
 import os
 import secrets
 import time
+import threading
 import uuid
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,14 @@ def _load_fixtures() -> dict[str, Any]:
     return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
+def _auth_synchronized(fn):
+    @wraps(fn)
+    def run(self, *args, **kwargs):
+        with self._auth_lock:
+            return fn(self, *args, **kwargs)
+    return run
+
+
 @dataclass
 class APIState:
     """In-memory Sprint 4 API state backed by the shared fixture file."""
@@ -61,6 +71,7 @@ class APIState:
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
     _db_available: bool = field(default=False, init=False, repr=False)
+    _auth_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
     warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
                                           init=False, repr=False)
 
@@ -125,7 +136,18 @@ class APIState:
                 self._backend_mode = "fixture"
         return self._generator
 
-    def issue_tokens(self, user: dict[str, Any]) -> dict[str, Any]:
+    @_auth_synchronized
+    def issue_tokens(self, user: dict[str, Any],
+                     family_id: str | None = None,
+                     refresh_token_to_rotate: str | None = None) -> dict[str, Any] | None:
+        """Issue an access/refresh pair for one login.
+
+        `family_id` ties the pair together so logout can end the login rather
+        than one credential of it. /auth/refresh passes the previous token's
+        family back in, so rotating a refresh token stays inside the same
+        login and a logout afterwards still reaches it. Omitting it starts a
+        new login, which is what /auth/login wants.
+        """
         access_token = f"dev_access_{secrets.token_urlsafe(24)}"
         refresh_token = f"dev_refresh_{secrets.token_urlsafe(24)}"
         now = time.time()
@@ -134,27 +156,28 @@ class APIState:
             "email": user.get("email"),
             "role": user.get("role", "student"),
             "enrolled_courses": user.get("enrolled_courses", []),
+            "family_id": family_id or f"fam_{secrets.token_urlsafe(16)}",
             "issued_at": _utc_now(),
         }
-        # expires_in was reported to clients but never enforced, so every token
-        # ever issued stayed valid for the life of the process.
+        # Persist the pair atomically before reporting a successful login.
+        # On rotation the consume and insert share the logout family lock.
+        if self._db_available:
+            from src.api import db
+            args = (access_token, refresh_token, payload,
+                    ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS)
+            if refresh_token_to_rotate:
+                if not db.rotate_token_pair(refresh_token_to_rotate, *args):
+                    return None
+            else:
+                db.insert_token_pair(*args)
+        elif refresh_token_to_rotate:
+            # The caller holds _auth_lock across validation, consume and issue.
+            if self.consume_refresh_token(refresh_token_to_rotate) is None:
+                return None
+        if refresh_token_to_rotate:
+            self.refresh_tokens.pop(refresh_token_to_rotate, None)
         self.access_tokens[access_token] = {**payload, "expires_at": now + ACCESS_TOKEN_TTL_SECONDS}
         self.refresh_tokens[refresh_token] = {**payload, "expires_at": now + REFRESH_TOKEN_TTL_SECONDS}
-
-        # T8-24: best-effort persist. A failed write here shouldn't fail the
-        # login — the in-memory dicts above already make this token work for
-        # the life of this process, same as before this task existed. It's
-        # only a restart that loses it if this write didn't land.
-        if self._db_available:
-            try:
-                from src.api import db
-                db.insert_access_token(access_token, payload,
-                                        expires_in_seconds=ACCESS_TOKEN_TTL_SECONDS)
-                db.insert_refresh_token(refresh_token, payload,
-                                         expires_in_seconds=REFRESH_TOKEN_TTL_SECONDS)
-            except Exception as exc:
-                logger.warning("Failed to persist tokens to Postgres (%s: %s).",
-                                type(exc).__name__, exc)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -204,9 +227,9 @@ class APIState:
                     store.pop(token, None)
                     return None
             except Exception as exc:
-                logger.warning("Token lookup failed (%s: %s); falling back to "
-                               "this worker's cache.", type(exc).__name__, exc)
-                payload = store.get(token)
+                logger.warning("Token lookup failed (%s: %s); refusing cached credentials.",
+                               type(exc).__name__, exc)
+                return None
         else:
             payload = store.get(token)
         if payload is None:
@@ -214,7 +237,8 @@ class APIState:
 
         expires_at = payload.get("expires_at")
         if expires_at is not None and time.time() >= expires_at:
-            self._retire_token(store, token, table)
+            # Keep the expired access row as a family handle for logout after
+            # cookie restore/expiry. It cannot authenticate; logout removes it.
             return None
         return payload
 
@@ -230,16 +254,35 @@ class APIState:
                                "may still be accepted elsewhere until it expires.",
                                table, type(exc).__name__, exc)
 
+    @_auth_synchronized
     def consume_refresh_token(self, token: str | None) -> dict[str, Any] | None:
         """Validate a refresh token and retire it, so each one is used once."""
         if not token:
             return None
+        if self._db_available:
+            from src.api import db
+            payload = db.consume_refresh_token(token)
+            self.refresh_tokens.pop(token, None)
+            return payload
         payload = self._live_token(self.refresh_tokens, token, "refresh_tokens")
         if payload is not None:
             # Retiring it in Postgres is what makes "used once" hold across
             # workers; popping the local dictionary alone does not.
             self._retire_token(self.refresh_tokens, token, "refresh_tokens")
         return payload
+
+    @_auth_synchronized
+    def refresh_login(self, token: str | None) -> dict[str, Any] | None:
+        if not token:
+            return None
+        payload = self._live_token(self.refresh_tokens, token, "refresh_tokens")
+        if not payload or not payload.get("family_id"):
+            return None
+        user = self.find_user_any_source(payload.get("email", ""))
+        if not user:
+            return None
+        return self.issue_tokens(user, family_id=payload["family_id"],
+                                 refresh_token_to_rotate=token)
 
     def find_demo_user(self, email: str) -> dict[str, Any] | None:
         users = self.fixtures.get("demo_users", [])
@@ -338,8 +381,65 @@ class APIState:
         return self.find_demo_user(email)
 
     def revoke_access_token(self, token: str) -> None:
-        """Log a token out everywhere."""
+        """Retire one access token everywhere. Prefer `revoke_login`."""
         self._retire_token(self.access_tokens, token, "access_tokens")
+
+    @_auth_synchronized
+    def revoke_login(self, access_token: str | None,
+                     refresh_token: str | None = None) -> None:
+        """End the whole login behind this access token.
+
+        Retiring only the access token left the refresh token beside it alive,
+        so the session that had just been logged out could be rebuilt from a
+        credential logout was supposed to have ended. Before this change the
+        old access token gave 401, but its refresh token still returned 200
+        and the new token worked.
+
+        The family covers that without depending on what the client remembers
+        to send, which matters because after a page reload the browser holds
+        only the access token -- the refresh token is deliberately not put in
+        a cookie. Either credential can identify a family. Pre-family database
+        credentials are invalidated by the idempotent schema upgrade.
+        """
+        if self._db_available:
+            from src.api import db
+            # Resolve and revoke in one transaction, including refresh-only
+            # logout and expired access tokens. Errors must reach the route.
+            db.revoke_login(access_token, refresh_token)
+            # Reads always consult DB; stale local copies cannot revive a login.
+            self.access_tokens.clear()
+            self.refresh_tokens.clear()
+            return
+        payload = None
+        if access_token:
+            payload = self.access_tokens.get(access_token)
+            self._retire_token(self.access_tokens, access_token, "access_tokens")
+
+        families = {(payload or {}).get("family_id"),
+                    (self.refresh_tokens.get(refresh_token) or {}).get("family_id")}
+        for family_id in families - {None}:
+            self._retire_token_family(family_id)
+
+        if refresh_token:
+            # A no-op once the family has been swept, and the only thing that
+            # works for a pre-family token.
+            self._retire_token(self.refresh_tokens, refresh_token, "refresh_tokens")
+
+    def _retire_token_family(self, family_id: str) -> None:
+        """Drop every token of one login, here and in Postgres."""
+        for store in (self.access_tokens, self.refresh_tokens):
+            for token in [t for t, p in store.items()
+                          if (p or {}).get("family_id") == family_id]:
+                store.pop(token, None)
+        if self._db_available:
+            try:
+                from src.api import db
+                db.delete_token_family(family_id)
+            except Exception as exc:
+                logger.warning("Could not delete token family from Postgres "
+                               "(%s: %s); credentials from this login may still "
+                               "be accepted elsewhere until they expire.",
+                               type(exc).__name__, exc)
 
     def refresh_enrolled_courses(self, user_id: str | None) -> list[str] | None:
         """Re-read one user's enrollments and update every live token they hold.
@@ -557,8 +657,84 @@ class APIState:
                 logger.warning("Failed to persist session archive to Postgres (%s: %s).",
                                 type(exc).__name__, exc)
 
+    def _refresh_documents(self) -> list[dict[str, Any]]:
+        """This worker's uploaded documents, brought up to date with Postgres.
+
+        `uploaded_documents` is filled once in __post_init__ and only mutated
+        locally afterwards, so with --workers=2 a document uploaded through one
+        worker simply does not exist for the other. Before this change, after
+        an upload that returned 202 and really had indexed its chunks, sixteen
+        reads of the same document id gave 404 twelve times, and its indexing
+        job fourteen times out of sixteen. The lecturer saw "upload complete"
+        and a document that was not there.
+
+        Postgres is authoritative when it answers, for the same reason as
+        `_live_token`: keeping this worker's extra rows would resurrect a
+        document deleted on the other one, and deleting a document also removes
+        its chunks, so the row would point at nothing. The dictionary remains
+        the source of truth when there is no database, which is how the tests
+        run.
+
+        The table holds one row per upload -- tens of them, not thousands -- so
+        re-reading it is cheaper than the second code path a query-by-id would
+        add, and it reuses the row shaping that start-up already depends on.
+        """
+        if self._db_available:
+            try:
+                from src.api import db
+                self.uploaded_documents = db.load_all_documents()
+            except Exception as exc:
+                logger.warning("Document reload failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+        return self.uploaded_documents
+
+    def list_indexing_jobs(self) -> dict[str, dict[str, Any]]:
+        """Read authoritative jobs; deleting a document cascades to its jobs."""
+        if self._db_available:
+            try:
+                from src.api import db
+                self.indexing_jobs = db.load_all_jobs()
+            except Exception as exc:
+                logger.warning("Job reload failed (%s: %s); falling back to "
+                               "this worker's cache.", type(exc).__name__, exc)
+        return self.indexing_jobs
+
+    def find_document(self, document_id: str | None) -> dict[str, Any] | None:
+        """One document by id, wherever it was uploaded from.
+
+        Searches the merged list rather than querying Postgres by id, because
+        fixture documents are part of what callers can see and have no row.
+        """
+        if not document_id:
+            return None
+        for document in self.list_documents():
+            if (document.get("document_id") == document_id
+                    or document.get("id") == document_id):
+                return document
+        return None
+
+    def find_uploaded_document(self, document_id: str | None) -> dict[str, Any] | None:
+        """Only real uploads, excluding fixtures.
+
+        Deletion needs this narrower search: a fixture document has no file and
+        no chunks of its own, so treating one as deletable would remove another
+        document's chunks from ChromaDB by filename.
+        """
+        if not document_id:
+            return None
+        for document in self._refresh_documents():
+            if (document.get("document_id") == document_id
+                    or document.get("id") == document_id):
+                return document
+        return None
+
+    def get_indexing_job(self, job_id: str | None) -> dict[str, Any] | None:
+        if not job_id:
+            return None
+        return self.list_indexing_jobs().get(job_id)
+
     def list_documents(self, course_id: str | None = None) -> list[dict[str, Any]]:
-        documents = list(self.fixtures.get("documents", [])) + self.uploaded_documents
+        documents = list(self.fixtures.get("documents", [])) + self._refresh_documents()
         if course_id:
             uuid_form, code_form = self.resolve_course(course_id)
             targets = {course_id}
@@ -658,7 +834,9 @@ class APIState:
                                job_id, exc)
 
     def delete_uploaded_document(self, document_id: str) -> bool:
-        before = len(self.uploaded_documents)
+        # Refresh first, or deleting a document that was uploaded through the
+        # other worker reports "not found" while the row and its chunks stay.
+        before = len(self._refresh_documents())
         self.uploaded_documents = [
             doc for doc in self.uploaded_documents
             if doc.get("document_id") != document_id and doc.get("id") != document_id

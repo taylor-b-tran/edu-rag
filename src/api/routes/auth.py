@@ -90,7 +90,11 @@ def signup():
         }), 409
 
     logger.info("New %s account created: %s", role, email)
-    return jsonify(state.issue_tokens(user)), 201
+    try:
+        return jsonify(state.issue_tokens(user)), 201
+    except Exception:
+        logger.exception("Could not persist signup session")
+        return jsonify({"error": "Session store unavailable; sign in again when available."}), 503
 
 
 @auth_bp.post("/login")
@@ -107,7 +111,11 @@ def login():
     user = _state().authenticate_user(email, password)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify(_state().issue_tokens(user))
+    try:
+        return jsonify(_state().issue_tokens(user))
+    except Exception:
+        logger.exception("Could not persist login session")
+        return jsonify({"error": "Session store unavailable."}), 503
 
 
 @auth_bp.post("/refresh")
@@ -117,16 +125,14 @@ def refresh():
     except Exception:
         return jsonify({"error": "invalid JSON body"}), 400
     refresh_token = body.get("refresh_token")
-    # Retires the token as it is read, so a captured refresh token cannot be
-    # replayed after the legitimate holder has already used it.
-    token_state = _state().consume_refresh_token(refresh_token)
-    if not token_state:
+    try:
+        tokens = _state().refresh_login(refresh_token)
+    except Exception:
+        logger.exception("Could not rotate login session")
+        return jsonify({"error": "Session store unavailable."}), 503
+    if not tokens:
         return jsonify({"error": "invalid or expired refresh token"}), 401
-
-    user = _state().find_user_any_source(token_state.get("email", ""))
-    if not user:
-        return jsonify({"error": "user no longer available"}), 401
-    return jsonify(_state().issue_tokens(user))
+    return jsonify(tokens)
 
 
 @auth_bp.get("/me")
@@ -157,10 +163,28 @@ def me():
 
 @auth_bp.post("/logout")
 def logout():
+    """End the login, not just the credential that was presented.
+
+    This used to retire the access token alone, which read as a successful
+    logout while the refresh token beside it still issued new access tokens.
+    Both now go, via the family they share.
+
+    The refresh token is read from the body as well, because tokens issued
+    before families existed have no family to sweep -- the UI already sends it.
+    """
     auth_header = request.headers.get("Authorization")
     token = auth_header.partition(" ")[2] if auth_header else ""
-    if token:
-        # Must reach Postgres: the row outlives the worker that issued it, and
-        # every other worker would keep honouring the token.
-        _state().revoke_access_token(token)
+    try:
+        body = request.get_json(silent=True) or {}
+    except Exception:
+        body = {}
+    refresh_token = body.get("refresh_token") if isinstance(body, dict) else None
+    if token or refresh_token:
+        # Must reach Postgres: the rows outlive the worker that issued them,
+        # and every other worker would keep honouring them.
+        try:
+            _state().revoke_login(token, refresh_token)
+        except Exception:
+            logger.exception("Could not revoke login session")
+            return jsonify({"error": "Session store unavailable; logout was not confirmed."}), 503
     return jsonify({"status": "success", "message": "Logged out successfully."})

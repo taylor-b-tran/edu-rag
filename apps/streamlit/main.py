@@ -398,11 +398,44 @@ data = load_responses()
 
 # ─── API CLIENT ───────────────────────────────────────────────────
 
-@st.cache_resource
-def get_api_client():
-    return PaediaAPIClient(APIConfig())
+# One client per browser session -- deliberately not @st.cache_resource.
+#
+# st.cache_resource hands the same object to every session the server is
+# running, and PaediaAPIClient keeps the signed-in user's JWT on the instance.
+# So one cached client meant one token shared by everybody: whoever logged in
+# most recently owned every other tab's requests, and a single sign-out
+# revoked the lot. Nothing about it looks wrong on screen, and it cannot show
+# up at all while testing happens one browser at a time -- which is how it
+# went unnoticed for so long.
+#
+# session_state is per browser session, which is the scope a credential
+# belongs in.
+_API_CLIENT_KEY = "_api_client"
 
-api = get_api_client()
+
+def get_api_client() -> PaediaAPIClient:
+    client = st.session_state.get(_API_CLIENT_KEY)
+    if client is None:
+        client = PaediaAPIClient(APIConfig())
+        st.session_state[_API_CLIENT_KEY] = client
+    return client
+
+
+class _SessionAPIClient:
+    """Resolves `api.<attr>` to the calling session's client, at call time.
+
+    Binding `api = get_api_client()` once at module level would reintroduce
+    the bug in a quieter form: module globals are shared by every ScriptRunner
+    thread, so two sessions rerunning at the same time overwrite each other's
+    binding and one can finish its run holding the other's client. Doing the
+    lookup on each attribute access keeps it inside the session that asked.
+    """
+
+    def __getattr__(self, name):
+        return getattr(get_api_client(), name)
+
+
+api = _SessionAPIClient()
 DEFAULT_COURSE_ID = "CSIT321"
 # T8-13 (Sprint 8): corpus now covers four real UOW subjects, not just the
 # original two demo courses.
@@ -989,11 +1022,13 @@ def render_sidebar():
             st.caption(role)
 
         if st.button("🚪 Sign Out", use_container_width=True):
-            _forget_session()
-            api.clear_auth()
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+            if api.clear_auth():
+                _forget_session()
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+            else:
+                st.error("Sign out could not be confirmed. Please try again.")
 
 
 # ─── CHAT PAGE (T09+T10+T11: full overhaul) ───────────────────────
