@@ -30,7 +30,7 @@ import time
 import uuid
 from datetime import datetime
 
-from api_client import PaediaAPIClient, APIConfig
+from api_client import PaediaAPIClient, APIConfig, APIReadError
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -393,7 +393,7 @@ def load_responses():
     return None
 
 
-data = load_responses()
+data = load_responses() if APIConfig().use_fixtures else None
 
 
 # ─── API CLIENT ───────────────────────────────────────────────────
@@ -437,9 +437,8 @@ class _SessionAPIClient:
 
 api = _SessionAPIClient()
 DEFAULT_COURSE_ID = "CSIT321"
-# T8-13 (Sprint 8): corpus now covers four real UOW subjects, not just the
-# original two demo courses.
-COURSE_FALLBACKS = [DEFAULT_COURSE_ID, "CSIT214", "CSCI369", "MATH202"]
+# Live selectors are populated from authorized course data, never seeded codes.
+COURSE_FALLBACKS = []
 LOGIN_COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "components", "login_form")
 login_form_component = components.declare_component("paedia_login_form", path=LOGIN_COMPONENT_DIR)
 
@@ -483,26 +482,13 @@ def _normalise_user_for_ui(user: dict) -> dict:
 
 
 def _all_courses() -> list[dict]:
-    """Live courses from /api/courses (falls back to fixtures if the API
-    or Postgres is unavailable — see PaediaAPIClient.get_courses)."""
+    """Courses from the selected live or explicit demo data source."""
     return api.get_courses()
 
 
 def _course_options_for_user(user: dict) -> list[str]:
-    """Courses this user may query. Empty means enrolled in nothing.
-
-    An empty list used to fall back to COURSE_FALLBACKS, which put anyone who
-    signed up - and is therefore enrolled in nothing - into CSIT321. Every
-    question then came back 403 "Not enrolled in this course", rendered as if
-    the assistant had said it. The fallback only makes sense when the course
-    list itself could not be fetched; it must not paper over a real enrolment
-    of zero.
-    """
+    """An empty successful result is empty; failed reads raise APIReadError."""
     all_courses = _all_courses()
-    if not all_courses:
-        # The API is unreachable, not a user with no enrolments.
-        return [c for c in COURSE_FALLBACKS if c]
-
     enrolled = set(user.get("enrolled_courses", []) or [])
     role = str(user.get("role", "")).lower()
     options: list[str] = []
@@ -561,6 +547,7 @@ def init_session_state():
         "pending_send": False,
         "query_state": None,
         "upload_progress": None,
+        "history_load_pending": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -582,15 +569,11 @@ def _hydrate_sessions_from_server() -> None:
     current browser tab. Close the tab and your history looked deleted while
     every message was still on disk; 103 sessions were sitting there unread.
 
-    Best effort on purpose: a failure here costs the old conversations, not the
-    login. The user still gets a working, empty chat.
+    Failed reads stay visible and are retried on the next run.
     """
-    if not api.is_live:
-        return
-    try:
-        remote = api.get_sessions()
-    except Exception:
-        return
+    st.session_state.history_load_pending = True
+    remote = api.get_sessions()
+    st.session_state.history_load_pending = False
     if not remote:
         return
 
@@ -788,6 +771,7 @@ def handle_login_submit() -> None:
         user = DEMO_USERS.get(email)
         if user and user["password"] == password:
             user = _normalise_user_for_ui({k: v for k, v in user.items() if k != "password"})
+            user["enrolled_courses"] = [c["course_code"] for c in _all_courses() if c.get("course_code")]
             st.session_state.authenticated = True
             st.session_state.user = user
             st.session_state.course_options = _course_options_for_user(user)
@@ -1150,7 +1134,7 @@ def render_chat_page():
         # neutral label when nothing has been answered yet.
         model_label = "Live API" if api.is_live else "Offline"
         for _msg in reversed(st.session_state.get("messages", [])):
-            if _msg.get("role") == "assistant" and _msg.get("model_used"):
+            if _msg.get("role") == "assistant" and _msg.get("model_used") and not _msg.get("error_type"):
                 model_label = _msg["model_used"]
                 break
         st.markdown(
@@ -1227,7 +1211,7 @@ def render_chat_page():
                     if msg.get("error_type"):
                         st.markdown(
                             f'<div class="error-card">'
-                            f'<strong>⚠️ {msg["error_type"].replace("_", " ").title()}</strong><br>'
+                            f'<strong>⚠️ Could not get an answer</strong><br>'
                             f'{_html.escape(str(msg.get("error_message") or "An error occurred."))}'
                             f'</div>',
                             unsafe_allow_html=True,
@@ -1535,6 +1519,10 @@ def _run_real_upload_and_indexing(f, course_id):
 
         if status == "completed":
             progress_placeholder.success(f"✅ {filename} — uploaded and indexed successfully!")
+            break
+        elif status == "unavailable":
+            progress_placeholder.error(status_res.get("error") or "Indexing status is unavailable.")
+            st.info("The upload was accepted, but indexing could not be confirmed. Check the document list before uploading again.")
             break
         elif status == "failed":
             err_msg = status_res.get("error", "Unknown indexing error")
@@ -2063,126 +2051,28 @@ def render_admin_page():
     st.markdown("### ⚙️ Admin Dashboard")
     st.markdown("<span class='status-badge' style='background:#FEE2E2; color:#991B1B;'>Admin</span>", unsafe_allow_html=True)
 
-    stats = api.get_admin_stats() if api.is_live else {}
-    offline = stats.get("_offline") or not api.is_live
-    docs_count = stats.get("documents", 0)
-    uploads_count = stats.get("uploaded_documents", 0)
-    queries_total = stats.get("queries_total", 0)
-    sessions_count = stats.get("sessions", 0)
-    users_count = stats.get("users", 0)
-    courses_count = stats.get("courses", 0)
-    warmup = stats.get("warmup") or {}
-    warmup_status = warmup.get("status", "unknown")
-    mode_label = stats.get("mode", "unknown")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Users (fixtures)", users_count if users_count else "—",
-              f"{courses_count} courses" if courses_count else "no fixture")
-    c2.metric("Documents", docs_count if docs_count else "—",
-              f"{uploads_count} uploaded" if uploads_count else "seed only")
-    c3.metric("Queries (lifetime)", queries_total if queries_total else "—",
-              f"{sessions_count} sessions" if sessions_count else "no sessions yet")
-    warmup_delta = "ready" if warmup_status == "ok" else warmup_status
-    c4.metric("Backend mode", mode_label, warmup_delta)
-
-    if offline:
-        st.warning("Admin metrics offline — API not reachable. Showing zeros from fixture fallback.")
+    stats = api.get_admin_stats()
+    if stats.get("_offline"):
+        st.warning(stats.get("error") or "Admin metrics are unavailable. Please retry.")
     else:
-        st.caption(f"Live from /api/admin/stats · Ollama warm-up: {warmup_status}"
-                   + (f" ({warmup.get('elapsed_ms')} ms)" if warmup.get("elapsed_ms") else ""))
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Courses", stats.get("courses", "—"))
+        c2.metric("Documents", stats.get("documents", "—"), f"{stats.get('uploaded_documents', 0)} uploaded")
+        c3.metric("Indexing jobs", stats.get("indexing_jobs", "—"))
+        warmup = stats.get("warmup") or {}
+        c4.metric("Backend mode", stats.get("mode", "unknown"), warmup.get("status", "unknown"))
+        st.caption("Live document and course metrics. System-wide user and conversation totals are not available here.")
 
     st.divider()
     render_course_management()
-
     st.divider()
     st.markdown("#### User Management")
-    st.caption(
-        "Demo users are read from `fixtures/sample_responses.json` and this table is "
-        "still read-only. To enroll or remove someone from a course, use "
-        "**Courses & Enrollments** above."
-    )
-
-    col1, col2 = st.columns([4, 2])
-    with col1:
-        search_query = st.text_input("Search", placeholder="🔍 Search users...",
-                                     label_visibility="collapsed", key="admin_search")
-    with col2:
-        st.button("+ Add User", type="primary", use_container_width=True, disabled=True,
-                  help="Disabled in Sprint 5 — user provisioning not yet wired to API")
-
-    fixture_users = data.get("demo_users", []) if isinstance(data, dict) else []
-    sessions = api.get_sessions() if api.is_live else []
-    queries_by_user: dict[str, int] = {}
-    for sess in sessions:
-        uid = sess.get("user_id") or sess.get("user_email") or "unknown"
-        queries_by_user[uid] = queries_by_user.get(uid, 0) + len(sess.get("messages", []) or [])
-
-    users = []
-    for u in fixture_users:
-        email = (u.get("email") or "").lower()
-        if search_query and search_query.lower() not in (u.get("name", "") + " " + email).lower():
-            continue
-        users.append({
-            "name": u.get("name") or u.get("username") or email or "Unknown",
-            "email": email or "—",
-            "role": (u.get("role") or "student").capitalize(),
-            "last": "—",
-            "queries": queries_by_user.get(u.get("user_id") or u.get("id"), 0),
-            "status": "Active" if u.get("enabled", True) else "Disabled",
-        })
-    if not users:
-        users = [{"name": "(no fixture users)", "email": "—", "role": "—",
-                  "last": "—", "queries": 0, "status": "—"}]
-
-    cols = st.columns([3, 2, 2, 1, 1, 2])
-    for col, header in zip(cols, ["User", "Role", "Last Active", "Queries", "Status", "Actions"]):
-        col.markdown(f"**{header}**")
-    st.markdown("<hr style='margin: 4px 0; border: none; border-top: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
-
-    for u in users:
-        cols = st.columns([3, 2, 2, 1, 1, 2])
-        cols[0].markdown(f"**{u['name']}**<br><span style='color:#64748B; font-size:0.8rem;'>{u['email']}</span>", unsafe_allow_html=True)
-        role_color = "#1B2A4A" if u["role"] == "Admin" else ("#0D9488" if u["role"] == "Lecturer" else "#64748B")
-        cols[1].markdown(f"<span class='status-badge' style='background:{role_color}20; color:{role_color};'>{u['role']}</span>", unsafe_allow_html=True)
-        cols[2].markdown(f"<span style='color: #475569;'>{u['last']}</span>", unsafe_allow_html=True)
-        cols[3].markdown(f"<span style='color: #475569;'>{u['queries']}</span>", unsafe_allow_html=True)
-        cols[4].markdown(f"<span class='status-badge badge-indexed'>{u['status']}</span>", unsafe_allow_html=True)
-        c_edit, c_del = cols[5].columns(2)
-        c_edit.button("Edit", key=f"edit_{u['email']}", disabled=True,
-                      help="Disabled in Sprint 5 — user editing not yet wired to API")
-        c_del.button("Del", key=f"delusr_{u['email']}", disabled=True,
-                     help="Disabled in Sprint 5 — user deletion not yet wired to API")
-
-    st.divider()
+    st.info("A system-wide user directory is not available here. Manage course membership in Courses & Enrollments above.")
     st.markdown("#### System Settings")
-
-    s1, s2, s3, s4 = st.columns(4)
-    with s1:
-        st.markdown("**LLM Provider**")
-        st.selectbox("LLM", ["Ollama (dev)", "OpenAI API (demo)"], label_visibility="collapsed", key="llm_model")
-    with s2:
-        st.markdown("**Embedding Model**")
-        st.selectbox("Embed", ["all-MiniLM-L6-v2 (384-dim)", "all-mpnet-base-v2 (768-dim)"], label_visibility="collapsed", key="embed_model")
-    with s3:
-        st.markdown("**Vector Store**")
-        st.selectbox("VDB", ["ChromaDB (course_id scoped)"], label_visibility="collapsed", key="vector_db")
-    with s4:
-        st.markdown("**Chunk Size**")
-        st.selectbox("Chunk", ["~500 tokens / 50 overlap", "~256 tokens / 25 overlap", "~1024 tokens / 100 overlap"], label_visibility="collapsed", key="chunk_size")
-
-    s5, s6, s7, s8 = st.columns(4)
-    with s5:
-        st.markdown("**Orchestration**")
-        st.selectbox("Orch", ["LangChain", "LlamaIndex"], label_visibility="collapsed", key="orch_framework")
-    with s6:
-        st.markdown("**Relational DB**")
-        st.selectbox("RDB", ["PostgreSQL"], label_visibility="collapsed", key="relational_db")
-    with s7:
-        st.markdown("**Top-k Retrieval**")
-        st.selectbox("Top-k", ["5", "3", "10"], label_visibility="collapsed", key="top_k")
-    with s8:
-        st.markdown("**Deployment**")
-        st.selectbox("Deploy", ["Docker Compose (local)"], label_visibility="collapsed", key="deployment")
+    st.write("Use Tuning to view and save global or course settings.")
+    if st.button("Open Tuning", key="admin_open_tuning"):
+        st.session_state.current_page = "settings"
+        st.rerun()
 
 
 # ─── MAIN APP ───────────────────────────────────────────────────────
@@ -2294,11 +2184,13 @@ def _restore_session_from_cookie() -> bool:
     return True
 
 
-def main():
+def _render_app():
     if not st.session_state.authenticated and not _restore_session_from_cookie():
         render_login_page()
         return
 
+    if st.session_state.get("history_load_pending"):
+        _hydrate_sessions_from_server()
     render_sidebar()
 
     page = st.session_state.current_page
@@ -2321,6 +2213,25 @@ def main():
     else:
         st.session_state.current_page = "chat"
         st.rerun()
+
+
+def main():
+    if api.config.use_fixtures:
+        st.warning("Demo mode — sample data only. Changes are not saved to the live system.")
+    try:
+        _render_app()
+    except APIReadError as exc:
+        st.error(str(exc))
+        st.caption("Data could not be loaded. Your current conversation has been kept.")
+        if st.button("Retry", key="retry_api_read"):
+            st.rerun()
+        if exc.status_code == 401:
+            # Forget a credential already rejected by the server; do not report logout.
+            if st.button("Sign in again", key="reauth_api_read"):
+                _forget_session()
+                st.session_state.authenticated = False
+                st.session_state[_API_CLIENT_KEY] = PaediaAPIClient(APIConfig())
+                st.rerun()
 
 
 if __name__ == "__main__":
