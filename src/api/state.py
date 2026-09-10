@@ -75,28 +75,81 @@ class APIState:
     warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
                                           init=False, repr=False)
 
-    def __post_init__(self) -> None:
+    @staticmethod
+    def _db_startup_timeout() -> float:
+        """Seconds a worker waits for Postgres at start-up; 0 means one attempt."""
+        raw = os.environ.get("PAEDIA_DB_STARTUP_TIMEOUT_SECONDS", "").strip()
+        if not raw:
+            return 0.0
         try:
-            from src.api import db
-            db.init_schema()
-            self.uploaded_documents = db.load_all_documents()
-            self.indexing_jobs = db.load_all_jobs()
-            self.access_tokens = db.load_all_access_tokens()
-            self.refresh_tokens = db.load_all_refresh_tokens()
-            self.sessions = db.load_all_sessions()
-            self._db_available = True
-            logger.info(
-                "APIState hydrated from Postgres: %d documents, %d jobs, "
-                "%d access tokens, %d sessions.",
-                len(self.uploaded_documents), len(self.indexing_jobs),
-                len(self.access_tokens), len(self.sessions),
-            )
-        except Exception as exc:
-            logger.warning(
-                "Postgres unavailable (%s: %s). Upload metadata will be in-memory only.",
-                type(exc).__name__, exc,
-            )
-            self._db_available = False
+            return max(0.0, float(raw))
+        except ValueError:
+            logger.warning("Ignoring PAEDIA_DB_STARTUP_TIMEOUT_SECONDS=%r: not a number.", raw)
+            return 0.0
+
+    def _connect_database(self) -> None:
+        """Hydrate from Postgres, waiting for it when a start-up timeout is set.
+
+        After a reboot Docker starts every container at once and ignores
+        depends_on, so a gunicorn worker can import this before Postgres accepts
+        connections. With a single attempt that worker then ran on in-memory
+        state for the rest of its life - every login refused, nothing persisted -
+        while /api/health still answered 200.
+
+        PAEDIA_DB_STARTUP_TIMEOUT_SECONDS > 0 (docker-compose.yml sets it) makes
+        the database required: keep trying for that long, then raise. The worker
+        fails to boot, gunicorn exits, and Docker's restart policy tries again.
+        Unset or 0 keeps one attempt and the in-memory fallback that the test
+        suite and offline demos depend on.
+        """
+        timeout = self._db_startup_timeout()
+        deadline = time.monotonic() + timeout
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                from src.api import db
+                db.init_schema()
+                self.uploaded_documents = db.load_all_documents()
+                self.indexing_jobs = db.load_all_jobs()
+                self.access_tokens = db.load_all_access_tokens()
+                self.refresh_tokens = db.load_all_refresh_tokens()
+                self.sessions = db.load_all_sessions()
+                self._db_available = True
+                logger.info(
+                    "APIState hydrated from Postgres on attempt %d: %d documents, "
+                    "%d jobs, %d access tokens, %d sessions.",
+                    attempt, len(self.uploaded_documents), len(self.indexing_jobs),
+                    len(self.access_tokens), len(self.sessions),
+                )
+                return
+            except Exception as exc:
+                if timeout <= 0:
+                    logger.warning(
+                        "Postgres unavailable (%s: %s). Upload metadata will be in-memory only.",
+                        type(exc).__name__, exc,
+                    )
+                    self._db_available = False
+                    return
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Postgres was not reachable within {timeout:g}s of start-up "
+                        f"({type(exc).__name__}: {exc}); refusing to run without it."
+                    ) from exc
+                logger.warning(
+                    "Postgres not ready on attempt %d (%s: %s); retrying for up to %.0fs.",
+                    attempt, type(exc).__name__, exc, remaining,
+                )
+                time.sleep(min(2.0, remaining))
+                try:
+                    from src.api import db
+                    db.reset_connection_state()
+                except Exception:
+                    pass
+
+    def __post_init__(self) -> None:
+        self._connect_database()
 
         try:
             from src.api import warmup
