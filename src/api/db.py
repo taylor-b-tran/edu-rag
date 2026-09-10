@@ -244,6 +244,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_session_idx ON chat_messages(session_id);
 
+-- Empty metadata means unknown for legacy messages; never invent a backfill.
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS response_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- One row per request that counted toward the caller's rate limit. Old rows
 -- are pruned in check_and_record_rate() rather than by a cron job — simplest
 -- thing that works at class-sized traffic.
@@ -1123,8 +1126,8 @@ def insert_chat_message(session_id: str, message: dict[str, Any]) -> None:
             cur.execute(
                 """
                 INSERT INTO chat_messages
-                  (message_id, session_id, question, answer, sources)
-                VALUES (%s, %s, %s, %s, %s)
+                  (message_id, session_id, question, answer, sources, response_metadata)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (message_id) DO NOTHING
                 """,
                 (
@@ -1133,8 +1136,11 @@ def insert_chat_message(session_id: str, message: dict[str, Any]) -> None:
                     message.get("question"),
                     message.get("answer"),
                     json.dumps(message.get("sources", [])),
+                    json.dumps(message.get("response_metadata", {})),
                 ),
             )
+            cur.execute("UPDATE chat_sessions SET updated_at = NOW() WHERE session_id = %s",
+                        (session_id,))
 
 
 def archive_chat_session(session_id: str) -> None:
@@ -1164,9 +1170,9 @@ def load_all_sessions() -> dict[str, dict[str, Any]]:
             session_rows = cur.fetchall()
             cur.execute(
                 """
-                SELECT message_id, session_id, question, answer, sources, created_at
+                SELECT message_id, session_id, question, answer, sources, response_metadata, created_at
                   FROM chat_messages
-                 ORDER BY created_at ASC
+                 ORDER BY created_at ASC, message_id ASC
                 """
             )
             message_rows = cur.fetchall()
@@ -1194,6 +1200,7 @@ def load_all_sessions() -> dict[str, dict[str, Any]]:
             "question": row.get("question", ""),
             "answer": row.get("answer", ""),
             "sources": row.get("sources") or [],
+            "response_metadata": row.get("response_metadata") or {},
             "created_at": row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
                 if row.get("created_at") else None,
         })
@@ -1232,10 +1239,10 @@ def get_chat_session(session_id: str, message_limit: int | None = None) -> dict[
             # session does not have to come back in full to read three turns.
             cur.execute(
                 """
-                SELECT message_id, question, answer, sources, created_at
+                SELECT message_id, question, answer, sources, response_metadata, created_at
                   FROM chat_messages
                  WHERE session_id = %s
-                 ORDER BY created_at DESC
+                 ORDER BY created_at DESC, message_id DESC
                  LIMIT %s
                 """,
                 (session_id, message_limit if message_limit else None),
@@ -1259,6 +1266,7 @@ def get_chat_session(session_id: str, message_limit: int | None = None) -> dict[
             "question": message_row.get("question", ""),
             "answer": message_row.get("answer", ""),
             "sources": message_row.get("sources") or [],
+            "response_metadata": message_row.get("response_metadata") or {},
             "created_at": message_row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
                 if message_row.get("created_at") else None,
         })

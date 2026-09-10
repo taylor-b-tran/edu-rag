@@ -149,13 +149,33 @@ def me():
     A dead or expired token is a plain 401, which is the signal to clear the
     cookie and show the login form.
     """
-    user = _state().validate_bearer(request.headers.get("Authorization"))
+    try:
+        user = _state().validate_bearer(request.headers.get("Authorization"), report_store_error=True)
+    except Exception:
+        logger.exception("Could not validate restored session")
+        return jsonify({"error": "Session store unavailable. Please retry."}), 503
     if user is None:
         return jsonify({"error": "Authentication required."}), 401
+    if _state().db_available:
+        # Token rows carry authorization, not the display profile. Resolve the
+        # account so reload uses the same name as login, including older tokens.
+        from src.api import db
+        try:
+            profile = db.get_user_by_email(user.get("email", ""))
+        except Exception:
+            logger.exception("Could not load session profile")
+            return jsonify({"error": "Session profile unavailable. Please retry."}), 503
+        if not profile or str(profile["user_id"]) != str(user.get("user_id")):
+            return jsonify({"error": "Authentication required."}), 401
+        user = {**user, **profile}
+    else:
+        profile = _state().find_demo_user(user.get("email", "")) or {}
+        user = {**profile, **user}
     return jsonify({
         "id": user.get("user_id"),
         "email": user.get("email"),
         "username": user.get("username"),
+        "name": user.get("name") or user.get("username") or user.get("email"),
         "role": user.get("role", "student"),
         "enrolled_courses": user.get("enrolled_courses", []),
     })
