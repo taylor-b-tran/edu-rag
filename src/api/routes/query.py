@@ -235,7 +235,14 @@ def query():
         "model_used": generated.model_used,
         "is_fallback": generated.is_fallback,
         "response_style": generated.response_style,
+        "backend_mode": state.backend_mode,
+        # Measured before persistence so the stored and immediate values agree.
+        "latency_ms": round((time.time() - started) * 1000),
     }
+    for field in ("retrieval_metadata", "token_count"):
+        value = getattr(generated, field, None)
+        if value is not None:
+            result[field] = value
     session_id = state.record_session_message(
         session_id=session_id,
         user_id=user.get("user_id"),
@@ -246,8 +253,6 @@ def query():
     result.update(
         {
             "session_id": session_id,
-            "backend_mode": state.backend_mode,
-            "latency_ms": round((time.time() - started) * 1000),
         }
     )
     return jsonify(result)

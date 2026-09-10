@@ -193,16 +193,16 @@ class APIState:
             },
         }
 
-    def validate_bearer(self, authorization: str | None) -> dict[str, Any] | None:
+    def validate_bearer(self, authorization: str | None, *, report_store_error: bool = False) -> dict[str, Any] | None:
         if not authorization:
             return None
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             return None
-        return self._live_token(self.access_tokens, token, "access_tokens")
+        return self._live_token(self.access_tokens, token, "access_tokens", report_store_error=report_store_error)
 
     def _live_token(self, store: dict[str, Any], token: str,
-                    table: str) -> dict[str, Any] | None:
+                    table: str, *, report_store_error: bool = False) -> dict[str, Any] | None:
         """Return the token's payload, or None if it is unknown or expired.
 
         Postgres is consulted first whenever it is available, because gunicorn
@@ -229,6 +229,8 @@ class APIState:
             except Exception as exc:
                 logger.warning("Token lookup failed (%s: %s); refusing cached credentials.",
                                type(exc).__name__, exc)
+                if report_store_error:
+                    raise
                 return None
         else:
             payload = store.get(token)
@@ -590,6 +592,11 @@ class APIState:
             "question": question,
             "answer": answer.get("answer", ""),
             "sources": answer.get("source_references", []),
+            "response_metadata": {key: answer[key] for key in (
+                "confidence", "confidence_score", "model_used", "latency_ms",
+                "is_fallback", "backend_mode", "retrieval_metadata", "token_count",
+                "response_style",
+            ) if key in answer},
             "created_at": _utc_now(),
         }
         session["messages"].append(message)

@@ -28,7 +28,7 @@ import html as _html
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from api_client import PaediaAPIClient, APIConfig, APIReadError
 
@@ -478,6 +478,7 @@ def _normalise_user_for_ui(user: dict) -> dict:
     role_map = {"student": "Student", "lecturer": "Lecturer", "admin": "Admin"}
     ui_user["role"] = role_map.get(role.lower(), role)
     ui_user["id"] = ui_user.get("id") or ui_user.get("user_id") or ui_user.get("username") or ""
+    ui_user["name"] = ui_user.get("name") or ui_user.get("username") or ui_user.get("email") or "User"
     return ui_user
 
 
@@ -574,9 +575,6 @@ def _hydrate_sessions_from_server() -> None:
     st.session_state.history_load_pending = True
     remote = api.get_sessions()
     st.session_state.history_load_pending = False
-    if not remote:
-        return
-
     restored = []
     for item in sorted(remote, key=lambda s: s.get("updated_at") or "", reverse=False):
         if item.get("archived"):
@@ -593,6 +591,11 @@ def _hydrate_sessions_from_server() -> None:
                              "timestamp": "", "timestamp_full": stamp})
             messages.append({"role": "assistant", "content": turn.get("answer", ""),
                              "source_references": turn.get("sources") or [],
+                             **{key: value for key, value in (turn.get("response_metadata") or {}).items()
+                                if key in ("confidence", "confidence_score", "model_used", "latency_ms",
+                                           "is_fallback", "backend_mode", "retrieval_metadata",
+                                           "token_count", "response_style")},
+                             "from_api": True,
                              "timestamp": "", "timestamp_full": stamp})
 
         first = turns[0].get("question") or "Chat"
@@ -606,8 +609,37 @@ def _hydrate_sessions_from_server() -> None:
             "message_count": len(messages),
         })
 
-    if restored:
-        st.session_state.sessions = restored
+    st.session_state.sessions = restored
+    # The URL is a per-tab selection hint, never an authorization credential.
+    # Only IDs returned by the authenticated, owner-filtered history may open.
+    requested = st.query_params.get("chat")
+    for session in restored:
+        if session["backend_session_id"] == requested and session["course_id"] in st.session_state.course_options:
+            switch_session(session["session_id"])
+            return
+    course = st.query_params.get("course")
+    if course in st.session_state.course_options:
+        st.session_state.course_id = course
+    create_new_session("Welcome Chat")
+
+
+def _remember_chat_selection() -> None:
+    """Persist only the active backend ID and course in this tab's URL."""
+    params = st.query_params.to_dict()
+    sid = st.session_state.get("session_id")
+    if sid:
+        params["chat"] = sid
+    else:
+        params.pop("chat", None)
+    params["course"] = st.session_state.get("course_id") or ""
+    st.query_params.from_dict(params)
+
+
+def _change_chat_course() -> None:
+    if st.session_state.selected_course_id == st.session_state.course_id:
+        return
+    st.session_state.course_id = st.session_state.selected_course_id
+    create_new_session()
 
 
 def create_new_session(title="New Chat"):
@@ -628,6 +660,7 @@ def create_new_session(title="New Chat"):
     st.session_state.course_id = course_id
     st.session_state.selected_course_id = course_id
     st.session_state.messages = session["messages"]
+    _remember_chat_selection()
     return session
 
 
@@ -638,7 +671,9 @@ def get_active_session():
     for s in st.session_state.sessions:
         if s["session_id"] == st.session_state.active_session_id:
             return s
-    return st.session_state.sessions[-1]
+    session = st.session_state.sessions[-1]
+    switch_session(session["session_id"])
+    return session
 
 
 def switch_session(session_id):
@@ -650,6 +685,7 @@ def switch_session(session_id):
             st.session_state.session_id = s.get("backend_session_id")
             st.session_state.course_id = s.get("course_id", DEFAULT_COURSE_ID)
             st.session_state.selected_course_id = st.session_state.course_id
+            _remember_chat_selection()
             return
 
 
@@ -749,21 +785,32 @@ def get_confidence_label(confidence) -> str:
     return "No confidence data"
 
 
+def _clear_identity_state() -> None:
+    """Drop the previous account's private UI data before reauthentication."""
+    for key in ("authenticated", "jwt_token", "user", "messages", "sessions",
+                "active_session_id", "session_id", "course_id", "course_options",
+                "selected_course_id", "pending_send", "query_state", "current_page",
+                "history_load_pending", "_cached_prompts", "_cached_prompts_course"):
+        st.session_state.pop(key, None)
+    init_session_state()
+
+
 def handle_login_submit() -> None:
     """Authenticate from login form state."""
     email = st.session_state.get("login_email", "").strip()
     password = st.session_state.get("login_password", "")
     login_result = api.login(email, password)
     if login_result.get("success"):
+        _clear_identity_state()
         user = _normalise_user_for_ui(login_result.get("user", {}))
-        st.session_state.authenticated = True
         st.session_state.jwt_token = login_result.get("jwt_token")
+        _remember_session(st.session_state.jwt_token)
         st.session_state.user = user
         st.session_state.course_options = _course_options_for_user(user)
         st.session_state.course_id = _default_course_for_user(user)
         st.session_state.selected_course_id = st.session_state.course_id
+        st.session_state.authenticated = True
         st.session_state.login_error = None
-        _remember_session(st.session_state.jwt_token)
         _hydrate_sessions_from_server()
         if not st.session_state.sessions:
             create_new_session("Welcome Chat")
@@ -803,16 +850,17 @@ def handle_signup_submit() -> None:
     result = api.signup(email, username, password, role)
     if result.get("success"):
         # Auto-login: the signup response already contains tokens + user
+        _clear_identity_state()
         user = _normalise_user_for_ui(result.get("user", {}))
-        st.session_state.authenticated = True
         st.session_state.jwt_token = result.get("jwt_token")
+        _remember_session(st.session_state.jwt_token)
         st.session_state.user = user
         st.session_state.course_options = _course_options_for_user(user)
         st.session_state.course_id = _default_course_for_user(user)
         st.session_state.selected_course_id = st.session_state.course_id
+        st.session_state.authenticated = True
         st.session_state.signup_error = None
         st.session_state.login_error = None
-        _remember_session(st.session_state.jwt_token)
         create_new_session("Welcome Chat")
     else:
         # Show the API error message as-is (it's already user-facing)
@@ -1007,9 +1055,9 @@ def render_sidebar():
 
         if st.button("🚪 Sign Out", use_container_width=True):
             if api.clear_auth():
-                _forget_session()
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
+                _forget_session()
                 st.rerun()
             else:
                 st.error("Sign out could not be confirmed. Please try again.")
@@ -1060,22 +1108,24 @@ def _send_message(text: str, append_user: bool = True):
         if session:
             session["backend_session_id"] = backend_session_id
             session["course_id"] = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+        _remember_chat_selection()
 
     msg = {
         "role": "assistant",
         "content": response.get("answer", ""),
         "source_references": response.get("source_references", []),
-        "confidence": response.get("confidence", 0),
+        "confidence": response.get("confidence"),
         "confidence_score": response.get("confidence_score"),
         # T8-07: defaulting to a model name the host stopped using in Sprint 8
         # meant a failed answer was labelled as if llama3 had produced it.
         "model_used": response.get("model_used") or "unknown",
-        "token_count": response.get("token_count", 0),
+        "token_count": response.get("token_count"),
         "latency_ms": response.get("latency_ms"),
         "is_fallback": response.get("is_fallback", False),
         "from_api": response.get("from_api", False),
         "backend_mode": response.get("backend_mode"),
         "retrieval_metadata": response.get("retrieval_metadata"),
+        "response_style": response.get("response_style"),
         "error_type": response.get("error_type"),
         "error_message": response.get("error_message"),
         "timestamp": now2.strftime("%I:%M %p"),
@@ -1109,6 +1159,8 @@ def _render_no_courses_notice() -> None:
 
 def render_chat_page():
     session = get_active_session()
+    if session["course_id"] != st.session_state.get("course_id"):
+        session = create_new_session()
 
     if not _course_options_for_user(st.session_state.get("user") or {}):
         _render_no_courses_notice()
@@ -1146,20 +1198,18 @@ def render_chat_page():
         course_options = st.session_state.get("course_options") or COURSE_FALLBACKS
         if current_course not in course_options:
             course_options = [current_course] + list(course_options)
+        # Widget keys can be discarded when the login page reruns. Reconcile
+        # immediately before declaration, with no competing default index.
+        st.session_state.selected_course_id = current_course
         selected_course = st.selectbox(
             "Course",
             course_options,
-            index=course_options.index(current_course),
+            index=None,
             format_func=_course_display_label,
             label_visibility="collapsed",
             key="selected_course_id",
+            on_change=_change_chat_course,
         )
-    if selected_course != st.session_state.get("course_id"):
-        st.session_state.course_id = selected_course
-        st.session_state.session_id = None
-        if session:
-            session["course_id"] = selected_course
-            session["backend_session_id"] = None
     with col4:
         if st.button("🗑️ Clear chat", use_container_width=True):
             st.session_state.messages = []
@@ -1168,6 +1218,7 @@ def render_chat_page():
                 session["messages"] = []
                 session["message_count"] = 0
                 session["backend_session_id"] = None
+            _remember_chat_selection()
             st.rerun()
 
     st.markdown("<hr style='margin: 0 0 16px 0; border: none; border-top: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
@@ -1262,6 +1313,15 @@ def render_chat_page():
                     conf_color = "#10B981" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EF4444")
                     conf_pct = int(confidence * 100)
                     conf_label = get_confidence_label(msg.get("confidence", confidence))
+                    has_confidence = msg.get("confidence") is not None or msg.get("confidence_score") is not None
+                    confidence_html = (
+                        f'<div class="confidence-bar"><div class="confidence-fill" '
+                        f'style="width: {conf_pct}%; background: {conf_color};"></div></div>'
+                        if has_confidence else ""
+                    )
+                    confidence_text = f"{conf_label}: {conf_pct}%" if has_confidence else "Confidence unavailable"
+                    if "is_fallback" not in msg:
+                        confidence_text += " · Fallback status unavailable"
                     model_used = msg.get("model_used", "")
                     model_badge = get_model_badge(model_used)
                     msg_class = "ai-msg-fallback" if is_fallback else "ai-msg"
@@ -1272,11 +1332,9 @@ def render_chat_page():
                     html_content = (
                         f'<div class="clearfix"><div class="{msg_class}">'
                         f'{fallback_html}{answer_html}{sources_html}'
-                        f'<div class="confidence-bar">'
-                        f'<div class="confidence-fill" style="width: {conf_pct}%; background: {conf_color};"></div>'
-                        f'</div>'
+                        f'{confidence_html}'
                         f'<div class="confidence-text">'
-                        f'{conf_label}: {conf_pct}% · {model_badge}{latency_indicator} · {timestamp_str}{api_indicator}'
+                        f'{confidence_text} · {model_badge}{latency_indicator} · {timestamp_str}{api_indicator}'
                         f'</div>'
                         f'</div></div>'
                     )
@@ -2118,24 +2176,36 @@ def _cookies():
 
 
 def _remember_session(token: str | None) -> None:
-    """Persist the access token for this browser, or clear it."""
-    controller = _cookies()
-    if controller is None or not token:
+    """Queue the write for a completed render, after the login rerun.
+
+    A fixed expiry is essential: rendering the component again must never
+    extend the one-hour cookie lifetime.
+    """
+    if token:
+        st.session_state["_auth_cookie_write"] = (
+            token, datetime.now(timezone.utc) + timedelta(seconds=_AUTH_COOKIE_MAX_AGE))
+
+
+def _flush_auth_cookie() -> None:
+    pending = st.session_state.get("_auth_cookie_write")
+    if pending is None:
         return
-    try:
-        controller.set(_AUTH_COOKIE, token, max_age=_AUTH_COOKIE_MAX_AGE, same_site="strict")
-    except Exception:
-        pass  # A browser that refuses the cookie costs persistence, not the login.
-
-
-def _forget_session() -> None:
     controller = _cookies()
     if controller is None:
         return
     try:
-        controller.remove(_AUTH_COOKIE)
+        token, expires = pending
+        if token:
+            controller.set(_AUTH_COOKIE, token, expires=expires, same_site="strict")
+        else:
+            controller.remove(_AUTH_COOKIE)
     except Exception:
-        pass
+        pass  # A browser refusing cookies still permits an in-tab login.
+
+
+def _forget_session() -> None:
+    st.query_params.clear()
+    st.session_state["_auth_cookie_write"] = (None, None)
 
 
 def _restore_session_from_cookie() -> bool:
@@ -2146,7 +2216,7 @@ def _restore_session_from_cookie() -> bool:
     left to fail again on every load.
     """
     controller = _cookies()
-    if controller is None or not api.is_live:
+    if controller is None or api.config.use_fixtures:
         return False
     try:
         token = controller.get(_AUTH_COOKIE)
@@ -2168,15 +2238,17 @@ def _restore_session_from_cookie() -> bool:
     result = api.get_current_user(token)
     if not result.get("success"):
         _forget_session()
+        _clear_identity_state()
+        st.session_state.login_error = "Your session has expired or ended. Please sign in again."
         return False
 
     user = _normalise_user_for_ui(result.get("user", {}))
-    st.session_state.authenticated = True
     st.session_state.jwt_token = token
     st.session_state.user = user
     st.session_state.course_options = _course_options_for_user(user)
     st.session_state.course_id = _default_course_for_user(user)
     st.session_state.selected_course_id = st.session_state.course_id
+    st.session_state.authenticated = True
     st.session_state.login_error = None
     _hydrate_sessions_from_server()
     if not st.session_state.sessions:
@@ -2229,9 +2301,10 @@ def main():
             # Forget a credential already rejected by the server; do not report logout.
             if st.button("Sign in again", key="reauth_api_read"):
                 _forget_session()
-                st.session_state.authenticated = False
+                _clear_identity_state()
                 st.session_state[_API_CLIENT_KEY] = PaediaAPIClient(APIConfig())
                 st.rerun()
+    _flush_auth_cookie()
 
 
 if __name__ == "__main__":
