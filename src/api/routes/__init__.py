@@ -8,6 +8,7 @@ from src.api.routes.auth import auth_bp
 from src.api.routes.courses import courses_bp
 from src.api.routes.settings import settings_bp
 from src.api.routes.documents import documents_bp
+from src.api.routes.feedback import feedback_bp
 from src.api.routes.health import health_bp
 from src.api.routes.query import query_bp
 from src.api.routes.sessions import sessions_bp
@@ -21,6 +22,7 @@ def register_routes(app: Flask) -> None:
     app.register_blueprint(query_bp)
     app.register_blueprint(documents_bp)
     app.register_blueprint(sessions_bp)
+    app.register_blueprint(feedback_bp)
     app.register_blueprint(courses_bp)
     app.register_blueprint(settings_bp)
 
