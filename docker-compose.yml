@@ -38,6 +38,12 @@ services:
       OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-llama3.2}
       DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # After a reboot Docker starts every container at once and ignores
+      # depends_on, so the API can start before Postgres accepts connections.
+      # Wait up to this long, then exit and let the restart policy retry,
+      # rather than run a worker with no database that refuses every login
+      # while /api/health still says ok (T9-12).
+      PAEDIA_DB_STARTUP_TIMEOUT_SECONDS: ${PAEDIA_DB_STARTUP_TIMEOUT_SECONDS:-120}
       # Browser origin allowed to call this API directly. Streamlit talks to it
       # server-side so the UI does not depend on this, but anything calling the
       # API from a browser does. Defaults to the local Streamlit port.

@@ -30,6 +30,9 @@ def health():
             "status": "ok",
             "mode": state.backend_mode,
             "rag_available": state.rag_available,
+            # Reachable is not usable: a worker that started without Postgres
+            # refuses every login yet still answers here. Say which this one is.
+            "database": "connected" if state.db_available else "unavailable",
             "fixture_loaded": state.fixture_loaded,
             "embedder": embedder_status(),
             "warmup": getattr(state, "warmup_status", {"status": "unknown"}),

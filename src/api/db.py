@@ -74,6 +74,23 @@ def connect() -> Iterator[psycopg.Connection]:
         raise
 
 
+def reset_connection_state() -> None:
+    """Make the next connect() a fresh probe: no open circuit, no old pool.
+
+    Only for a worker waiting for Postgres at start-up. The circuit breaker and
+    the pool's reconnect backoff keep request paths from hammering a database
+    that is down; a worker that cannot start without one has to keep probing.
+    """
+    global _POOL, _pg_last_failure
+    _pg_last_failure = 0.0
+    if _POOL is not None:
+        try:
+            _POOL.close(timeout=0)
+        except Exception:
+            pass
+        _POOL = None
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS uploaded_documents (
     document_id      TEXT PRIMARY KEY,

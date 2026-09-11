@@ -980,6 +980,12 @@ components:
         status:
           type: string
           enum: [ok, degraded]
+        database:
+          type: string
+          enum: [connected, unavailable]
+          description: >-
+            Whether the worker that answered is backed by PostgreSQL. A worker
+            without it refuses logins and persists nothing, yet still returns 200.
         services:
           type: object
           required: [postgres, chromadb, ollama]
