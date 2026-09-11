@@ -1154,28 +1154,30 @@ def render_chat_page():
             session["course_id"] = selected_course
             session["backend_session_id"] = None
     with col4:
-        # T8-11: Response-style picker — fetched from GET /api/response-styles
+        # T8-11: Response-style picker — fetched from GET /api/response-styles.
+        # "Auto" (empty string) means "use whatever the course is configured
+        # for" and is the default so students don't accidentally override a
+        # lecturer's setting just by loading the page.
         if st.session_state.get("response_styles_cache") is None:
             st.session_state.response_styles_cache = api.get_response_styles()
         styles_data = st.session_state.response_styles_cache
         style_list = styles_data.get("styles") or []
-        default_style = styles_data.get("default")
         if style_list:
-            style_ids = [s["id"] for s in style_list]
-            style_labels = {s["id"]: s.get("label", s["id"]) for s in style_list}
-            current_style = st.session_state.get("response_style") or default_style
-            if current_style not in style_ids:
-                current_style = style_ids[0]
+            options = [""] + [s["id"] for s in style_list]
+            labels = {"": "Auto (course default)"}
+            labels.update({s["id"]: s.get("label", s["id"]) for s in style_list})
+            current = st.session_state.get("response_style") or ""
+            if current not in options:
+                current = ""
             chosen = st.selectbox(
                 "Style",
-                style_ids,
-                index=style_ids.index(current_style),
-                format_func=lambda sid: style_labels.get(sid, sid),
+                options,
+                index=options.index(current),
+                format_func=lambda sid: labels.get(sid, sid),
                 label_visibility="collapsed",
                 key="response_style_select",
             )
-            if chosen != st.session_state.get("response_style"):
-                st.session_state.response_style = chosen
+            st.session_state.response_style = chosen or None
     with col5:
         if st.button("🗑️ Clear chat", use_container_width=True):
             st.session_state.messages = []
@@ -1415,19 +1417,28 @@ def render_history_page():
                 st.rerun()
         with c3:
             if st.button("Delete", key=f"delete_{i}", type="secondary"):
-                backend_sid = session.get("backend_session_id") or session.get("session_id")
-                result = api.delete_session(backend_sid)
-                if result.get("success"):
+                backend_sid = session.get("backend_session_id")
+                # Local-only chats (no backend ID yet) are just removed in-memory
+                if backend_sid:
+                    result = api.delete_session(backend_sid)
+                    ok = result.get("success")
+                    err = result.get("error", "unknown error")
+                else:
+                    ok, err = True, None
+
+                if ok:
+                    sid = session["session_id"]
                     st.session_state.sessions = [
                         s for s in st.session_state.sessions
-                        if s["session_id"] != session["session_id"]
+                        if s["session_id"] != sid
                     ]
-                    if st.session_state.get("active_session_id") == session["session_id"]:
+                    if st.session_state.get("active_session_id") == sid:
                         st.session_state.active_session_id = None
+                        st.session_state.session_id = None
                         st.session_state.messages = []
                     st.rerun()
                 else:
-                    st.toast(f"Could not delete: {result.get('error', 'unknown error')}")
+                    st.toast(f"Could not delete: {err}")
 
 
 # ─── UPLOADS PAGE (Student view) ──────────────────────────────────
@@ -1988,20 +1999,13 @@ def render_courses_page():
 
                     if st.button(f"Join {code}", key=f"join_{code}", type="primary",
                                  use_container_width=True):
-                        result = api.add_course_member(code, user_email, "student")
+                        result = api.self_enrol(code)
                         if result.get("success"):
                             st.success(f"Enrolled in {code}!")
                             _refresh_course_options()
                             st.rerun()
                         else:
-                            err = result.get("error", "Enrolment failed.")
-                            if "403" in str(err) or "manage" in str(err).lower():
-                                st.warning(
-                                    f"Self-enrolment is not enabled for {code}. "
-                                    "Ask your lecturer or an admin to add you."
-                                )
-                            else:
-                                st.error(f"Could not join {code}: {err}")
+                            st.error(result.get("error", "Enrolment failed."))
 
     st.divider()
     st.info(
