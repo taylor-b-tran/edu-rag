@@ -356,18 +356,32 @@ def _seed_demo_auth_data() -> None:
                     """,
                     (course_code, course_name),
                 )
-            # Student and lecturer are enrolled in both demo courses, matching
-            # fixtures/sample_responses.json so behaviour doesn't change
-            # depending on which backend actually answered the login.
+            # The demo student and lecturer are members of both demo courses,
+            # matching fixtures/sample_responses.json so behaviour doesn't
+            # change depending on which backend actually answered the login.
+            #
+            # Only those accounts and only those courses (T8-05). This used to
+            # pair every student and lecturer with every course on every start,
+            # so a restart put anyone who had left a course back in it, gave each
+            # new account every course - inactive ones included - and made every
+            # lecturer a member of courses they do not teach. A demo account that
+            # leaves a demo course still gets it back at the next start, which
+            # keeps the demo in a known state.
             cur.execute(
                 """
                 INSERT INTO course_memberships (user_id, course_id, membership_role)
                 SELECT u.id, c.id, u.role
                   FROM users u
-                  CROSS JOIN courses c
-                 WHERE u.role IN ('student', 'lecturer')
+                  JOIN courses c ON c.course_code = ANY(%s)
+                 WHERE u.email = ANY(%s)
+                   AND u.role IN ('student', 'lecturer')
                 ON CONFLICT (user_id, course_id) DO NOTHING
-                """
+                """,
+                (
+                    [code for code, _name in _DEMO_COURSES],
+                    [email for _username, email, role, _password, _from_env in _DEMO_USERS
+                     if role in ("student", "lecturer")],
+                ),
             )
             # T8-04/T8-09: the demo courses were seeded with no owner, so no
             # lecturer could manage them and the per-course tuning screen was

@@ -518,8 +518,11 @@ class APIState:
             logger.warning("Could not refresh enrollments for %s (%s: %s).",
                            user_id, type(exc).__name__, exc)
             return None
+        # Walk copies: logins and token checks on other threads add to and drop
+        # from these dicts, and walking a dict while its size changes raises
+        # "dictionary changed size during iteration".
         for store in (self.access_tokens, self.refresh_tokens):
-            for payload in store.values():
+            for payload in list(store.values()):
                 if payload.get("user_id") == user_id:
                     payload["enrolled_courses"] = list(courses)
 

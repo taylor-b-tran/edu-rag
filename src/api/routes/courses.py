@@ -115,8 +115,109 @@ def list_courses():
         courses.append({
             **course,
             "can_manage": role == "admin" or (role == "lecturer" and code in owned),
+            # The check the query, document and settings routes make, so a Join
+            # or Joined label cannot disagree with what the next question gets
+            # (T8-05). Unlike looking for the code in the token's list, it also
+            # matches the fixture course ids a login without Postgres carries,
+            # and it is true for an admin, who may ask about any course.
+            "is_enrolled": _state().is_enrolled(user, code),
         })
     return jsonify({"courses": courses})
+
+
+# Students join and leave courses themselves (T8-05). Until now the only way
+# into a course was POST /courses/<code>/members, which only the course's manager
+# may call - and still only they may - so a student who had just signed up could
+# see every course and ask about none of them. Any active course is open to any
+# student, so there is nothing to approve.
+#
+# The routes are named like /auth/login and /auth/logout because each is
+# something the caller does to their own account. Both are safe to repeat, so a
+# double click or a retry after a timeout ends in the same place.
+
+def _require_student():
+    user, err = _require_auth()
+    if err:
+        return None, err
+    if user.get("role") != "student":
+        return None, (jsonify({
+            "error": "Only students join or leave courses themselves. Lecturers and "
+                     "admins are added to a course by the person who manages it.",
+        }), 403)
+    return user, None
+
+
+def _answer_once_the_token_shows_it(code: str, *, enrolled: bool, status: str,
+                                    http_status: int):
+    """Report the change only when the caller's own credentials carry it.
+
+    Every worker authorises a request from the stored token, not from the
+    membership table. refresh_enrolled_courses logs and carries on when it
+    cannot rewrite that token, which is right for a lecturer creating a course,
+    but here it would tell a student they had joined and then refuse their first
+    question. Reading the token back is what their next request will do.
+    """
+    seen = _state().validate_bearer(request.headers.get("Authorization"))
+    held = list((seen or {}).get("enrolled_courses") or [])
+    if seen is None or (code in held) != enrolled:
+        return jsonify({
+            "error": "Your courses could not be updated just now. Please try again.",
+        }), 503
+    return jsonify({"status": status, "course_code": code, "enrolled_courses": held}), http_status
+
+
+@courses_bp.post("/courses/<course_code>/join")
+def join_course(course_code: str):
+    """A student joins an active course."""
+    user, err = _require_student()
+    if err:
+        return err
+    db_err = _require_db()
+    if db_err:
+        return db_err
+
+    from src.api import db
+    course = db.get_course_by_code(course_code)
+    if course is None:
+        return jsonify({"error": f"course '{course_code}' not found"}), 404
+    if not course.get("is_active", True):
+        return jsonify({"error": f"course '{course_code}' is not open to join right now"}), 409
+
+    code = course["course_code"]
+    already = code in db.get_enrolled_course_codes(user["user_id"])
+    if not already:
+        db.add_course_membership(code, user["email"], "student")
+    _state().refresh_enrolled_courses(user["user_id"])
+    return _answer_once_the_token_shows_it(
+        code, enrolled=True,
+        status="already_enrolled" if already else "enrolled",
+        http_status=200 if already else 201,
+    )
+
+
+@courses_bp.post("/courses/<course_code>/leave")
+def leave_course(course_code: str):
+    """A student leaves a course, including one that has since closed."""
+    user, err = _require_student()
+    if err:
+        return err
+    db_err = _require_db()
+    if db_err:
+        return db_err
+
+    from src.api import db
+    course = db.get_course_by_code(course_code)
+    if course is None:
+        return jsonify({"error": f"course '{course_code}' not found"}), 404
+
+    code = course["course_code"]
+    removed = db.remove_course_membership(code, user["email"])
+    _state().refresh_enrolled_courses(user["user_id"])
+    return _answer_once_the_token_shows_it(
+        code, enrolled=False,
+        status="unenrolled" if removed else "not_enrolled",
+        http_status=200,
+    )
 
 
 @courses_bp.post("/courses")
