@@ -679,18 +679,22 @@ class PaediaAPIClient:
             return {"success": True, "error": None}
         return {"success": False, "error": "Course management is unavailable right now."}
 
-    def self_enrol(self, course_code: str) -> dict:
+    def join_course(self, course_code: str) -> dict:
         """
-        Let the currently authenticated user join a course as a student (T8-05).
+        Let the currently authenticated user join a course (T8-05).
 
-        Live API: POST /api/courses/<code>/enrol
+        Live API: POST /api/courses/<code>/join
+        Returns enrolled_courses list on success so the UI can update in-place.
         """
-        result = self._post(f"/api/courses/{course_code}/enrol", {})
+        result = self._post(f"/api/courses/{course_code}/join", {})
         if result and result.get("_api_error"):
-            return {"success": False, "error": result.get("error", "Enrolment failed.")}
+            return {"success": False, "error": result.get("error", "Enrolment failed."),
+                    "enrolled_courses": None}
         if result and result.get("status") == "enrolled":
-            return {"success": True, "error": None}
-        return {"success": False, "error": "Enrolment is unavailable right now."}
+            return {"success": True, "error": None,
+                    "enrolled_courses": result.get("enrolled_courses")}
+        return {"success": False, "error": "Enrolment is unavailable right now.",
+                "enrolled_courses": None}
 
     def remove_course_member(self, course_code: str, email: str) -> dict:
         """

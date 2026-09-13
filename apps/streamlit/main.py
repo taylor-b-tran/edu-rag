@@ -1428,14 +1428,17 @@ def render_history_page():
 
                 if ok:
                     sid = session["session_id"]
+                    was_active = st.session_state.get("active_session_id") == sid
                     st.session_state.sessions = [
                         s for s in st.session_state.sessions
                         if s["session_id"] != sid
                     ]
-                    if st.session_state.get("active_session_id") == sid:
-                        st.session_state.active_session_id = None
-                        st.session_state.session_id = None
-                        st.session_state.messages = []
+                    if was_active:
+                        remaining = st.session_state.sessions
+                        if remaining:
+                            switch_session(remaining[-1]["session_id"])
+                        else:
+                            create_new_session()
                     st.rerun()
                 else:
                     st.toast(f"Could not delete: {err}")
@@ -1924,7 +1927,6 @@ def render_courses_page():
 
     user = st.session_state.get("user") or {}
     role = user.get("role", "Student")
-    user_email = user.get("email", "")
     active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
     courses = _all_courses()
 
@@ -1999,10 +2001,12 @@ def render_courses_page():
 
                     if st.button(f"Join {code}", key=f"join_{code}", type="primary",
                                  use_container_width=True):
-                        result = api.self_enrol(code)
+                        result = api.join_course(code)
                         if result.get("success"):
-                            st.success(f"Enrolled in {code}!")
+                            if result.get("enrolled_courses") is not None:
+                                st.session_state.user["enrolled_courses"] = result["enrolled_courses"]
                             _refresh_course_options()
+                            st.success(f"Enrolled in {code}!")
                             st.rerun()
                         else:
                             st.error(result.get("error", "Enrolment failed."))

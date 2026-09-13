@@ -251,40 +251,6 @@ def add_member(course_code: str):
     }), 201
 
 
-@courses_bp.post("/courses/<course_code>/enrol")
-def self_enrol(course_code: str):
-    """T8-05 — Let an authenticated student join a course themselves.
-
-    Unlike add_member (which requires a manager), this only needs a valid
-    bearer token.  The caller is always enrolled as a student; lecturers
-    and admins who need a different membership role should use the manager
-    endpoint.
-    """
-    user, err = _require_auth()
-    if err:
-        return err
-    db_err = _require_db()
-    if db_err:
-        return db_err
-
-    from src.api import db
-    course = db.get_course_by_code(course_code)
-    if course is None:
-        return jsonify({"error": f"course '{course_code}' not found"}), 404
-    if not course.get("is_active", True):
-        return jsonify({"error": "This course is not accepting new enrolments."}), 409
-
-    email = user["email"]
-    db.add_course_membership(course_code, email, "student")
-    _state().refresh_enrolled_courses(user["user_id"])
-    return jsonify({
-        "status": "enrolled",
-        "email": email,
-        "course_code": course_code,
-        "membership_role": "student",
-    }), 201
-
-
 @courses_bp.delete("/courses/<course_code>/members/<email>")
 def remove_member(course_code: str, email: str):
     _, course, err = _require_course_manager(course_code)
