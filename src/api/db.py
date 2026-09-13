@@ -74,6 +74,23 @@ def connect() -> Iterator[psycopg.Connection]:
         raise
 
 
+def reset_connection_state() -> None:
+    """Make the next connect() a fresh probe: no open circuit, no old pool.
+
+    Only for a worker waiting for Postgres at start-up. The circuit breaker and
+    the pool's reconnect backoff keep request paths from hammering a database
+    that is down; a worker that cannot start without one has to keep probing.
+    """
+    global _POOL, _pg_last_failure
+    _pg_last_failure = 0.0
+    if _POOL is not None:
+        try:
+            _POOL.close(timeout=0)
+        except Exception:
+            pass
+        _POOL = None
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS uploaded_documents (
     document_id      TEXT PRIMARY KEY,
@@ -205,6 +222,25 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     expires_at        TIMESTAMPTZ NOT NULL
 );
 
+-- Sprint 9: the access token and the refresh token handed out together
+-- are one login, and need a shared id to say so. Without it, logout could only
+-- retire the credential it was given -- the access token -- and the refresh
+-- token beside it went on minting new access tokens for the session that had
+-- just been ended: old access token 401, refresh token 200 with a working
+-- new token.
+--
+-- Added as an ALTER for the same reason as courses.owner_id above: this file
+-- is replayed on every start and there is still no migration runner. Nullable
+-- legacy credentials cannot be paired safely; invalidate them below.
+ALTER TABLE access_tokens  ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT NULL;
+
+DELETE FROM access_tokens WHERE family_id IS NULL;
+DELETE FROM refresh_tokens WHERE family_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS access_tokens_family_idx  ON access_tokens(family_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_family_idx ON refresh_tokens(family_id);
+
 CREATE TABLE IF NOT EXISTS chat_sessions (
     session_id  TEXT PRIMARY KEY,
     user_id     TEXT,
@@ -225,6 +261,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_session_idx ON chat_messages(session_id);
 
+-- Empty metadata means unknown for legacy messages; never invent a backfill.
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS response_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- One row per request that counted toward the caller's rate limit. Old rows
 -- are pruned in check_and_record_rate() rather than by a cron job — simplest
 -- thing that works at class-sized traffic.
@@ -234,9 +273,9 @@ CREATE TABLE IF NOT EXISTS rate_limit_hits (
     hit_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+
 CREATE INDEX IF NOT EXISTS rate_limit_hits_key_idx ON rate_limit_hits (rate_key, hit_at);
 """
-
 # T9-05: thumbs up/down on an answer. One vote per (message, user) rather
 # than a log of every click, because the UI is a toggle, not a tally - a
 # student changing their mind should overwrite their earlier vote, not add
@@ -866,8 +905,10 @@ def _insert_token(table: str, token: str, payload: dict[str, Any],
             cur.execute(
                 f"""
                 INSERT INTO {table}
-                  (token, user_id, email, role, enrolled_courses, expires_at)
-                VALUES (%s, %s, %s, %s, %s, NOW() + %s * INTERVAL '1 second')
+                  (token, user_id, email, role, enrolled_courses, family_id,
+                   expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s,
+                        NOW() + %s * INTERVAL '1 second')
                 ON CONFLICT (token) DO NOTHING
                 """,
                 (
@@ -876,6 +917,7 @@ def _insert_token(table: str, token: str, payload: dict[str, Any],
                     payload.get("email"),
                     payload.get("role"),
                     json.dumps(payload.get("enrolled_courses", [])),
+                    payload.get("family_id"),
                     expires_in_seconds,
                 ),
             )
@@ -914,7 +956,8 @@ def _load_all_tokens(table: str) -> dict[str, dict[str, Any]]:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT token, user_id, email, role, enrolled_courses, issued_at, "
+                f"SELECT token, user_id, email, role, enrolled_courses, "
+                f"       family_id, issued_at, "
                 f"       EXTRACT(EPOCH FROM expires_at) AS expires_at "
                 f"FROM {table}"
             )
@@ -971,7 +1014,8 @@ def get_token(table: str, token: str) -> dict[str, Any] | None:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                SELECT user_id, email, role, enrolled_courses, issued_at,
+                SELECT user_id, email, role, enrolled_courses, family_id,
+                       issued_at,
                        EXTRACT(EPOCH FROM expires_at) AS expires_at
                   FROM {table}
                  WHERE token = %s
@@ -995,6 +1039,98 @@ def delete_token(table: str, token: str) -> None:
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(f"DELETE FROM {table} WHERE token = %s", (token,))
+
+
+def delete_token_family(family_id: str) -> int:
+    """Retire every credential issued under one login.
+
+    Both tables, one statement each, because a login is an access token and a
+    refresh token and ending it has to mean both. Returns how many rows went,
+    which is what lets the caller tell a real revocation from a token that had
+    no family and needs the single-token fallback.
+    """
+    removed = 0
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            _lock_token_family(cur, family_id)
+            for table in ("access_tokens", "refresh_tokens"):
+                cur.execute(f"DELETE FROM {table} WHERE family_id = %s", (family_id,))
+                removed += cur.rowcount or 0
+    return removed
+
+
+def _lock_token_family(cur, family_id: str) -> None:
+    # All rotation and revocation paths take this transaction-scoped lock.
+    # A refresh waiting behind logout rechecks its row after acquiring it.
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (family_id,))
+
+
+def _insert_pair(cur, access: str, refresh: str, payload: dict,
+                 access_ttl: int, refresh_ttl: int) -> None:
+    for table, token, ttl in (("access_tokens", access, access_ttl),
+                              ("refresh_tokens", refresh, refresh_ttl)):
+        cur.execute(
+            f"""INSERT INTO {table}
+                (token, user_id, email, role, enrolled_courses, family_id, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW() + %s * INTERVAL '1 second')""",
+            (token, str(payload["user_id"]), payload.get("email"), payload.get("role"),
+             json.dumps(payload.get("enrolled_courses", [])), payload["family_id"], ttl),
+        )
+
+
+def insert_token_pair(access: str, refresh: str, payload: dict,
+                      access_ttl: int, refresh_ttl: int) -> None:
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            _insert_pair(cur, access, refresh, payload, access_ttl, refresh_ttl)
+
+
+def rotate_token_pair(old_refresh: str, access: str, refresh: str, payload: dict,
+                      access_ttl: int, refresh_ttl: int) -> bool:
+    """Consume and replace while holding the same family lock as logout."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            _lock_token_family(cur, payload["family_id"])
+            cur.execute(
+                """DELETE FROM refresh_tokens
+                   WHERE token = %s AND family_id = %s AND expires_at > NOW()
+                   RETURNING token""", (old_refresh, payload["family_id"]),
+            )
+            if cur.fetchone() is None:
+                return False
+            _insert_pair(cur, access, refresh, payload, access_ttl, refresh_ttl)
+            return True
+
+
+def consume_refresh_token(token: str) -> dict | None:
+    """Atomic single-use consumption for callers which do not issue a new pair."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                """DELETE FROM refresh_tokens WHERE token = %s AND expires_at > NOW()
+                   RETURNING user_id, email, role, enrolled_courses, family_id,
+                   EXTRACT(EPOCH FROM expires_at) AS expires_at""", (token,),
+            )
+            return cur.fetchone()
+
+
+def revoke_login(access: str | None, refresh: str | None) -> None:
+    """Resolve either credential (including expired access) and revoke its family."""
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT family_id FROM access_tokens WHERE token = %s
+                   UNION SELECT family_id FROM refresh_tokens WHERE token = %s""",
+                (access, refresh),
+            )
+            families = sorted({r["family_id"] for r in cur.fetchall() if r["family_id"]})
+            for family in families:
+                _lock_token_family(cur, family)
+                for table in ("access_tokens", "refresh_tokens"):
+                    cur.execute(f"DELETE FROM {table} WHERE family_id = %s", (family,))
+            # Defensive cleanup for an unmigrated store; no credential is issued here.
+            cur.execute("DELETE FROM access_tokens WHERE token = %s", (access,))
+            cur.execute("DELETE FROM refresh_tokens WHERE token = %s", (refresh,))
 
 
 def load_all_access_tokens() -> dict[str, dict[str, Any]]:
@@ -1026,8 +1162,8 @@ def insert_chat_message(session_id: str, message: dict[str, Any]) -> None:
             cur.execute(
                 """
                 INSERT INTO chat_messages
-                  (message_id, session_id, question, answer, sources)
-                VALUES (%s, %s, %s, %s, %s)
+                  (message_id, session_id, question, answer, sources, response_metadata)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (message_id) DO NOTHING
                 """,
                 (
@@ -1036,8 +1172,11 @@ def insert_chat_message(session_id: str, message: dict[str, Any]) -> None:
                     message.get("question"),
                     message.get("answer"),
                     json.dumps(message.get("sources", [])),
+                    json.dumps(message.get("response_metadata", {})),
                 ),
             )
+            cur.execute("UPDATE chat_sessions SET updated_at = NOW() WHERE session_id = %s",
+                        (session_id,))
 
 
 def archive_chat_session(session_id: str) -> None:
@@ -1067,9 +1206,9 @@ def load_all_sessions() -> dict[str, dict[str, Any]]:
             session_rows = cur.fetchall()
             cur.execute(
                 """
-                SELECT message_id, session_id, question, answer, sources, created_at
+                SELECT message_id, session_id, question, answer, sources, response_metadata, created_at
                   FROM chat_messages
-                 ORDER BY created_at ASC
+                 ORDER BY created_at ASC, message_id ASC
                 """
             )
             message_rows = cur.fetchall()
@@ -1097,6 +1236,7 @@ def load_all_sessions() -> dict[str, dict[str, Any]]:
             "question": row.get("question", ""),
             "answer": row.get("answer", ""),
             "sources": row.get("sources") or [],
+            "response_metadata": row.get("response_metadata") or {},
             "created_at": row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
                 if row.get("created_at") else None,
         })
@@ -1135,10 +1275,10 @@ def get_chat_session(session_id: str, message_limit: int | None = None) -> dict[
             # session does not have to come back in full to read three turns.
             cur.execute(
                 """
-                SELECT message_id, question, answer, sources, created_at
+                SELECT message_id, question, answer, sources, response_metadata, created_at
                   FROM chat_messages
                  WHERE session_id = %s
-                 ORDER BY created_at DESC
+                 ORDER BY created_at DESC, message_id DESC
                  LIMIT %s
                 """,
                 (session_id, message_limit if message_limit else None),
@@ -1162,6 +1302,7 @@ def get_chat_session(session_id: str, message_limit: int | None = None) -> dict[
             "question": message_row.get("question", ""),
             "answer": message_row.get("answer", ""),
             "sources": message_row.get("sources") or [],
+            "response_metadata": message_row.get("response_metadata") or {},
             "created_at": message_row["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
                 if message_row.get("created_at") else None,
         })
@@ -1196,7 +1337,7 @@ def check_and_record_rate(rate_key: str, window_seconds: int, max_hits: int) -> 
                 (rate_key,),
             )
             return True
-
+        
 
 def upsert_message_feedback(message_id: str, user_id: str, rating: str) -> None:
     """Record or change this user's vote on this message. ON CONFLICT means a
@@ -1245,3 +1386,4 @@ def get_session_feedback(session_id: str, user_id: str) -> dict[str, str]:
             )
             rows = cur.fetchall()
     return {row["message_id"]: row["rating"] for row in rows}
+        
