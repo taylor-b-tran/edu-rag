@@ -549,6 +549,44 @@ class PaediaAPIClient:
             return {"success": True, "error": None}
         return {"success": False, "error": "Course management is unavailable right now."}
 
+    def join_course(self, course_code: str) -> dict:
+        """
+        Join a course as the signed-in student (T8-05).
+
+        Live API: POST /api/courses/<code>/join
+        Returns: { "success": bool, "status": str|None, "enrolled_courses": list|None, "error": str|None }
+        On success, enrolled_courses is every course the server now lets this
+        student ask about: store it on the session user so the course selector
+        offers the new course straight away. It is None when the change was not
+        confirmed; keep the list you have and re-read the courses instead.
+        """
+        return self._join_or_leave("join", course_code, {"enrolled", "already_enrolled"})
+
+    def leave_course(self, course_code: str) -> dict:
+        """
+        Leave a course as the signed-in student (T8-05).
+
+        Live API: POST /api/courses/<code>/leave
+        Returns the same shape as join_course.
+        """
+        return self._join_or_leave("leave", course_code, {"unenrolled", "not_enrolled"})
+
+    def _join_or_leave(self, action: str, course_code: str, confirmed: set) -> dict:
+        if self.config.use_fixtures:
+            return {"success": False, "status": None, "enrolled_courses": None,
+                    "error": "Joining or leaving a course needs the live system."}
+        # Sent once, like every write: after an uncertain outcome the caller
+        # re-reads the course list rather than repeating the request.
+        result = self._post(f"/api/courses/{course_code}/{action}", {})
+        if isinstance(result, dict) and not result.get("_api_error") and result.get("status") in confirmed:
+            return {"success": True, "status": result["status"],
+                    "enrolled_courses": list(result.get("enrolled_courses") or []), "error": None}
+        failure = result if isinstance(result, dict) else {}
+        return {"success": False, "status": None, "enrolled_courses": None,
+                "error": failure.get("message") or failure.get("error")
+                or "The change to your courses was not confirmed. Please retry.",
+                "status_code": failure.get("status_code")}
+
     # ─── Live configuration (T8-08 backend, T8-09 UI) ─────────────────
 
     def get_global_settings(self) -> dict:
