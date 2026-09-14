@@ -1,10 +1,8 @@
 """
 Paedia API Client — HTTP layer for Flask WebApplication (Module 4)
 
-Connects the Streamlit UI to the Flask REST API. When the API is
-unreachable (e.g. Task 2 not yet deployed), every method falls back
-to fixture data from sample_responses.json so the UI remains fully
-functional for Sprint demos.
+Connects the Streamlit UI to the Flask REST API. Sample data is used only
+when PAEDIA_USE_FIXTURES is explicitly enabled. Live failures remain errors.
 
 Endpoints (defined in Assessment 2, Section: WebApplication):
   POST /api/auth/login        → JWT + user profile
@@ -79,25 +77,26 @@ def _load_fixtures() -> Optional[dict]:
 
 # ─── API CLIENT ──────────────────────────────────────────────────────
 
-class PaediaAPIClient:
-    """
-    HTTP client for the Flask WebApplication REST API.
+class APIReadError(RuntimeError):
+    """A failed read must not masquerade as an empty collection."""
 
-    Design rationale:
-    - Every public method tries the live API first, then falls back to
-      fixture data if the API is unreachable or `use_fixtures` is True.
-    - The `_api_available` flag is set on the first successful request
-      and cached for the session to avoid repeated timeouts.
-    - JWT token is stored in-memory and attached to every request via
-      the Authorization header.
-    """
+    def __init__(self, endpoint: str, result: dict):
+        self.endpoint = endpoint
+        self.status_code = result.get("status_code")
+        self.error_type = result.get("error_type", "api_error")
+        super().__init__(result.get("message") or result.get("error") or "Could not load data. Please retry.")
+
+
+class PaediaAPIClient:
+    """Per-browser bearer credentials; explicit demo mode, recoverable live requests."""
 
     def __init__(self, config: Optional[APIConfig] = None):
         self.config = config or APIConfig()
         self._jwt_token: Optional[str] = None
         self._refresh_token: Optional[str] = None
         self._api_available: Optional[bool] = None  # None = not checked yet
-        self._fixtures = _load_fixtures()
+        self._fixtures = _load_fixtures() if self.config.use_fixtures else None
+        self._health_checked_at = 0.0
 
     # ── Internal helpers ──
 
@@ -109,140 +108,100 @@ class PaediaAPIClient:
         return h
 
     def _check_api(self) -> bool:
-        """Ping the API health endpoint to determine availability."""
-        if self._api_available is not None:
-            return self._api_available
+        """Short-lived health display cache; never gates real requests."""
         if not HAS_REQUESTS or self.config.use_fixtures:
-            self._api_available = False
             return False
+        now = time.monotonic()
+        if self._api_available is not None and now - self._health_checked_at < 5:
+            return self._api_available
         try:
-            resp = requests.get(
-                f"{self.config.base_url}/api/health",
-                timeout=3,
-            )
+            resp = requests.get(f"{self.config.base_url}/api/health", timeout=3)
             self._api_available = resp.status_code == 200
-        except Exception:
+        except requests.RequestException:
             self._api_available = False
-        logger.info("API availability: %s", self._api_available)
+        self._health_checked_at = now
         return self._api_available
 
-    def _post(
-        self,
-        endpoint: str,
-        payload: dict,
-        timeout: Optional[int] = None,
-        max_retries: Optional[int] = None,
-    ) -> Optional[dict]:
-        """Make a POST request to the Flask API. Returns None on failure."""
-        if not self._check_api():
+    @staticmethod
+    def _failure(message="Cannot reach the server. Please retry.", *, status_code=None,
+                 error_type="api_unavailable") -> dict:
+        return {"_api_error": True, "error": message, "message": message,
+                "status_code": status_code, "error_type": error_type}
+
+    def _request(self, method, endpoint, *, timeout=None, max_retries=0, **kwargs):
+        if self.config.use_fixtures:
             return None
-        url = f"{self.config.base_url}{endpoint}"
-        attempts = self.config.max_retries if max_retries is None else max_retries
-        request_timeout = timeout or self.config.timeout
-        for attempt in range(attempts + 1):
+        if not HAS_REQUESTS:
+            return self._failure()
+        for attempt in range(max_retries + 1):
             try:
-                resp = requests.post(
-                    url,
-                    json=payload,
-                    headers=self._headers(),
-                    timeout=request_timeout,
-                )
-                if resp.status_code == 401 and self._refresh_token:
-                    # Try token refresh once
-                    if self._refresh_jwt():
-                        resp = requests.post(
-                            url,
-                            json=payload,
-                            headers=self._headers(),
-                            timeout=request_timeout,
-                        )
+                headers = self._headers()
+                if "files" in kwargs:
+                    headers.pop("Content-Type", None)
+                send = getattr(requests, method.lower())
+                resp = send(f"{self.config.base_url}{endpoint}", headers=headers,
+                            timeout=timeout or self.config.timeout, **kwargs)
+                if resp.status_code == 401 and self._refresh_token and self._refresh_jwt():
+                    headers = self._headers()
+                    if "files" in kwargs:
+                        headers.pop("Content-Type", None)
+                    resp = send(f"{self.config.base_url}{endpoint}", headers=headers,
+                                timeout=timeout or self.config.timeout, **kwargs)
+                self._api_available = True
+                self._health_checked_at = 0.0  # a response is not proof of healthy retrieval
+                try:
+                    data = resp.json()
+                except ValueError:
+                    data = None
                 if resp.status_code >= 400:
-                    try:
-                        error = resp.json()
-                    except Exception:
-                        error = {"error": resp.text or resp.reason}
-                    error["_api_error"] = True
-                    error["status_code"] = resp.status_code
-                    return error
-                return resp.json()
-            except Exception as e:
-                logger.warning("API POST %s attempt %d failed: %s", endpoint, attempt + 1, e)
-                if attempt < attempts:
-                    time.sleep(0.5 * (attempt + 1))
-        return None
+                    labels = {401: "Your session has expired. Please sign in again.",
+                              403: "You do not have permission to access this resource.",
+                              404: "The requested item was not found.",
+                              429: "Too many requests. Please try again shortly."}
+                    message = labels.get(resp.status_code, "The server could not complete this request. Please retry.")
+                    if isinstance(data, dict):
+                        message = data.get("message") or data.get("error") or message
+                    return self._failure(message, status_code=resp.status_code,
+                                         error_type="api_http_error")
+                if not isinstance(data, (dict, list)):
+                    return self._failure("The server returned an invalid response. Please retry.",
+                                         error_type="api_invalid_response")
+                return data
+            except requests.Timeout:
+                result = self._failure("The request timed out. Its outcome could not be confirmed. Please check before retrying.",
+                                       error_type="api_timeout")
+            except requests.RequestException:
+                result = self._failure()
+            self._api_available = False
+            self._health_checked_at = time.monotonic()
+            if attempt < max_retries:
+                time.sleep(0.5 * (attempt + 1))
+        return result
 
-    def _patch(self, endpoint: str, payload: dict) -> Optional[dict]:
-        """Make a PATCH request to the Flask API. Returns None on failure."""
-        if not self._check_api() or not HAS_REQUESTS:
-            return None
-        try:
-            resp = requests.patch(
-                f"{self.config.base_url}{endpoint}",
-                json=payload,
-                headers=self._headers(),
-                timeout=self.config.timeout,
-            )
-            if resp.status_code >= 400:
-                try:
-                    error = resp.json()
-                except Exception:
-                    error = {"error": resp.text or resp.reason}
-                error["_api_error"] = True
-                error["status_code"] = resp.status_code
-                return error
-            return resp.json()
-        except Exception as e:
-            logger.warning("API PATCH %s failed: %s", endpoint, e)
-            return None
+    def _post(self, endpoint, payload, timeout=None, max_retries=None):
+        # Writes are not automatically repeated after an uncertain outcome.
+        return self._request("post", endpoint, json=payload, timeout=timeout,
+                             max_retries=0 if max_retries is None else max_retries)
 
-    def _delete(self, endpoint: str) -> Optional[dict]:
-        """Make a DELETE request to the Flask API. Returns None on failure."""
-        if not self._check_api() or not HAS_REQUESTS:
-            return None
-        try:
-            resp = requests.delete(
-                f"{self.config.base_url}{endpoint}",
-                headers=self._headers(),
-                timeout=self.config.timeout,
-            )
-            if resp.status_code >= 400:
-                try:
-                    error = resp.json()
-                except Exception:
-                    error = {"error": resp.text or resp.reason}
-                error["_api_error"] = True
-                error["status_code"] = resp.status_code
-                return error
-            return resp.json()
-        except Exception as e:
-            logger.warning("API DELETE %s failed: %s", endpoint, e)
-            return None
+    def _patch(self, endpoint, payload):
+        return self._request("patch", endpoint, json=payload)
 
-    def _get(self, endpoint: str, params: Optional[dict] = None) -> Optional[dict]:
-        """Make a GET request to the Flask API. Returns None on failure."""
-        if not self._check_api():
-            return None
-        url = f"{self.config.base_url}{endpoint}"
-        try:
-            resp = requests.get(
-                url,
-                params=params,
-                headers=self._headers(),
-                timeout=self.config.timeout,
-            )
-            if resp.status_code == 401 and self._refresh_token:
-                if self._refresh_jwt():
-                    resp = requests.get(
-                        url,
-                        params=params,
-                        headers=self._headers(),
-                        timeout=self.config.timeout,
-                    )
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            logger.warning("API GET %s failed: %s", endpoint, e)
-            return None
+    def _delete(self, endpoint):
+        return self._request("delete", endpoint)
+
+    def _get(self, endpoint, params=None):
+        return self._request("get", endpoint, params=params)
+
+    def _read_list(self, endpoint, key, params=None):
+        result = self._get(endpoint, params)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict) and not result.get("_api_error") and isinstance(result.get(key), list):
+            return result[key]
+        if self.config.use_fixtures:
+            return (self._fixtures or {}).get(key, [])
+        raise APIReadError(endpoint, result if isinstance(result, dict) and result.get("_api_error")
+                           else self._failure("Could not load data. Please retry.", error_type="api_invalid_response"))
 
     def _refresh_jwt(self) -> bool:
         """Attempt to refresh the JWT using the stored refresh token."""
@@ -273,7 +232,7 @@ class PaediaAPIClient:
     @property
     def mode_label(self) -> str:
         """Human-readable label for the current connection mode."""
-        return "Live API" if self.is_live else "Fixture Mode (demo)"
+        return "Fixture Mode (demo)" if self.config.use_fixtures else ("Live API" if self.is_live else "API unavailable")
 
     def login(self, email: str, password: str) -> dict:
         """
@@ -393,30 +352,19 @@ class PaediaAPIClient:
                 "confidence_score": 0.0,
                 "model_used": "api_error",
                 "token_count": 0,
-                "is_fallback": True,
-                "from_api": True,
-                "error_type": result.get("error"),
+                "is_fallback": False,
+                "from_api": bool(result.get("status_code")),
+                "error_type": result.get("error_type") or "api_error",
                 "error_message": message,
                 "status_code": result.get("status_code"),
             }
-        if api_live:
-            return {
-                "answer": "The live API did not return a response before the query timeout.",
-                "source_references": [],
-                "confidence": "Low",
-                "confidence_score": 0.0,
-                "model_used": "api_timeout",
-                "token_count": 0,
-                "is_fallback": True,
-                "from_api": True,
-                "error_type": "api_timeout",
-                "error_message": "The live API request timed out.",
-            }
+        if self.config.use_fixtures:
+            return self._fixture_query(query_text)
+        return {"answer": "The server returned no answer. Please retry.",
+                "error_type": "api_invalid_response", "error_message": "No answer was returned.",
+                "is_fallback": False, "from_api": False, "source_references": []}
 
-        # Fixture fallback
-        return self._fixture_query(query_text)
-
-    def clear_auth(self) -> None:
+    def clear_auth(self) -> bool:
         """Sign out: revoke the token on the server, then forget it locally.
 
         This used to drop the two local variables and nothing else, so the
@@ -427,21 +375,26 @@ class PaediaAPIClient:
         signing out cleared the screen, the cookie survived, the token still
         resolved to a user, and the next page load signed you straight back in.
 
-        Best effort on the network call. If revocation cannot be reached the
-        local state is still cleared, which is no worse than the old behaviour.
+        Keep credentials for a retry if the server cannot confirm revocation.
         """
-        if self._jwt_token and HAS_REQUESTS:
+        if self._jwt_token or self._refresh_token:
+            if not HAS_REQUESTS:
+                return False
             try:
-                requests.post(
+                response = requests.post(
                     f"{self.config.base_url}/api/auth/logout",
                     json={"refresh_token": self._refresh_token},
                     headers=self._headers(),
                     timeout=self.config.timeout,
                 )
+                if response.status_code != 200:
+                    return False
             except Exception as e:
                 logger.warning("Logout could not reach the API: %s", e)
+                return False
         self._jwt_token = None
         self._refresh_token = None
+        return True
 
     def _fixture_query(self, query_text: str) -> dict:
         """Match query against fixture responses."""
@@ -470,26 +423,16 @@ class PaediaAPIClient:
 
         Returns: { "success": bool, "document": dict, "job_id": str|None, "error": str|None }
         """
-        if self._check_api() and HAS_REQUESTS:
-            try:
-                resp = requests.post(
-                    f"{self.config.base_url}/api/upload",
-                    files={"file": (filename, file_bytes)},
-                    data={"course_id": course_id},
-                    headers={"Authorization": f"Bearer {self._jwt_token}"} if self._jwt_token else {},
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return {
-                    "success": True,
-                    "document": data.get("document", {}),
-                    "job_id": data.get("job_id"),
-                    "error": None
-                }
-            except Exception as e:
-                logger.warning("Document upload failed: %s", e)
-                return {"success": False, "document": {}, "job_id": None, "error": str(e)}
+        if not self.config.use_fixtures:
+            result = self._request("post", "/api/upload", files={"file": (filename, file_bytes)},
+                                   data={"course_id": course_id}, timeout=30)
+            if not isinstance(result, dict) or result.get("_api_error") or not result.get("document"):
+                result = result if isinstance(result, dict) else self._failure("Upload was not confirmed.")
+                return {"success": False, "document": {}, "job_id": None,
+                        "error": result.get("message") or "Upload was not confirmed.",
+                        "status_code": result.get("status_code")}
+            return {"success": True, "document": result["document"],
+                    "job_id": result.get("job_id"), "error": None}
 
         # Fixture fallback — return mock document record
         import uuid
@@ -505,60 +448,22 @@ class PaediaAPIClient:
         return {"success": True, "document": mock_doc, "job_id": None, "error": None}
 
     def delete_document(self, document_id: str) -> dict:
-        """
-        Delete a document.
-
-        Live API: DELETE /api/document/<id>
-        """
-        if self._check_api() and HAS_REQUESTS:
-            try:
-                resp = requests.delete(
-                    f"{self.config.base_url}/api/document/{document_id}",
-                    headers={"Authorization": f"Bearer {self._jwt_token}"} if self._jwt_token else {},
-                    timeout=15,
-                )
-                resp.raise_for_status()
-                return resp.json()
-            except Exception as e:
-                logger.warning("Document deletion failed: %s", e)
-                return {"success": False, "error": str(e)}
-        return {"status": "success", "message": "Document deleted."}
+        if self.config.use_fixtures:
+            return {"status": "success", "message": "Demo document deleted."}
+        result = self._delete(f"/api/document/{document_id}")
+        if not isinstance(result, dict) or result.get("_api_error"):
+            result = result if isinstance(result, dict) else self._failure("Deletion was not confirmed.")
+            return {"success": False, "error": result["message"], "status_code": result.get("status_code")}
+        return result
 
     def get_documents(self, course_id: Optional[str] = None) -> list:
-        """
-        List documents, optionally scoped by course_id.
-
-        Live API: GET /api/documents?course_id=<id>
-        Fixture fallback: return documents from sample_responses.json
-        """
-        params = {"course_id": course_id} if course_id else {}
-        result = self._get("/api/documents", params)
-        if result and isinstance(result, list):
-            return result
-        if result and "documents" in result:
-            return result["documents"]
-
-        # Fixture fallback
-        if self._fixtures:
-            docs = self._fixtures.get("documents", [])
-            if course_id:
-                docs = [d for d in docs if d.get("course_id") == course_id]
-            return docs
-        return []
+        docs = self._read_list("/api/documents", "documents", {"course_id": course_id} if course_id else {})
+        if self.config.use_fixtures and course_id:
+            return [d for d in docs if d.get("course_id") == course_id]
+        return docs
 
     def get_sessions(self, user_id: Optional[str] = None) -> list:
-        """
-        List chat sessions for the current user.
-
-        Live API: GET /api/sessions
-        Fixture fallback: return empty list (sessions are transient)
-        """
-        result = self._get("/api/sessions", {"user_id": user_id} if user_id else None)
-        if result and isinstance(result, list):
-            return result
-        if result and "sessions" in result:
-            return result["sessions"]
-        return []
+        return self._read_list("/api/sessions", "sessions", {"user_id": user_id} if user_id else None)
 
     def delete_session(self, session_id: str) -> dict:
         """
@@ -574,51 +479,25 @@ class PaediaAPIClient:
         return {"success": False, "error": "Could not delete session."}
 
     def get_indexing_status(self, job_id: str) -> dict:
-        """
-        Poll indexing job status for a document.
-
-        Live API: GET /api/indexing-jobs/<job_id>
-        Fixture fallback: return { "status": "indexed", "progress_percent": 100 }
-        """
+        if self.config.use_fixtures:
+            return {"status": "completed", "progress_percent": 100}
         result = self._get(f"/api/indexing-jobs/{job_id}")
-        if result:
-            return result
-        return {"status": "indexed", "progress_percent": 100}
+        if not isinstance(result, dict) or result.get("_api_error") or "status" not in result:
+            result = result if isinstance(result, dict) else {}
+            return {"status": "unavailable", "error": result.get("message") or "Indexing status is unavailable.",
+                    "status_code": result.get("status_code")}
+        return result
 
     def get_admin_stats(self) -> dict:
-        """
-        Live admin/metrics snapshot.
-
-        Live API: GET /api/admin/stats
-        Fixture fallback: zeros so the UI still renders.
-        """
         result = self._get("/api/admin/stats")
-        if result and isinstance(result, dict):
-            return result
-        return {
-            "documents": 0, "uploaded_documents": 0, "indexing_jobs": 0,
-            "sessions": 0, "queries_total": 0, "users": 0, "courses": 0,
-            "mode": "fixture", "warmup": {"status": "unknown"},
-            "_offline": True,
-        }
+        if isinstance(result, dict) and not result.get("_api_error"):
+            # The endpoint's users are fixture counts; sessions/queries are
+            # worker-local. Do not present these as system-wide live metrics.
+            return {**result, "users": None, "sessions": None, "queries_total": None}
+        return {"_offline": True, "error": (result if isinstance(result, dict) else {}).get("message") or "Metrics unavailable in demo mode."}
 
     def get_courses(self, user_id: Optional[str] = None) -> list:
-        """
-        List courses the user is enrolled in.
-
-        Live API: GET /api/courses
-        Fixture fallback: return courses from sample_responses.json
-        """
-        result = self._get("/api/courses", {"user_id": user_id} if user_id else None)
-        if result and isinstance(result, list):
-            return result
-        if result and "courses" in result:
-            return result["courses"]
-
-        # Fixture fallback
-        if self._fixtures:
-            return self._fixtures.get("courses", [])
-        return []
+        return self._read_list("/api/courses", "courses", {"user_id": user_id} if user_id else None)
 
     def create_course(self, course_code: str, course_name: str,
                        description: Optional[str] = None) -> dict:
@@ -658,10 +537,7 @@ class PaediaAPIClient:
 
         Live API: GET /api/courses/<code>/members
         """
-        result = self._get(f"/api/courses/{course_code}/members")
-        if result and "members" in result:
-            return result["members"]
-        return []
+        return self._read_list(f"/api/courses/{course_code}/members", "members")
 
     def add_course_member(self, course_code: str, email: str, membership_role: str) -> dict:
         """
@@ -679,23 +555,6 @@ class PaediaAPIClient:
             return {"success": True, "error": None}
         return {"success": False, "error": "Course management is unavailable right now."}
 
-    def join_course(self, course_code: str) -> dict:
-        """
-        Let the currently authenticated user join a course (T8-05).
-
-        Live API: POST /api/courses/<code>/join
-        Returns enrolled_courses list on success so the UI can update in-place.
-        """
-        result = self._post(f"/api/courses/{course_code}/join", {})
-        if result and result.get("_api_error"):
-            return {"success": False, "error": result.get("error", "Enrolment failed."),
-                    "enrolled_courses": None}
-        if result and result.get("status") == "enrolled":
-            return {"success": True, "error": None,
-                    "enrolled_courses": result.get("enrolled_courses")}
-        return {"success": False, "error": "Enrolment is unavailable right now.",
-                "enrolled_courses": None}
-
     def remove_course_member(self, course_code: str, email: str) -> dict:
         """
         Unenroll a user from a course (admin only).
@@ -709,6 +568,44 @@ class PaediaAPIClient:
             return {"success": True, "error": None}
         return {"success": False, "error": "Course management is unavailable right now."}
 
+    def join_course(self, course_code: str) -> dict:
+        """
+        Join a course as the signed-in student (T8-05).
+
+        Live API: POST /api/courses/<code>/join
+        Returns: { "success": bool, "status": str|None, "enrolled_courses": list|None, "error": str|None }
+        On success, enrolled_courses is every course the server now lets this
+        student ask about: store it on the session user so the course selector
+        offers the new course straight away. It is None when the change was not
+        confirmed; keep the list you have and re-read the courses instead.
+        """
+        return self._join_or_leave("join", course_code, {"enrolled", "already_enrolled"})
+
+    def leave_course(self, course_code: str) -> dict:
+        """
+        Leave a course as the signed-in student (T8-05).
+
+        Live API: POST /api/courses/<code>/leave
+        Returns the same shape as join_course.
+        """
+        return self._join_or_leave("leave", course_code, {"unenrolled", "not_enrolled"})
+
+    def _join_or_leave(self, action: str, course_code: str, confirmed: set) -> dict:
+        if self.config.use_fixtures:
+            return {"success": False, "status": None, "enrolled_courses": None,
+                    "error": "Joining or leaving a course needs the live system."}
+        # Sent once, like every write: after an uncertain outcome the caller
+        # re-reads the course list rather than repeating the request.
+        result = self._post(f"/api/courses/{course_code}/{action}", {})
+        if isinstance(result, dict) and not result.get("_api_error") and result.get("status") in confirmed:
+            return {"success": True, "status": result["status"],
+                    "enrolled_courses": list(result.get("enrolled_courses") or []), "error": None}
+        failure = result if isinstance(result, dict) else {}
+        return {"success": False, "status": None, "enrolled_courses": None,
+                "error": failure.get("message") or failure.get("error")
+                or "The change to your courses was not confirmed. Please retry.",
+                "status_code": failure.get("status_code")}
+
     # ─── Live configuration (T8-08 backend, T8-09 UI) ─────────────────
 
     def get_global_settings(self) -> dict:
@@ -720,7 +617,7 @@ class PaediaAPIClient:
         Fixture fallback: empty, so the UI shows defaults and disables editing.
         """
         result = self._get("/api/settings")
-        if result and isinstance(result, dict):
+        if result and isinstance(result, dict) and not result.get("_api_error"):
             return result
         return {"scope": "global", "settings": {}, "_unavailable": True}
 
@@ -733,7 +630,7 @@ class PaediaAPIClient:
         which is what the page needs to show provenance honestly.
         """
         result = self._get(f"/api/courses/{course_code}/settings")
-        if result and isinstance(result, dict):
+        if result and isinstance(result, dict) and not result.get("_api_error"):
             return result
         return {"scope": course_code, "settings": {}, "effective": {}, "_unavailable": True}
 
@@ -794,7 +691,7 @@ class PaediaAPIClient:
         is really on.
         """
         result = self._get("/api/health")
-        if result and isinstance(result, dict):
+        if result and isinstance(result, dict) and not result.get("_api_error"):
             return result
         return {"status": "unknown", "rag_available": False,
                 "embedder": {"status": "unknown"}, "_unavailable": True}
@@ -813,4 +710,6 @@ class PaediaAPIClient:
         result = self._get("/api/auth/me")
         if result and isinstance(result, dict) and result.get("email"):
             return {"success": True, "user": result}
+        if not self.config.use_fixtures and not (isinstance(result, dict) and result.get("status_code") == 401):
+            raise APIReadError("/api/auth/me", result if isinstance(result, dict) else self._failure())
         return {"success": False, "user": None}

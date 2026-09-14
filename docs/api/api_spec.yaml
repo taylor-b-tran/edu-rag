@@ -75,10 +75,14 @@ paths:
       tags: [Authentication]
       summary: Logout current user
       operationId: logoutUser
-      description: Revokes the current refresh token or active server-side session.
+      description: >-
+        Revokes the login family identified by the bearer access token or optional
+        refresh_token JSON body, including tokens issued by concurrent rotation.
+        Other logins remain active. An expired access token can still identify
+        its family for logout. Missing or already revoked credentials are idempotent.
       responses:
         "200":
-          description: Logout successful.
+          description: Login family revoked, or credentials already absent.
           content:
             application/json:
               schema:
@@ -88,6 +92,8 @@ paths:
                   value:
                     status: success
                     message: Logged out successfully.
+        "503":
+          description: Session store unavailable; revocation was not confirmed and must be retried.
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -974,6 +980,12 @@ components:
         status:
           type: string
           enum: [ok, degraded]
+        database:
+          type: string
+          enum: [connected, unavailable]
+          description: >-
+            Whether the worker that answered is backed by PostgreSQL. A worker
+            without it refuses logins and persists nothing, yet still returns 200.
         services:
           type: object
           required: [postgres, chromadb, ollama]

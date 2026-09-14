@@ -52,10 +52,7 @@ def _require_auth():
 
 def _find_document(doc_id: str):
     """Locate a document by either of the two id fields it is stored under."""
-    for document in _state().list_documents():
-        if document.get("document_id") == doc_id or document.get("id") == doc_id:
-            return document
-    return None
+    return _state().find_document(doc_id)
 
 
 def _document_course(document: dict) -> str:
@@ -258,11 +255,8 @@ def delete_document(doc_id: str):
     if user.get("role") not in _LECTURER_ROLES:
         return jsonify({"error": "Lecturer or admin role required."}), 403
 
-    target_doc = None
-    for doc in _state().uploaded_documents:
-        if doc.get("document_id") == doc_id or doc.get("id") == doc_id:
-            target_doc = doc
-            break
+    # Uploads only, not fixtures -- see APIState.find_uploaded_document.
+    target_doc = _state().find_uploaded_document(doc_id)
 
     # Holding the lecturer role is not enough. Without this, any lecturer could
     # delete any other lecturer's material in any course - and deletion also
@@ -300,14 +294,16 @@ def get_indexing_job(job_id: str):
     user, err = _require_auth()
     if err:
         return err
-    job = _state().indexing_jobs.get(job_id)
+    job = _state().get_indexing_job(job_id)
     if not job:
         return jsonify({"error": "indexing job not found"}), 404
 
     # A job carries the document it belongs to, and its `error` field can quote
     # server-side file paths, so it is gated on the same enrollment test.
     document = _find_document(job.get("document_id") or "")
-    if document is not None and not _may_see_document(user, document):
+    if document is None:
+        return jsonify({"error": "indexing job not found"}), 404
+    if not _may_see_document(user, document):
         logger.warning("User %s requested indexing job %s for unauthorised course %s",
                        user.get("user_id"), job_id, _document_course(document))
         return jsonify({"error": "indexing job not found"}), 404

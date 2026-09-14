@@ -153,6 +153,48 @@ function Test-RecoveryHttp {
     }
 }
 
+function Get-RecoveryHttpBody {
+    param([string]$Uri)
+    $response = $null
+    try {
+        $request = [System.Net.HttpWebRequest]::Create($Uri)
+        $request.Proxy = $null
+        $request.Timeout = 5000
+        $request.ReadWriteTimeout = 5000
+        $request.AllowAutoRedirect = $false
+        # A fresh connection each read gives the other gunicorn worker a chance
+        # to answer; keep-alive would pin every read to the same one.
+        $request.KeepAlive = $false
+        $response = $request.GetResponse()
+        if ([int]$response.StatusCode -ne 200) { return $null }
+        $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+        try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } catch { return $null } finally {
+        if ($null -ne $response) { $response.Dispose() }
+    }
+}
+
+function Test-RecoveryHealthBody {
+    param([string]$Body)
+    # /api/health answers 200 from a worker that started before Postgres and
+    # refuses every login. Only an explicit "connected" counts as usable.
+    if (-not $Body) { return $false }
+    try { $health = $Body | ConvertFrom-Json } catch { return $false }
+    if ($null -eq $health -or $null -eq $health.PSObject.Properties['database']) { return $false }
+    return $health.database -eq 'connected'
+}
+
+function Test-RecoveryApiDatabase {
+    param([string]$Uri, [int]$Reads = 6)
+    # Several fresh connections make it likely, not certain, that both workers
+    # answer. With its start-up timeout set the API will not run without
+    # Postgres at all; this confirms that setting is actually in effect.
+    for ($i = 0; $i -lt $Reads; $i++) {
+        if (-not (Test-RecoveryHealthBody (Get-RecoveryHttpBody $Uri))) { return $false }
+    }
+    return $true
+}
+
 function Get-RecoveryHealthUri {
     param([string]$Service, $Expected)
     $path = if ($Service -eq 'api') { '/api/health' } else { '/_stcore/health' }
@@ -185,22 +227,29 @@ function Invoke-RecoveryServices {
     foreach ($service in @('api', 'streamlit')) {
         $container = $containers[$service]
         $uri = Get-RecoveryHealthUri $service $Expected[$service]
+        # Reachable is not usable for the API: a worker that started before
+        # Postgres answers health with 200 and refuses every login.
+        $needsDatabase = ($service -eq 'api')
         $repair = ($container.State -ne 'running' -or
             -not (Test-RecoveryPorts $container.ConfiguredPorts $Expected[$service]) -or
             -not (Test-RecoveryPorts $container.Ports $Expected[$service]))
         if ($CheckOnly) {
             if ($repair -or -not (Test-RecoveryHttp $uri)) { throw "$service failed actual binding/reachability checks." }
+            if ($needsDatabase -and -not (Test-RecoveryApiDatabase $uri)) { throw 'api is reachable but reports no database connection.' }
         } else {
             if (-not $repair) {
                 # Give a normally starting container time to become reachable.
-                # If Docker reports bindings but its host proxy is broken,
-                # one controlled recreation is still needed.
+                # If Docker reports bindings but its host proxy is broken, or the
+                # API came up without its database, one controlled recreation is
+                # still needed.
                 try {
-                    Wait-RecoveryCondition { Test-RecoveryHttp $uri } $HealthTimeoutSeconds $PollSeconds "$service health"
+                    Wait-RecoveryCondition {
+                        (Test-RecoveryHttp $uri) -and (-not $needsDatabase -or (Test-RecoveryApiDatabase $uri))
+                    } $HealthTimeoutSeconds $PollSeconds "$service health"
                 } catch { $repair = $true }
             }
             if ($repair) {
-                Write-RecoveryLog $Context "Recreating $service to restore its Tailscale binding."
+                Write-RecoveryLog $Context "Recreating $service to restore its binding and health."
                 $null = Invoke-RecoveryDocker $Context ($Context.ComposeArguments + @('up', '-d', '--no-deps', '--no-build', '--pull', 'never', '--force-recreate', $service)) 120
             }
             Wait-RecoveryCondition {
@@ -208,10 +257,12 @@ function Invoke-RecoveryServices {
                 $current.State -eq 'running' -and
                     (Test-RecoveryPorts $current.ConfiguredPorts $Expected[$service]) -and
                     (Test-RecoveryPorts $current.Ports $Expected[$service]) -and
-                    (Test-RecoveryHttp $uri)
+                    (Test-RecoveryHttp $uri) -and
+                    (-not $needsDatabase -or (Test-RecoveryApiDatabase $uri))
             } $HealthTimeoutSeconds $PollSeconds "$service actual binding and host HTTP health"
         }
-        Write-RecoveryLog $Context "$service reachable: $uri (actual binding verified)."
+        $verified = if ($needsDatabase) { 'actual binding verified; database connected' } else { 'actual binding verified' }
+        Write-RecoveryLog $Context "$service reachable: $uri ($verified)."
     }
 }
 
