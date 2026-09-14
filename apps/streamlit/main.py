@@ -15,7 +15,7 @@ Sprint 6 updates:
 
 Sprint 8 updates:
   T8-05: Student course enrollment — My Courses page now shows available courses
-         with a Join button that calls POST /api/courses/<code>/members.
+         with a Join button that calls POST /api/courses/<code>/join.
   T8-06: Signup UI — tabbed Sign In / Sign Up on login page, POST /api/auth/signup,
          auto-login on success, inline validation and API error display.
   T8-07: Removed hardcoded content — suggested prompts are now course-aware and
@@ -2087,6 +2087,12 @@ def render_courses_page():
                             if result.get("enrolled_courses") is not None:
                                 st.session_state.user["enrolled_courses"] = result["enrolled_courses"]
                             _refresh_course_options()
+                            # The first course a student joins becomes the
+                            # active one. Without this the chat page falls back
+                            # to DEFAULT_COURSE_ID, and every question in a
+                            # course they did not join comes back refused.
+                            if not st.session_state.get("course_id"):
+                                st.session_state.course_id = code
                             st.success(f"Enrolled in {code}!")
                             st.rerun()
                         else:
