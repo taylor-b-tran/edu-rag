@@ -49,7 +49,7 @@ def test_reload_keeps_selected_conversation_course_order_and_metadata(ui):
     assert state.messages[1]["source_references"] == [{"page": 1}]
     assert "confidence" not in state.messages[3] and "is_fallback" not in state.messages[3]
     ui.get_ai_response("Continue the explanation")
-    ui.api.query.assert_called_once_with("Continue the explanation", course_id="CSCI203", session_id="b")
+    ui.api.query.assert_called_once_with("Continue the explanation", course_id="CSCI203", session_id="b", response_style=None)
 
 @pytest.mark.parametrize("sid", ["foreign", "archived", "unenrolled"])
 def test_url_hint_cannot_restore_unowned_archived_or_unenrolled_chat(ui, sid):

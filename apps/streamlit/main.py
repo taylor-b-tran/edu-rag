@@ -14,10 +14,18 @@ Sprint 6 updates:
        course-scoped chat header. All backed by real /api/courses endpoints.
 
 Sprint 8 updates:
+  T8-05: Student course enrollment — My Courses page now shows available courses
+         with a Join button that calls POST /api/courses/<code>/join.
   T8-06: Signup UI — tabbed Sign In / Sign Up on login page, POST /api/auth/signup,
          auto-login on success, inline validation and API error display.
   T8-07: Removed hardcoded content — suggested prompts are now course-aware and
          built from indexed documents, UOW-specific placeholders replaced.
+  T8-11: Response-style picker — dropdown in chat header fetches styles from
+         GET /api/response-styles and passes selection to POST /api/query.
+
+Sprint 9 updates:
+  T9-13: Session history — Delete button calls DELETE /api/sessions/<id>,
+         Continue loads the correct session (not just the most recent).
 """
 
 import streamlit as st
@@ -548,6 +556,8 @@ def init_session_state():
         "pending_send": False,
         "query_state": None,
         "upload_progress": None,
+        "response_style": None,
+        "response_styles_cache": None,
         "history_load_pending": False,
     }
     for key, val in defaults.items():
@@ -695,7 +705,9 @@ def get_ai_response(query: str) -> dict:
     """Query the RAG pipeline via the API client."""
     course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
     session_id = st.session_state.get("session_id")
-    return api.query(query, course_id=course_id, session_id=session_id)
+    style = st.session_state.get("response_style")
+    return api.query(query, course_id=course_id, session_id=session_id,
+                     response_style=style)
 
 
 def get_suggested_prompts() -> list:
@@ -1168,7 +1180,7 @@ def render_chat_page():
 
     active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
 
-    col1, col2, col3, col4 = st.columns([5, 3, 2, 2])
+    col1, col2, col3, col4, col5 = st.columns([4, 3, 2, 2, 2])
     with col1:
         st.markdown("### 💬 Ask your course materials")
         st.caption(f"Querying **{_course_display_label(active_cid)}**")
@@ -1211,6 +1223,31 @@ def render_chat_page():
             on_change=_change_chat_course,
         )
     with col4:
+        # T8-11: Response-style picker — fetched from GET /api/response-styles.
+        # "Auto" (empty string) means "use whatever the course is configured
+        # for" and is the default so students don't accidentally override a
+        # lecturer's setting just by loading the page.
+        if st.session_state.get("response_styles_cache") is None:
+            st.session_state.response_styles_cache = api.get_response_styles()
+        styles_data = st.session_state.response_styles_cache
+        style_list = styles_data.get("styles") or []
+        if style_list:
+            options = [""] + [s["id"] for s in style_list]
+            labels = {"": "Auto (course default)"}
+            labels.update({s["id"]: s.get("label", s["id"]) for s in style_list})
+            current = st.session_state.get("response_style") or ""
+            if current not in options:
+                current = ""
+            chosen = st.selectbox(
+                "Style",
+                options,
+                index=options.index(current),
+                format_func=lambda sid: labels.get(sid, sid),
+                label_visibility="collapsed",
+                key="response_style_select",
+            )
+            st.session_state.response_style = chosen or None
+    with col5:
         if st.button("🗑️ Clear chat", use_container_width=True):
             st.session_state.messages = []
             st.session_state.session_id = None
@@ -1452,14 +1489,36 @@ def render_history_page():
         c1, c2, c3 = st.columns([6, 1, 1])
         with c2:
             if st.button("Continue", key=f"continue_{i}"):
-                if session["session_id"].startswith("demo-"):
-                    pass  # Demo sessions can't be resumed
-                else:
-                    switch_session(session["session_id"])
+                switch_session(session["session_id"])
                 st.session_state.current_page = "chat"
                 st.rerun()
         with c3:
-            st.button("Delete", key=f"delete_{i}", type="secondary")
+            if st.button("Delete", key=f"delete_{i}", type="secondary"):
+                backend_sid = session.get("backend_session_id")
+                # Local-only chats (no backend ID yet) are just removed in-memory
+                if backend_sid:
+                    result = api.delete_session(backend_sid)
+                    ok = result.get("success")
+                    err = result.get("error", "unknown error")
+                else:
+                    ok, err = True, None
+
+                if ok:
+                    sid = session["session_id"]
+                    was_active = st.session_state.get("active_session_id") == sid
+                    st.session_state.sessions = [
+                        s for s in st.session_state.sessions
+                        if s["session_id"] != sid
+                    ]
+                    if was_active:
+                        remaining = st.session_state.sessions
+                        if remaining:
+                            switch_session(remaining[-1]["session_id"])
+                        else:
+                            create_new_session()
+                    st.rerun()
+                else:
+                    st.toast(f"Could not delete: {err}")
 
 
 # ─── UPLOADS PAGE (Student view) ──────────────────────────────────
@@ -1941,7 +2000,9 @@ def render_settings_page():
 # ─── ADMIN DASHBOARD (Admin only) ──────────────────────────────────
 
 def render_courses_page():
-    """T05 — Card-based course browser, backed by real /api/courses data."""
+    """T05 — Card-based course browser, backed by real /api/courses data.
+    T8-05 — Students can now see all available courses and join unenrolled ones.
+    """
     st.markdown("### 📚 My Courses")
     st.caption("Select a course to scope your Q&A queries, uploads, and document retrieval.")
 
@@ -1954,60 +2015,88 @@ def render_courses_page():
         st.info("No courses available — the backend may be offline.")
         return
 
-    # Filter to enrolled courses for students, show all for admins
-    user_options = set(_course_options_for_user(user))
-    visible = [c for c in courses if c.get("course_code") in user_options]
+    enrolled_codes = set(_course_options_for_user(user))
+    enrolled = [c for c in courses if c.get("course_code") in enrolled_codes]
+    available = [c for c in courses if c.get("course_code") not in enrolled_codes
+                 and c.get("is_active", True)]
 
-    # T8-07: this used to fall back to showing every course to anyone enrolled
-    # in nothing. The card's only action is "Switch to X", which changes which
-    # course the UI queries but does not enrol anybody -- so the button invited
-    # a new student into a course whose every question then returned 403,
-    # rendered in the chat as though the assistant had said it. Saying plainly
-    # that there is nothing yet is worse-looking and more honest, and it stops
-    # being the empty case at all once T8-05 adds a Join action to these cards.
-    if not visible:
-        st.info(
-            "You are not enrolled in any course yet, so there is nothing to show here. "
-            "Ask your lecturer to add you, or an admin to enrol you."
-        )
-        if role == "Admin":
-            st.caption("Admins see every course; this list being empty means none exist.")
-        return
+    # ── Enrolled courses ──
+    if enrolled:
+        st.markdown("#### Your Courses")
+        cols = st.columns(2, gap="medium")
+        for idx, course in enumerate(enrolled):
+            code = course.get("course_code", "?")
+            is_active = code == active_cid
+            with cols[idx % 2]:
+                border_style = "border-left: 4px solid #0D9488;" if is_active else "border-left: 4px solid #E2E8F0;"
+                bg = "#F0FDFA" if is_active else "#FFFFFF"
+                with st.container(border=True):
+                    st.markdown(
+                        f"<div style='{border_style} padding-left: 12px; background: {bg}; border-radius: 4px;'>"
+                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{'✅ ' if is_active else ''}{code}</span><br/>"
+                        f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
+                        f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    members = api.get_course_members(code) if role == "Admin" else []
+                    docs = api.get_documents(code)
+                    stats_parts = [f"📄 {len(docs)} docs"]
+                    if members:
+                        stats_parts.append(f"👥 {len(members)} members")
+                    active_label = "🟢 Active" if course.get("is_active", True) else "⚪ Inactive"
+                    stats_parts.append(active_label)
+                    st.caption(" · ".join(stats_parts))
 
-    cols = st.columns(2, gap="medium")
-    for idx, course in enumerate(visible):
-        code = course.get("course_code", "?")
-        is_active = code == active_cid
-        with cols[idx % 2]:
-            border_style = "border-left: 4px solid #0D9488;" if is_active else "border-left: 4px solid #E2E8F0;"
-            bg = "#F0FDFA" if is_active else "#FFFFFF"
-            with st.container(border=True):
-                st.markdown(
-                    f"<div style='{border_style} padding-left: 12px; background: {bg}; border-radius: 4px;'>"
-                    f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{'✅ ' if is_active else ''}{code}</span><br/>"
-                    f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
-                    f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                # Course stats from API
-                members = api.get_course_members(code) if role == "Admin" else []
-                docs = api.get_documents(code)
-                stats_parts = [f"📄 {len(docs)} docs"]
-                if members:
-                    stats_parts.append(f"👥 {len(members)} members")
-                active_label = "🟢 Active" if course.get("is_active", True) else "⚪ Inactive"
-                stats_parts.append(active_label)
-                st.caption(" · ".join(stats_parts))
+                    if is_active:
+                        st.button("✓ Active Course", key=f"sel_{code}", type="primary",
+                                  use_container_width=True, disabled=True)
+                    else:
+                        if st.button(f"Switch to {code}", key=f"sel_{code}", use_container_width=True):
+                            st.session_state.course_id = code
+                            st.session_state.selected_course_id = code
+                            st.rerun()
+    else:
+        st.info("You are not enrolled in any course yet.")
 
-                if is_active:
-                    st.button("✓ Active Course", key=f"sel_{code}", type="primary",
-                              use_container_width=True, disabled=True)
-                else:
-                    if st.button(f"Switch to {code}", key=f"sel_{code}", use_container_width=True):
-                        st.session_state.course_id = code
-                        st.session_state.selected_course_id = code
-                        st.rerun()
+    # ── Available courses to join (T8-05) ──
+    if available:
+        st.divider()
+        st.markdown("#### Available Courses")
+        st.caption("Join a course to start asking questions about its materials.")
+        cols2 = st.columns(2, gap="medium")
+        for idx, course in enumerate(available):
+            code = course.get("course_code", "?")
+            with cols2[idx % 2]:
+                with st.container(border=True):
+                    st.markdown(
+                        f"<div style='border-left: 4px solid #D4A843; padding-left: 12px; border-radius: 4px;'>"
+                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{code}</span><br/>"
+                        f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
+                        f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    docs = api.get_documents(code)
+                    st.caption(f"📄 {len(docs)} docs · 🟢 Active")
+
+                    if st.button(f"Join {code}", key=f"join_{code}", type="primary",
+                                 use_container_width=True):
+                        result = api.join_course(code)
+                        if result.get("success"):
+                            if result.get("enrolled_courses") is not None:
+                                st.session_state.user["enrolled_courses"] = result["enrolled_courses"]
+                            _refresh_course_options()
+                            # The first course a student joins becomes the
+                            # active one. Without this the chat page falls back
+                            # to DEFAULT_COURSE_ID, and every question in a
+                            # course they did not join comes back refused.
+                            if not st.session_state.get("course_id"):
+                                st.session_state.course_id = code
+                            st.success(f"Enrolled in {code}!")
+                            st.rerun()
+                        else:
+                            st.error(result.get("error", "Enrolment failed."))
 
     st.divider()
     st.info(

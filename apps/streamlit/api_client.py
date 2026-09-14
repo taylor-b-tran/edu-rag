@@ -311,11 +311,12 @@ class PaediaAPIClient:
         ) if result else "Cannot reach the server. Try again in a moment."
         return {"success": False, "user": {}, "jwt_token": None, "error": error_msg}
 
-    def query(self, query_text: str, course_id: str, session_id: Optional[str] = None) -> dict:
+    def query(self, query_text: str, course_id: str, session_id: Optional[str] = None,
+              response_style: Optional[str] = None) -> dict:
         """
         Submit a RAG query.
 
-        Live API: POST /api/query { query, course_id, session_id }
+        Live API: POST /api/query { query, course_id, session_id, response_style }
         Fixture fallback: match against responses in sample_responses.json
 
         Returns: {
@@ -329,11 +330,16 @@ class PaediaAPIClient:
         }
         """
         # Try live API
-        result = self._post("/api/query", {
+        api_live = self._check_api()
+        payload = {
             "query": query_text,
             "course_id": course_id,
             "session_id": session_id,
-        }, timeout=self.config.query_timeout, max_retries=0)
+        }
+        if response_style:
+            payload["response_style"] = response_style
+        result = self._post("/api/query", payload,
+                            timeout=self.config.query_timeout, max_retries=0)
         if result and "answer" in result:
             result["from_api"] = True
             return result
@@ -458,6 +464,19 @@ class PaediaAPIClient:
 
     def get_sessions(self, user_id: Optional[str] = None) -> list:
         return self._read_list("/api/sessions", "sessions", {"user_id": user_id} if user_id else None)
+
+    def delete_session(self, session_id: str) -> dict:
+        """
+        Archive / delete a chat session.
+
+        Live API: DELETE /api/sessions/<session_id>
+        """
+        result = self._delete(f"/api/sessions/{session_id}")
+        if result and result.get("_api_error"):
+            return {"success": False, "error": result.get("error", "Delete failed.")}
+        if result and result.get("status") == "success":
+            return {"success": True, "error": None}
+        return {"success": False, "error": "Could not delete session."}
 
     def get_indexing_status(self, job_id: str) -> dict:
         if self.config.use_fixtures:
