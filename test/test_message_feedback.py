@@ -147,10 +147,17 @@ def test_a_vote_is_written_through_to_postgres_when_available(client, monkeypatc
     assert written == {"message_id": "m1", "user_id": USER["user_id"], "rating": "down"}
 
 
-def test_a_failed_write_still_returns_success_from_the_in_memory_copy(client, monkeypatch):
-    """Same best-effort-persistence choice as record_session_message: a
-    Postgres hiccup costs the next restart's copy of this one vote, not the
-    click the student just made."""
+def test_a_failed_write_is_reported_rather_than_reported_as_saved(client, monkeypatch):
+    """This was best-effort persistence on purpose, on the reasoning that a
+    Postgres hiccup would cost "the next restart's copy of this one vote, not
+    the click the student just made".
+
+    That premise does not hold: get_session_feedback prefers Postgres whenever
+    it is reachable, so a vote that failed to write is gone at the next read,
+    not at the next restart -- the student's own page reload is enough. They
+    were shown a saved vote that no longer existed, and never told. So the
+    in-memory write is rolled back and the caller gets a 503 it can retry.
+    """
     from src.api import db
 
     monkeypatch.setattr(type(client.state), "db_available", property(lambda self: True))
@@ -160,6 +167,47 @@ def test_a_failed_write_still_returns_success_from_the_in_memory_copy(client, mo
         raise RuntimeError("postgres is away")
 
     monkeypatch.setattr(db, "upsert_message_feedback", boom)
+    resp = client.put(FEEDBACK_URL, json={"rating": "up"}, headers=AUTH)
+    assert resp.status_code == 503
+    assert USER["user_id"] not in client.state.message_feedback.get("m1", {})
+
+
+def test_a_failed_write_does_not_wipe_the_vote_that_was_already_there(client, monkeypatch):
+    """Rolling back must restore what was there, not clear it."""
+    from src.api import db
+
+    monkeypatch.setattr(type(client.state), "db_available", property(lambda self: True))
+    monkeypatch.setattr(client.state, "_db_available", True)
+    client.state.message_feedback.setdefault("m1", {})[USER["user_id"]] = "up"
+
+    def boom(message_id, user_id, rating):
+        raise RuntimeError("postgres is away")
+
+    monkeypatch.setattr(db, "upsert_message_feedback", boom)
+    assert client.put(FEEDBACK_URL, json={"rating": "down"}, headers=AUTH).status_code == 503
+    assert client.state.message_feedback["m1"][USER["user_id"]] == "up"
+
+
+def test_a_failed_clear_is_reported_and_the_vote_stays_visible(client, monkeypatch):
+    from src.api import db
+
+    monkeypatch.setattr(type(client.state), "db_available", property(lambda self: True))
+    monkeypatch.setattr(client.state, "_db_available", True)
+    client.state.message_feedback.setdefault("m1", {})[USER["user_id"]] = "up"
+
+    def boom(message_id, user_id):
+        raise RuntimeError("postgres is away")
+
+    monkeypatch.setattr(db, "delete_message_feedback", boom)
+    assert client.delete(FEEDBACK_URL, headers=AUTH).status_code == 503
+    assert client.state.message_feedback["m1"][USER["user_id"]] == "up"
+
+
+def test_without_a_database_the_in_memory_write_is_the_whole_truth(client, monkeypatch):
+    """No Postgres behind it means nothing can contradict the dictionary, so
+    the vote really is saved and 200 is honest."""
+    monkeypatch.setattr(type(client.state), "db_available", property(lambda self: False))
+    monkeypatch.setattr(client.state, "_db_available", False)
     resp = client.put(FEEDBACK_URL, json={"rating": "up"}, headers=AUTH)
     assert resp.status_code == 200
     assert client.state.message_feedback["m1"][USER["user_id"]] == "up"

@@ -5,7 +5,7 @@ import os
 import uuid as _uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -245,6 +245,62 @@ def get_document(doc_id: str):
                        user.get("user_id"), doc_id, _document_course(document))
         return jsonify({"error": "document not found"}), 404
     return jsonify(document)
+
+
+@documents_bp.get("/document/<doc_id>/file")
+def get_document_file(doc_id: str):
+    """Serve the original file, read-only, to anyone enrolled in its course.
+
+    A student could previously see a list of the course materials and open
+    none of them, which left that screen with nothing to do. Reading is all
+    this grants: no route here writes a file, and uploading still requires the
+    lecturer role.
+
+    Authorisation is the same `_may_see_document` test the metadata route
+    uses, and a refusal is a 404 for the same reason: a 403 would confirm the
+    id is real and let someone walk the id space to learn what other courses
+    hold.
+    """
+    user, err = _require_auth()
+    if err:
+        return err
+    document = _find_document(doc_id)
+    if document is None or not _may_see_document(user, document):
+        if document is not None:
+            logger.warning("User %s requested the file of document %s from unauthorised course %s",
+                           user.get("user_id"), doc_id, _document_course(document))
+        return jsonify({"error": "document not found"}), 404
+
+    stored_name = document.get("filename") or ""
+    if not stored_name:
+        return jsonify({"error": "document has no stored file"}), 404
+
+    # The name comes out of the database, so it is not automatically safe to
+    # join onto a path. Resolve it and insist the result is still inside the
+    # upload directory, which stops "../" and absolute paths from reaching
+    # anything else on the host.
+    upload_dir = _upload_dir().resolve()
+    try:
+        file_path = (upload_dir / stored_name).resolve()
+        file_path.relative_to(upload_dir)
+    except (ValueError, OSError):
+        logger.warning("Rejected document path outside the upload directory: %r", stored_name)
+        return jsonify({"error": "document not found"}), 404
+
+    if not file_path.is_file():
+        # Seeded chunks have no file behind them, and a row can outlive its
+        # upload. Say so plainly instead of serving an empty response.
+        return jsonify({
+            "error": "file unavailable",
+            "message": "This document is listed but its file is not on the server.",
+        }), 404
+
+    logger.info("User %s opened document %s (%s)", user.get("user_id"), doc_id, stored_name)
+    return send_file(
+        file_path,
+        as_attachment=False,
+        download_name=document.get("original_filename") or stored_name,
+    )
 
 
 @documents_bp.delete("/document/<doc_id>")

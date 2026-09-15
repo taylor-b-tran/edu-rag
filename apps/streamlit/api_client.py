@@ -456,6 +456,63 @@ class PaediaAPIClient:
             return {"success": False, "error": result["message"], "status_code": result.get("status_code")}
         return result
 
+    def download_document(self, document_id: str) -> dict:
+        """The original file, for reading.
+
+        Returns {"success", "content", "error", "status_code"} rather than bare
+        bytes. The caller has to tell "the file is missing" apart from "your
+        session expired" and "the service is unreachable", and a bare None
+        cannot: every one of them would be reported to the reader as a missing
+        file, which is both wrong and unactionable.
+
+        Binary, so it cannot go through `_request()` -- that parses JSON -- but
+        it follows the same policy: one 401 retry behind a token refresh, and
+        the same wording for the statuses a reader can act on.
+        """
+        if self.config.use_fixtures:
+            return self._download_failure("Opening a document needs the live system.")
+        if not HAS_REQUESTS:
+            return self._download_failure("The API client is unavailable.")
+
+        url = f"{self.config.base_url}/api/document/{document_id}/file"
+        try:
+            response = requests.get(url, headers=self._headers(),
+                                    timeout=self.config.timeout)
+            if response.status_code == 401 and self._refresh_token and self._refresh_jwt():
+                response = requests.get(url, headers=self._headers(),
+                                        timeout=self.config.timeout)
+        except requests.Timeout:
+            return self._download_failure(
+                "The request timed out before the file arrived. Please retry.")
+        except requests.RequestException:
+            return self._download_failure(
+                "Could not reach the server. Please check the connection and retry.")
+
+        if response.status_code == 200:
+            return {"success": True, "content": response.content,
+                    "error": None, "status_code": 200}
+
+        labels = {
+            401: "Your session has expired. Please sign in again.",
+            403: "You do not have permission to open this document.",
+            404: "This document is listed but its file is not on the server.",
+            429: "Too many requests. Please try again shortly.",
+        }
+        message = labels.get(response.status_code,
+                             "The server could not return this file. Please retry.")
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                message = body.get("message") or message
+        except ValueError:
+            pass
+        return self._download_failure(message, status_code=response.status_code)
+
+    @staticmethod
+    def _download_failure(message: str, status_code: Optional[int] = None) -> dict:
+        return {"success": False, "content": None,
+                "error": message, "status_code": status_code}
+
     def get_documents(self, course_id: Optional[str] = None) -> list:
         docs = self._read_list("/api/documents", "documents", {"course_id": course_id} if course_id else {})
         if self.config.use_fixtures and course_id:
@@ -517,6 +574,22 @@ class PaediaAPIClient:
         if result and "course" in result:
             return {"success": True, "course": result["course"], "error": None}
         return {"success": False, "course": {}, "error": "Course management is unavailable right now."}
+
+    def reactivate_course(self, course_code: str) -> dict:
+        """Bring a deactivated course back.
+
+        Live API: PATCH /api/courses/<code> with is_active true. The route has
+        accepted this since T8-04; nothing in the client reached it, which made
+        deactivation a one-way door from the admin screen.
+        """
+        if self.config.use_fixtures:
+            return {"success": False, "error": "Reactivating a course needs the live system."}
+        result = self._patch(f"/api/courses/{course_code}", {"is_active": True})
+        if result is None:
+            return {"success": False, "error": "Courses are unavailable right now."}
+        if result.get("_api_error"):
+            return {"success": False, "error": result.get("message") or result.get("error")}
+        return {"success": True, "error": None, "course": result.get("course", {})}
 
     def deactivate_course(self, course_code: str) -> dict:
         """

@@ -46,6 +46,40 @@ _CHOICE = {
 }
 _STRING = {"ollama_model"}
 
+# The models we have actually run against this corpus on the host, so the admin
+# screen can offer a choice instead of a free-text box nobody can verify. This
+# is a menu, not a whitelist: validation below still accepts any name, because
+# the admin may have pulled something new that this list has not caught up with.
+KNOWN_MODELS = [
+    {
+        "name": "gemma4:12b",
+        "vram_gb": 11,
+        "note": "Current default, chosen for staying close to the retrieved "
+                "sources and citing only the chunks it used.",
+    },
+    {
+        "name": "qwen3.5:9b",
+        "vram_gb": 6,
+        "note": "Faster and more detailed, but tends to pad an answer with "
+                "retrieved material that is only loosely related.",
+    },
+    {
+        "name": "qwen3:14b",
+        "vram_gb": 11,
+        "note": "Previous default. Kept so a change can be compared against it.",
+    },
+    {
+        "name": "qwen2.5:7b",
+        "vram_gb": 5,
+        "note": "For 8 GB-class cards, where a 12B model would offload to RAM.",
+    },
+    {
+        "name": "llama3.2",
+        "vram_gb": 3,
+        "note": "CPU-only fallback for a machine with no usable GPU.",
+    },
+]
+
 # Anything that changes which weights are resident, or that applies to every
 # course at once, stays with the admin.
 COURSE_SCOPED = {"top_k", "similarity_threshold", "response_style", "prompt_strategy"}
@@ -163,7 +197,15 @@ def read_global():
     db_err = _require_db()
     if db_err:
         return db_err
-    return jsonify({"scope": GLOBAL_SCOPE, "settings": _stored(GLOBAL_SCOPE)})
+    return jsonify({
+        "scope": GLOBAL_SCOPE,
+        "settings": _stored(GLOBAL_SCOPE),
+        "known_models": KNOWN_MODELS,
+        # What a question would actually be answered with right now. Without
+        # this the admin screen had to guess, and guessed the first catalogue
+        # entry, which is only right on a host that happens to run it.
+        "effective_model": effective_settings().get("ollama_model"),
+    })
 
 
 @settings_bp.patch("/settings")

@@ -316,7 +316,7 @@ button[data-testid="stBaseButton-primary"]:hover {
 .model-unknown { background: #F1F5F9; color: #475569; }
 
 /* ── Status badges ── */
-.status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .badge-indexed { background: #D1FAE5; color: #065F46; }
 .badge-processing { background: #FEF3C7; color: #92400E; }
 .badge-failed { background: #FEE2E2; color: #991B1B; }
@@ -725,6 +725,11 @@ def get_suggested_prompts() -> list:
         return st.session_state["_cached_prompts"]
 
     docs = api.get_documents(course_id)
+    # Only a document that holds chunks can actually be summarised. Naming the
+    # first row regardless put "Summarise RAG_Pipeline_Overview" on the landing
+    # screen for a document with no chunks anywhere in the vector store, so the
+    # answer came from unrelated material and nothing said so.
+    docs = [d for d in docs if (d.get("chunks") or 0) > 0]
     # Use original_filename (T8-28: uploads store under a generated name)
     doc_names = [
         (d.get("original_filename") or d.get("filename") or d.get("name") or "")
@@ -970,7 +975,7 @@ def render_sidebar():
         if role in ("Lecturer", "Admin"):
             pages["doc_manager"] = ("📁", "Document Manager")
         else:
-            pages["uploads"] = ("📁", "My Uploads")
+            pages["uploads"] = ("📚", "Course Materials")
         if role in ("Lecturer", "Admin"):
             pages["settings"] = ("⚙️", "Tuning")
         if role == "Admin":
@@ -1034,7 +1039,9 @@ def render_sidebar():
 
         st.divider()
         docs_count = len(docs)
-        indexed = sum(1 for d in docs if str(d.get("status")).lower() in ("indexed", "completed"))
+        # Counted through _document_status so the sidebar cannot say "7 indexed"
+        # while the Document Manager shows one of them as holding no chunks.
+        indexed = _document_indexed_count(docs)
         api_icon = "🟢" if api.is_live else "🟡"
         # T8-07: this line used to end with a flat "Semantic search ON", printed
         # whether or not it was. If the embedder fails to load the backend falls
@@ -1187,10 +1194,7 @@ def render_chat_page():
     with col2:
         current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
         live_docs = api.get_documents(current_course)
-        indexed_live = sum(
-            1 for d in live_docs
-            if str(d.get("status") or d.get("indexing_status") or "").lower() in ("indexed", "completed")
-        )
+        indexed_live = _document_indexed_count(live_docs)
         # T8-07: this said "ollama/llama3" whenever the API was unreachable,
         # which stopped being true in Sprint 8 -- the host runs qwen3:14b. Every
         # answer already reports the model that produced it, so the badge shows
@@ -1312,11 +1316,18 @@ def render_chat_page():
                     # otherwise put working script into every reader's page.
                     # Bold and code spans are re-applied afterwards so the
                     # intended formatting still renders.
-                    answer_html = _html.escape(msg["content"]).replace("\n", "<br>")
+                    is_fallback = msg.get("is_fallback", False)
+                    # The pipeline prefixes a fallback answer with this same
+                    # sentence, so rendering the banner on top of it showed the
+                    # reader the warning twice. The banner is the better of the
+                    # two -- it is styled and it cannot be mistaken for the
+                    # model's own words -- so the prefix comes off here.
+                    body = _strip_fallback_prefix(msg["content"]) if is_fallback else msg["content"]
+
+                    answer_html = _html.escape(body).replace("\n", "<br>")
                     answer_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', answer_html)
                     answer_html = re.sub(r'`([^`]+)`', r'<code>\1</code>', answer_html)
 
-                    is_fallback = msg.get("is_fallback", False)
                     fallback_html = ""
                     if is_fallback:
                         fallback_html = '<div class="fallback-label">⚠️ Based on general knowledge — not verified against course materials</div>'
@@ -1325,7 +1336,11 @@ def render_chat_page():
                     sources_html = ""
                     if msg.get("source_references"):
                         sources_html = '<div class="source-label">📄 Retrieved from:</div>'
-                        for src in msg["source_references"]:
+                        # Numbered, because the answer cites [S1], [S2]... and an
+                        # unnumbered list gives the reader nothing to match them
+                        # against. The pipeline renumbers the markers to these
+                        # very positions, so chip n is always marker [Sn].
+                        for position, src in enumerate(msg["source_references"], 1):
                             # Filenames, sections and collection names come from
                             # uploaded material, so they are attacker-chosen in
                             # the same way the answer text is.
@@ -1341,7 +1356,7 @@ def render_chat_page():
                             sim_pct = int((src.get("similarity") or 0) * 100)
                             sources_html += (
                                 f'<span class="source-chip">'
-                                f'📄 {filename} · p.{page_number}'
+                                f'<strong>[S{position}]</strong> {filename} · p.{page_number}'
                                 f'{section_str} · {sim_pct}%{collection_str}'
                                 f'</span>'
                             )
@@ -1444,12 +1459,17 @@ def render_history_page():
         # Was hardcoded to ["All courses", "CSIT321", "CSIT214", "ISIT312"];
         # ISIT312 is not a real course on this instance.
         _user = st.session_state.get("user") or {}
-        st.selectbox("Course", ["All courses"] + _course_options_for_user(_user),
-                     label_visibility="collapsed")
+        course_filter = st.selectbox(
+            "Course", ["All courses"] + _course_options_for_user(_user),
+            key="history_course", label_visibility="collapsed")
     with col2:
-        st.selectbox("Period", ["Last 7 days", "Last 30 days", "All time"], label_visibility="collapsed")
+        period_filter = st.selectbox(
+            "Period", ["Last 7 days", "Last 30 days", "All time"],
+            key="history_period", label_visibility="collapsed")
     with col3:
-        st.text_input("Search", placeholder="🔍 Search conversations...", label_visibility="collapsed")
+        search_text = st.text_input(
+            "Search", placeholder="🔍 Search conversations...",
+            key="history_search", label_visibility="collapsed")
 
     st.divider()
 
@@ -1457,10 +1477,22 @@ def render_history_page():
     real_sessions = st.session_state.get("sessions", [])
     # Four invented conversations used to be merged in here unconditionally,
     # so every user saw the same fake history on their own account (T8-07).
-    all_sessions = real_sessions
+    # All three controls above used to be rendered with their return values
+    # discarded, so "Last 7 days" listed conversations from weeks earlier and a
+    # nonsense search term still returned every session.
+    all_sessions = _filter_sessions(real_sessions, course_filter, period_filter, search_text)
     accent_colors = ["#0D9488", "#1B2A4A", "#D4A843", "#0D9488", "#64748B"]
 
-    for i, session in enumerate(all_sessions[:8]):
+    if not all_sessions:
+        st.info("No conversations match these filters." if real_sessions
+                else "No conversations yet.")
+
+    # Older conversations used to be unreachable: the loop stopped at eight and
+    # nothing offered the rest.
+    shown = int(st.session_state.get("history_shown", _HISTORY_PAGE))
+    visible = all_sessions[:shown]
+
+    for i, session in enumerate(visible):
         title = session.get("title", "Untitled")
         course = session.get("course_id", "CSIT214")
         created = session.get("created_at", "—")
@@ -1520,12 +1552,24 @@ def render_history_page():
                 else:
                     st.toast(f"Could not delete: {err}")
 
+    if all_sessions:
+        st.caption(f"Showing {len(visible)} of {len(all_sessions)} conversations.")
+    if len(all_sessions) > len(visible):
+        if st.button(f"Show {min(_HISTORY_PAGE, len(all_sessions) - len(visible))} more",
+                     key="history_show_more"):
+            st.session_state.history_shown = len(visible) + _HISTORY_PAGE
+            st.rerun()
+
 
 # ─── UPLOADS PAGE (Student view) ──────────────────────────────────
 
 def render_uploads_page():
-    st.markdown("### 📁 My Uploads")
-    st.caption("Read-only — ask your lecturer to add course materials.")
+    # Called "My Uploads" until it was pointed out that a student uploads
+    # nothing here, and could not open anything either, which left the screen
+    # with no reason to exist.
+    st.markdown("### 📚 Course Materials")
+    st.caption("Everything your lecturer has added for this course. Open any of "
+               "them to read; only a lecturer can add or remove them.")
     _render_document_table(student_view=True)
 
 
@@ -1656,6 +1700,56 @@ def _run_real_upload_and_indexing(f, course_id):
             time.sleep(1.0)
 
 
+def _document_table_ratio(student_view: bool):
+    """Column shares for the document table.
+
+    Status and Actions used to take a `1` share each. Below roughly 1200px that
+    left the Status cell too narrow for the word "Indexed" -- it wrapped to one
+    character per line and drove the row to 83px -- and the Actions cell too
+    narrow for its buttons, which then overflowed their own container.
+    """
+    # ..., Open for everyone, then Delete for a lecturer.
+    return [3.5, 1, 1, 2, 2, 1.2] + ([1.2] if not student_view else [])
+
+
+def _document_indexed_count(docs) -> int:
+    """How many documents are actually usable in an answer.
+
+    One rule, used by the table, the summary line, the sidebar and the chat
+    header. They each had their own before, so the same course could be
+    reported as 7 indexed in one place and 6 in another.
+    """
+    return sum(1 for d in (docs or []) if _document_status(d)[0] == "indexed")
+
+
+def _document_status(doc):
+    """(label, badge class, tooltip) for one document.
+
+    A row whose `status` column says "indexed" while it holds no chunks is not
+    indexed in any sense the reader cares about: it can never be retrieved or
+    cited. Reporting it as ready is how a document sat in the corpus for months
+    looking healthy while contributing nothing to a single answer.
+    """
+    raw = str(doc.get("status") or doc.get("indexing_status") or "pending").lower()
+    chunks = doc.get("chunks") or 0
+
+    if raw in ("indexed", "completed"):
+        if chunks:
+            # "recorded" rather than "in the vector store": this reads the count
+            # stored with the document, not ChromaDB itself.
+            return "indexed", "badge-indexed", f"{chunks} chunks recorded"
+        if chunks is None:
+            return ("no chunks", "badge-failed",
+                    "No chunk count recorded, so it cannot be cited. Re-upload it.")
+        return ("no chunks", "badge-failed",
+                "Marked indexed but holds no chunks, so it can never be cited. Re-upload it.")
+    if raw == "processing":
+        return "processing", "badge-processing", "Indexing is still running"
+    if raw == "pending":
+        return "pending", "badge-pending", "Queued for indexing"
+    return raw, "badge-failed", f"Indexing status: {raw}"
+
+
 def _document_totals(docs) -> tuple[int, int]:
     """Counts for the Document Manager summary line.
 
@@ -1665,8 +1759,9 @@ def _document_totals(docs) -> tuple[int, int]:
     the whole page down, so one bad upload hid every good one. `file_size_bytes`
     just above already had this right.
     """
-    indexed = sum(1 for d in docs
-                  if str(d.get("status")).lower() in ("indexed", "completed"))
+    # Counted the same way the badge decides, so the summary line cannot say
+    # "5 indexed" while one row on screen reads "Not indexed".
+    indexed = _document_indexed_count(docs)
     total_chunks = sum((d.get("chunks") or 0) for d in docs)
     return indexed, total_chunks
 
@@ -1676,12 +1771,15 @@ def _render_document_table(student_view: bool = False):
     course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
     docs = api.get_documents(course_id)
 
-    headers = ["File Name", "Type", "Size", "Status", "Uploaded"]
+    headers = ["File Name", "Type", "Size", "Status", "Uploaded", "Open"]
     if not student_view:
-        headers.append("Actions")
-    cols = st.columns([4, 1, 1, 1, 2] + ([1] if not student_view else []))
+        headers.append("Remove")
+    cols = st.columns(_document_table_ratio(student_view))
     for col, header in zip(cols, headers):
-        col.markdown(f"**{header}**")
+        # A header that breaks mid-word ("Stat us", "Typ e") reads as a glitch.
+        col.markdown(
+            f"<strong style='white-space: nowrap;'>{header}</strong>",
+            unsafe_allow_html=True)
     st.markdown("<hr style='margin: 4px 0; border: none; border-top: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
 
     for doc in docs:
@@ -1695,28 +1793,75 @@ def _render_document_table(student_view: bool = False):
         size_bytes = doc.get("file_size_bytes") or doc.get("size_bytes") or 0
         doc_size = f"{size_bytes / (1024*1024):.1f} MB" if size_bytes else "—"
 
-        status = str(doc.get("status") or "pending").lower()
-        badge_class = "badge-indexed" if status in ("indexed", "completed") else ("badge-processing" if status == "processing" else "badge-failed")
+        status, badge_class, status_note = _document_status(doc)
 
         uploaded_at = doc.get("uploaded_at") or doc.get("uploaded") or "—"
         doc_uploaded = uploaded_at.split("T")[0] if "T" in uploaded_at else uploaded_at
 
-        cols = st.columns([4, 1, 1, 1, 2] + ([1] if not student_view else []))
+        cols = st.columns(_document_table_ratio(student_view))
         cols[0].markdown(f"📄 {doc_name}")
         cols[1].markdown(f"<span style='color: #475569;'>{doc_type}</span>", unsafe_allow_html=True)
         cols[2].markdown(f"<span style='color: #475569;'>{doc_size}</span>", unsafe_allow_html=True)
-        cols[3].markdown(f"<span class='status-badge {badge_class}'>{status.capitalize()}</span>", unsafe_allow_html=True)
+        cols[3].markdown(
+            f"<span class='status-badge {badge_class}' title='{_html.escape(status_note)}'>"
+            f"{status.capitalize()}</span>", unsafe_allow_html=True)
         cols[4].markdown(f"<span style='color: #475569;'>{doc_uploaded}</span>", unsafe_allow_html=True)
+        # Reading the original file. Fetched only when asked for: some of these
+        # run to 11 MB, and pulling every one on every rerun to keep a download
+        # control primed would make the page unusable.
+        if st.session_state.get("doc_open") == doc_id:
+            result = api.download_document(doc_id)
+            if result.get("success"):
+                cols[5].download_button(
+                    "⬇️", data=result["content"], file_name=doc_name,
+                    key=f"dl_{doc_id}", help=f"Save {doc_name}")
+            else:
+                # Say which of the several reasons it was. Reporting an expired
+                # session as a missing file sends the reader after the wrong
+                # problem, and there is nothing they can do about a file that is
+                # supposedly gone.
+                st.warning(f"{doc_name}: {result.get('error')}")
+                st.session_state.doc_open = None
+        elif cols[5].button("📄", key=f"open_{doc_id}", help=f"Open {doc_name}"):
+            st.session_state.doc_open = doc_id
+            st.rerun()
+
         if not student_view:
-            c1, c2 = cols[5].columns(2)
-            c1.button("🔄", key=f"retry_{doc_id}")
-            if c2.button("🗑️", key=f"delmgr_{doc_id}"):
-                api.delete_document(doc_id)
+            # The retry button that used to sit here called nothing -- its
+            # return value was discarded, and there is no re-index route to
+            # call anyway. A control that cannot work is worse than no control,
+            # so re-indexing means re-uploading the file until that route
+            # exists. Deleting is now confirmed, and its result is checked:
+            # a failed delete used to look exactly like a successful one.
+            if st.session_state.get("confirm_doc_delete") == doc_id:
+                st.warning(f"Delete {doc_name}? This removes it and its chunks for everyone.")
+                yes_col, no_col = cols[6].columns(2)
+                if yes_col.button("✓", key=f"deldoc_yes_{doc_id}", help="Confirm delete"):
+                    result = api.delete_document(doc_id)
+                    st.session_state.confirm_doc_delete = None
+                    if isinstance(result, dict) and result.get("success") is False:
+                        st.error(result.get("error") or f"Could not delete {doc_name}.")
+                    else:
+                        st.toast(f"Deleted {doc_name}.")
+                        st.rerun()
+                if no_col.button("✕", key=f"deldoc_no_{doc_id}", help="Cancel"):
+                    st.session_state.confirm_doc_delete = None
+                    st.rerun()
+            elif cols[6].button("🗑️", key=f"delmgr_{doc_id}", help=f"Delete {doc_name}"):
+                st.session_state.confirm_doc_delete = doc_id
                 st.rerun()
 
     st.divider()
     indexed, total_chunks = _document_totals(docs)
     st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
+    unindexed = [d for d in docs if not (d.get("chunks") or 0)]
+    if unindexed and not student_view:
+        st.warning(
+            f"{len(unindexed)} document(s) have no indexed chunks and cannot be cited in "
+            "an answer: " + ", ".join(
+                str(d.get("original_filename") or d.get("filename") or "?") for d in unindexed
+            ) + ". Re-upload to index them."
+        )
 
 
 # ─── SETTINGS / LIVE CONFIG (Lecturer / Admin view) ────────────────
@@ -1752,6 +1897,118 @@ _KEY_HELP = {
     "num_predict": "Maximum tokens in an answer. Raising it did not lengthen "
                    "answers on this host; response_style is what changes length.",
 }
+
+
+_OTHER_MODEL = "Other (type a name)…"
+
+
+def _model_picker(stored_value, known_models, *, disabled, effective=None):
+    """Pick the model from the ones we have measured, without locking the admin in.
+
+    The catalogue comes from the API so the notes stay with the validation that
+    accepts them. A model already set but not in the catalogue stays selectable,
+    and "Other" is always there for something freshly pulled -- otherwise this
+    screen would refuse to show a value the API is perfectly happy to store.
+    """
+    if not known_models:
+        # Fixtures, or the API is down: no catalogue to offer, so keep the box.
+        return st.text_input(
+            "Model", value=str(stored_value or ""), disabled=disabled,
+            key="gval_ollama_model", label_visibility="collapsed",
+        )
+
+    notes = {m["name"]: m.get("note", "") for m in known_models}
+    options = [m["name"] for m in known_models]
+    if stored_value and stored_value not in options:
+        options.insert(0, str(stored_value))
+    options.append(_OTHER_MODEL)
+
+    # With nothing stored, the value in effect comes from the environment, not
+    # from whichever catalogue entry happens to sort first. Showing the first
+    # entry told an admin on a smaller host that it was serving a model it was
+    # not.
+    fallback = str(effective) if effective else options[0]
+    if fallback not in options:
+        options.insert(0, fallback)
+    current = str(stored_value) if stored_value else fallback
+    choice = st.selectbox(
+        "Model", options, index=options.index(current),
+        disabled=disabled, key="gval_ollama_model", label_visibility="collapsed",
+    )
+    if choice == _OTHER_MODEL:
+        return st.text_input(
+            "Model name", value="", disabled=disabled,
+            key="gval_ollama_model_custom", placeholder="name:tag as `ollama pull` takes it",
+        ).strip()
+    if notes.get(choice):
+        st.caption(notes[choice])
+    return choice
+
+
+_HISTORY_PAGE = 8
+_PERIOD_DAYS = {"Last 7 days": 7, "Last 30 days": 30, "All time": None}
+
+
+def _session_moment(session):
+    """Best-effort timestamp for a session, or None if it cannot be read.
+
+    None means "keep it". Hiding a conversation because its timestamp arrived
+    in an unexpected shape is a worse failure than showing one too many.
+    """
+    raw = str(session.get("created_at") or "").strip().replace("T", " ").rstrip("Z")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _session_haystack(session) -> str:
+    """Everything in a session that a search should look at."""
+    parts = [str(session.get("title", "")), str(session.get("preview", "")),
+             str(session.get("course_id", ""))]
+    for m in session.get("messages") or []:
+        parts.append(str(m.get("question", "")))
+        parts.append(str(m.get("answer", "")))
+        parts.append(str(m.get("content", "")))
+    return " ".join(parts).lower()
+
+
+def _filter_sessions(sessions, course, period, query):
+    """Apply the three Session History controls."""
+    out = list(sessions or [])
+
+    if course and course != "All courses":
+        out = [s for s in out if s.get("course_id") == course]
+
+    days = _PERIOD_DAYS.get(period)
+    if days:
+        cutoff = datetime.now() - timedelta(days=days)
+        out = [s for s in out
+               if (_session_moment(s) or cutoff) >= cutoff]
+
+    needle = (query or "").strip().lower()
+    if needle:
+        out = [s for s in out if needle in _session_haystack(s)]
+
+    return out
+
+
+_FALLBACK_SENTENCE = "Based on general knowledge"
+
+
+def _strip_fallback_prefix(text: str) -> str:
+    """Drop the pipeline's leading fallback sentence, if it is there.
+
+    Matched on the opening words rather than the exact string: the sentence has
+    already been written with both an em dash and a hyphen, and a reader seeing
+    the warning twice is a worse outcome than a missed strip.
+    """
+    lines = (text or "").lstrip().split("\n")
+    if lines and lines[0].strip().startswith(_FALLBACK_SENTENCE):
+        return "\n".join(lines[1:]).lstrip()
+    return text
 
 
 def _setting_source(key: str, course_stored: dict, global_stored: dict) -> tuple[str, bool]:
@@ -1910,10 +2167,10 @@ def _render_global_tuning(styles: list):
             )
 
             if key == "ollama_model":
-                value = st.text_input(
-                    "Model", value=str(stored.get(key, "qwen3:14b")),
-                    disabled=not override, key=f"gval_{key}",
-                    label_visibility="collapsed",
+                value = _model_picker(
+                    stored.get(key), global_cfg.get("known_models") or [],
+                    disabled=not override,
+                    effective=global_cfg.get("effective_model"),
                 )
             elif key == "temperature":
                 value = st.slider(
@@ -1984,8 +2241,14 @@ def render_settings_page():
             )
         else:
             codes = [c.get("course_code") for c in manageable]
+            # Open on the course the rest of the session is scoped to. Opening
+            # on whichever course sorts first invites editing one course's
+            # retrieval settings while reading another course's answers, and
+            # nothing on the screen would say so.
+            scoped = st.session_state.get("course_id")
             picked = st.selectbox(
                 "Course", codes,
+                index=codes.index(scoped) if scoped in codes else 0,
                 format_func=lambda code: _course_display_label(code),
                 key="tuning_course",
             )
@@ -2056,6 +2319,42 @@ def render_courses_page():
                             st.session_state.course_id = code
                             st.session_state.selected_course_id = code
                             st.rerun()
+
+                    # Leaving has worked in the API and the client since
+                    # self-enrolment shipped, but no control ever called it, so
+                    # a student could join a course and never get back out.
+                    # Confirmed in two steps because one stray click would drop
+                    # their access to the materials.
+                    if str(role).lower() == "student":
+                        if st.session_state.get("confirm_leave") == code:
+                            st.warning(f"Leave {code}? You will lose access to its materials.")
+                            yes_col, no_col = st.columns(2)
+                            if yes_col.button("Yes, leave", key=f"leave_yes_{code}",
+                                              use_container_width=True):
+                                result = api.leave_course(code)
+                                st.session_state.confirm_leave = None
+                                if result.get("success"):
+                                    if result.get("enrolled_courses") is not None:
+                                        st.session_state.user["enrolled_courses"] = result["enrolled_courses"]
+                                    _refresh_course_options()
+                                    # Never leave the chat pointed at a course
+                                    # the student can no longer query.
+                                    if st.session_state.get("course_id") == code:
+                                        left = _course_options_for_user(st.session_state.user)
+                                        st.session_state.course_id = left[0] if left else None
+                                        st.session_state.selected_course_id = st.session_state.course_id
+                                    st.success(f"Left {code}.")
+                                    st.rerun()
+                                else:
+                                    st.error(result.get("error", "Could not leave this course."))
+                            if no_col.button("Cancel", key=f"leave_no_{code}",
+                                             use_container_width=True):
+                                st.session_state.confirm_leave = None
+                                st.rerun()
+                        elif st.button(f"Leave {code}", key=f"leave_{code}",
+                                       use_container_width=True):
+                            st.session_state.confirm_leave = code
+                            st.rerun()
     else:
         st.info("You are not enrolled in any course yet.")
 
@@ -2100,8 +2399,9 @@ def render_courses_page():
 
     st.divider()
     st.info(
-        f"All queries and uploads are currently scoped to **{active_cid} — "
-        f"{_course_display_label(active_cid)}**. "
+        # _course_display_label already reads "CSIT321 — Project"; prefixing the
+        # code again rendered "CSIT321 — CSIT321 — Project".
+        f"All queries and uploads are currently scoped to **{_course_display_label(active_cid)}**. "
         "ChromaDB retrieval uses `course_id` filtering so only documents from this course are searched."
     )
 
@@ -2192,6 +2492,18 @@ def render_course_management():
                         st.rerun()
                     else:
                         st.error(result.get("error") or "Failed to deactivate course.")
+            else:
+                # Deactivating used to be a one-way door: the API has always
+                # accepted PATCH is_active, but no control ever sent it, so a
+                # course switched off by accident stayed off.
+                st.caption("Deactivated — students cannot see or join this course.")
+                if st.button("Reactivate course", key=f"react_{code}"):
+                    result = api.reactivate_course(code)
+                    if result.get("success"):
+                        _refresh_course_options()
+                        st.rerun()
+                    else:
+                        st.error(result.get("error") or "Failed to reactivate course.")
 
 
 def render_admin_page():

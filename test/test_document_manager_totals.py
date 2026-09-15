@@ -48,7 +48,15 @@ def test_every_document_failed(totals):
 
 
 def test_a_missing_key_still_works(totals):
-    assert totals([{"status": "indexed"}]) == (1, 0)
+    """No crash on a document with no `chunks` key at all -- the original point
+    of this file -- and it is not counted as indexed.
+
+    That second half is a deliberate change. A row in this shape -- `status`
+    saying "indexed" while `chunks` is NULL and the vector store holds nothing
+    for it -- can never be retrieved or cited, and counting it made the summary
+    line disagree with the badge on the row above it.
+    """
+    assert totals([{"status": "indexed"}]) == (0, 0)
 
 
 def test_completed_counts_as_indexed(totals):
