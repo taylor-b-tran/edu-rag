@@ -4,7 +4,44 @@
 
 EduRAG (product name: **Paedia**) is a six-person team project applying **Retrieval-Augmented Generation (RAG)** to higher education. Students ask questions in natural language; the system retrieves the most relevant passages from indexed course documents and generates an answer with inline source citations. Off-topic or unsupported questions are explicitly labelled as fallback responses rather than presented as course-authoritative answers.
 
-This README is the **single entry point** for new team members. Read top-to-bottom on a clean Windows 11 machine and you will reach the point where a CSIT321 query returns a grounded answer with citations.
+This README is the **single entry point** for new team members.  Team members and testers should use the shared Paedia instance through Tailscale. The local Docker setup instructions below are intended for development, host administration, and standalone deployments.
+
+---
+## Access the Shared Paedia Instance
+Paedia is currently deployed on one shared GPU host. Team members and testers do not need to run the Docker stack locally to use the system.
+
+Access to the shared instance is provided through Tailscale. Each person must be individually given access to the Paedia host before they can connect.
+
+## Requirements
+
+Before accessing Paedia:
+1. Install Tailscale on your system.
+2. Sign in to Tailscale using the account that has been given access to Paedia host.
+3. Make sure the shared Paedia host appears in Tailscale.
+4. Make sure Tailscale is connected.
+
+## Connecting to Paedia
+1. Open Tailscale and confirm that you are connected.
+2. Open a web browser such as Microsoft Edge or Google Chrome.
+3. Enter the shared Paedia host address and Streamlit port in the browser address bar (Host_Address:Port)
+4. The Paedia login page should appear
+5. Sign in with an existing account or create a new account.
+
+The Paedia web interface uses port '8501'.
+
+The shared deployment is accessed through the Tailscale host address, not 'localhost'. References to 'localhost' later in this README are for development or administration performed directly on the host machine
+
+### Troubleshooting Shared Access
+
+If Paedia does not load:
+
+- Check that Tailscale is running and connected.
+- Check that the Paedia host has been shared with your Tailscale account.
+- Check that the shared host appears online in Tailscale.
+- Check that you are using the correct Tailscale host address and port '8501'
+- Check with the team member managing the GPU host that the Paedia Docker services are running.
+
+If Tailscale is connected but the browser connection times out, the share or Paedia service may be unavailable.
 
 ---
 
@@ -404,12 +441,15 @@ All four should return 200. The `/api/health` response includes a `warmup` block
 
 ### 9.2 End-to-end smoke test (browser)
 
-1. Open <http://localhost:8501> in any modern browser.
-2. Sign in as **`student@uow.edu.au`** — password from your `.env` (see [§10](#10-demo-credentials)).
-3. In the chat box, ask: **"What is Retrieval-Augmented Generation?"**
-4. Expected: an answer that cites `Week1_RAG_Introduction.pdf p.1` (or similar), `Confidence: High`, latency 5–15 s on GPU.
+For the shared team deployment:
 
-If the answer comes back as a generic "I am Paedia, I help with…" boilerplate, you are getting the fixture fallback — ChromaDB or Ollama is not reachable. See [§12.4](#124-getting-fixture-fallback-instead-of-live-answers).
+1. Connect to Tailscale.
+2. Open the shared Paedia host address on port `8501`.
+3. Sign in with a student account.
+4. Ask: "What is Retrieval-Augmented Generation?"
+5. Confirm that Paedia returns a grounded answer with source citations.
+
+When testing directly on the GPU host or a standalone local deployment, `http://localhost:8501` may be used instead.
 
 ### 9.3 End-to-end upload flow (browser)
 
@@ -933,7 +973,7 @@ python scripts/check_demo_ready.py                                       # confi
 
 Then in a browser:
 
-1. Open <http://localhost:8501>, sign in as `student@uow.edu.au` (passwords in [§10](#10-demo-credentials)).
+1. Open <http://host:8501>, sign in as `student@uow.edu.au` (passwords in [§10](#10-demo-credentials)).
 2. Ask: *"What is Retrieval-Augmented Generation?"* — expect an answer citing `Week1_RAG_Introduction.pdf`, confidence label, and model name shown in the response footer.
 3. Sign out, sign in as `lecturer@uow.edu.au`, open **Document Manager**, upload a short PDF, watch it go `queued → processing → indexed`.
 4. Ask a question that depends on that file — the citation should point at your filename.
