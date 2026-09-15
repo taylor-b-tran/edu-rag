@@ -813,27 +813,59 @@ class APIState:
                 return message
         return None
 
-    def set_message_feedback(self, message_id: str, user_id: str, rating: str) -> None:
-        self.message_feedback.setdefault(message_id, {})[user_id] = rating
-        if self._db_available:
-            try:
-                from src.api import db
-                db.upsert_message_feedback(message_id, user_id, rating)
-            except Exception as exc:
-                logger.warning("Failed to persist feedback for message %s to Postgres (%s: %s).",
-                                message_id, type(exc).__name__, exc)
+    def set_message_feedback(self, message_id: str, user_id: str, rating: str) -> bool:
+        """Record a vote. True only when it is where it will be read back from.
 
-    def clear_message_feedback(self, message_id: str, user_id: str) -> None:
+        With Postgres behind it this dictionary is a cache: get_session_feedback
+        prefers the database, so a write that failed there is a vote that
+        disappears the moment anything reads it -- including the voter's own
+        screen on the next load. Reporting success then is the same mistake as
+        confirming an enrolment before the token carries it, so the failed
+        write is rolled back here and the caller is told.
+        """
+        votes = self.message_feedback.setdefault(message_id, {})
+        had_before = user_id in votes
+        previous = votes.get(user_id)
+        votes[user_id] = rating
+        if not self._db_available:
+            return True
+        try:
+            from src.api import db
+            db.upsert_message_feedback(message_id, user_id, rating)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to persist feedback for message %s to Postgres (%s: %s).",
+                            message_id, type(exc).__name__, exc)
+            if had_before:
+                votes[user_id] = previous
+            else:
+                votes.pop(user_id, None)
+            return False
+
+    def clear_message_feedback(self, message_id: str, user_id: str) -> bool:
+        """Remove a vote. True only when it is gone where it is read back from.
+
+        Same reasoning as set_message_feedback: a delete that failed in
+        Postgres leaves a vote that comes straight back on the next read, so
+        the in-memory removal is undone and the caller is told.
+        """
         votes = self.message_feedback.get(message_id)
+        had_before = votes is not None and user_id in votes
+        previous = votes.get(user_id) if votes is not None else None
         if votes is not None:
             votes.pop(user_id, None)
-        if self._db_available:
-            try:
-                from src.api import db
-                db.delete_message_feedback(message_id, user_id)
-            except Exception as exc:
-                logger.warning("Failed to clear feedback for message %s in Postgres (%s: %s).",
-                                message_id, type(exc).__name__, exc)
+        if not self._db_available:
+            return True
+        try:
+            from src.api import db
+            db.delete_message_feedback(message_id, user_id)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to clear feedback for message %s in Postgres (%s: %s).",
+                            message_id, type(exc).__name__, exc)
+            if had_before:
+                self.message_feedback.setdefault(message_id, {})[user_id] = previous
+            return False
 
     def get_session_feedback(self, session_id: str, user_id: str) -> dict[str, str]:
         """This user's votes for every message in a session, as

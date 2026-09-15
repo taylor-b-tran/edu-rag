@@ -35,8 +35,12 @@ services:
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-llama3.2}
-      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
+      # Both names, same fallback, on purpose: the pipeline reads OLLAMA_MODEL
+      # and warmup reads DEFAULT_OLLAMA_MODEL. They used to fall back to
+      # different models, so a stack started without a .env warmed one model
+      # into VRAM and then asked Ollama for a different one on every query.
+      OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-gemma4:12b}
+      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-gemma4:12b}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # After a reboot Docker starts every container at once and ignores
       # depends_on, so the API can start before Postgres accepts connections.
@@ -149,8 +153,8 @@ services:
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-llama3.2}
-      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-qwen3:14b}
+      OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-gemma4:12b}
+      DEFAULT_OLLAMA_MODEL: ${DEFAULT_OLLAMA_MODEL:-gemma4:12b}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./:/workspace

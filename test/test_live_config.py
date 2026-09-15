@@ -264,3 +264,28 @@ def test_generate_accepts_a_per_call_threshold():
     params = inspect.signature(LLMResponseGeneration.generate).parameters
     assert "similarity_threshold" in params
     assert params["similarity_threshold"].default is None
+
+
+# --- the model catalogue ---------------------------------------------
+
+def test_the_admin_screen_is_offered_the_models_we_measured(client):
+    """The picker's options come from the API, next to the validation that
+    accepts them, so the notes cannot drift away from what is allowed."""
+    client.as_user(ADMIN)
+    body = client.get("/api/settings", headers=AUTH).get_json()
+    names = [m["name"] for m in body["known_models"]]
+    assert "gemma4:12b" in names
+    assert len(names) == len(set(names))
+
+
+def test_a_model_outside_the_catalogue_is_still_accepted(client, store):
+    """The catalogue is a menu, not a whitelist. An admin who has just pulled
+    something new must not be blocked by a list that has not caught up."""
+    client.as_user(ADMIN)
+    catalogued = {m["name"] for m in settings_mod.KNOWN_MODELS}
+    fresh = "mistral-small:24b"
+    assert fresh not in catalogued
+
+    assert client.patch("/api/settings", json={"ollama_model": fresh},
+                        headers=AUTH).status_code == 200
+    assert store[("global", "ollama_model")] == fresh

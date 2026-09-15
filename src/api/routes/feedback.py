@@ -64,7 +64,11 @@ def set_feedback(session_id: str, message_id: str):
             "message": f"rating must be one of: {', '.join(sorted(_VALID_RATINGS))}",
         }), 400
 
-    _state().set_message_feedback(message_id, user.get("user_id"), rating)
+    if not _state().set_message_feedback(message_id, user.get("user_id"), rating):
+        return jsonify({
+            "error": "feedback_not_saved",
+            "message": "Your feedback could not be saved just now. Please try again.",
+        }), 503
     return jsonify({"message_id": message_id, "rating": rating})
 
 
@@ -80,7 +84,11 @@ def clear_feedback(session_id: str, message_id: str):
     if err:
         return err
 
-    _state().clear_message_feedback(message_id, user.get("user_id"))
+    if not _state().clear_message_feedback(message_id, user.get("user_id")):
+        return jsonify({
+            "error": "feedback_not_saved",
+            "message": "Your feedback could not be cleared just now. Please try again.",
+        }), 503
     return jsonify({"message_id": message_id, "rating": None})
 
 

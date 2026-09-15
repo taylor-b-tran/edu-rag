@@ -15,6 +15,58 @@ FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course 
 # prompts ask the model to produce.
 _INLINE_CITATION_RE = re.compile(r"\[S(\d+)\]")
 _SOURCES_LINE_RE = re.compile(r"(?im)^sources\s*:\s*(.+)$")
+# Models do not always emit one marker per bracket. gemma4:12b writes "[S1, S3]"
+# often enough that treating it as literal text loses real citations: the strip
+# pass leaves it alone, the extractor never sees S3, and renumbering skips it.
+_CITATION_GROUP_RE = re.compile(r"\[\s*S\s*\d+(?:\s*,\s*S?\s*\d+)*\s*\]", re.IGNORECASE)
+_CITATION_NUMBER_RE = re.compile(r"\d+")
+
+
+def _split_citation_groups(text: str) -> str:
+    """Rewrite "[S1, S3]" as "[S1][S3]" so one bracket carries one source.
+
+    Everything downstream -- stripping, extraction, renumbering -- is written
+    against the single-marker form, so normalising once here keeps the grouped
+    form from silently bypassing all three.
+    """
+    def _expand(m):
+        return "".join(f"[S{n}]" for n in _CITATION_NUMBER_RE.findall(m.group(0)))
+    return _CITATION_GROUP_RE.sub(_expand, text)
+
+
+def _renumber_citations(text: str, mapping: dict) -> str:
+    """Point every [Sn] at the position its source occupies in the list shown.
+
+    The prompt numbers chunks S1..Sk. The answer is then filtered to the chunks
+    the model actually cited, and that list is de-duplicated by file and page,
+    so the source a reader sees as "2" was "5" when the model wrote about it.
+    Without this the markers keep the prompt's numbering and point past the end
+    of a shorter list. A marker with no entry in `mapping` is dropped rather
+    than left dangling.
+    """
+    def _replace(m):
+        target = mapping.get(int(m.group(1)))
+        return f"[S{target}]" if target else ""
+
+    out = _INLINE_CITATION_RE.sub(_replace, text)
+
+    def _clean_sources_line(m):
+        kept, seen = [], set()
+        for token in m.group(1).split(","):
+            digits = token.strip().upper().lstrip("S")
+            if not digits.isdigit():
+                continue
+            target = mapping.get(int(digits))
+            if target and target not in seen:
+                seen.add(target)
+                kept.append(f"S{target}")
+        return f"Sources: {', '.join(sorted(kept, key=lambda t: int(t[1:])))}" if kept else ""
+
+    out = _SOURCES_LINE_RE.sub(_clean_sources_line, out)
+    out = re.sub(r"[ \t]+([.,;:!?])", r"\1", out)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def _extract_cited_source_indices(raw_answer: str, num_chunks: int) -> set:
@@ -450,17 +502,27 @@ class LLMResponseGeneration:
         return label, round(avg, 3)
 
     @staticmethod
-    def _source_refs(chunks):
-        # De-duplicates chunks that come from the same file + page
-        seen, refs = set(), []
+    def _refs_with_positions(chunks):
+        """De-duplicate by file + page, and say where each chunk ended up.
+
+        Returns (refs, positions) where positions[i] is the 1-based place of
+        chunks[i] in refs. Two chunks from the same page share one position,
+        which is exactly why the answer text cannot reuse the prompt numbering.
+        """
+        at, refs, positions = {}, [], []
         for ch in chunks:
             k = (ch.source_file, ch.page_number)
-            if k not in seen:
-                seen.add(k)
+            if k not in at:
                 refs.append({"source_file": ch.source_file, "page": ch.page_number,
                              "topic": ch.topic, "week": ch.week,
                              "similarity": round(ch.similarity, 3)})
-        return refs
+                at[k] = len(refs)
+            positions.append(at[k])
+        return refs, positions
+
+    @staticmethod
+    def _source_refs(chunks):
+        return LLMResponseGeneration._refs_with_positions(chunks)[0]
 
     def generate(self, query, course_id=COURSE_ID, top_k=None,
                  history=None, response_style=None,
@@ -482,8 +544,7 @@ class LLMResponseGeneration:
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
         if ok:
-            raw = _strip_invalid_citation_markers(raw, len(good))
-        answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
+            raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
         conf, cscore= self._confidence(good)
         
         # T8-18: only report sources the model actually cited -- previously
@@ -491,9 +552,19 @@ class LLMResponseGeneration:
         # the model never mentioned in its answer. If nothing can be confidently
         # extracted, keep the full list rather than guessing and hiding a real citation.
         cited = _extract_cited_source_indices(raw, len(good)) if ok else set()
-        used_chunks = [good[i - 1] for i in sorted(cited)] if cited else good
+        shown_order = sorted(cited) if cited else list(range(1, len(good) + 1))
+        used_chunks = [good[i - 1] for i in shown_order]
+        refs, positions = self._refs_with_positions(used_chunks)
+
+        # The numbering the reader sees. Built after de-duplication, because
+        # that is the step that decides how long the list actually is.
+        if ok:
+            raw = _renumber_citations(
+                raw, {orig: positions[k] for k, orig in enumerate(shown_order)})
+
+        answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         return GeneratedResponse(
-            answer=answer, source_refs=self._source_refs(used_chunks),
+            answer=answer, source_refs=refs,
             is_fallback=is_fallback, model_used=(model or OLLAMA_MODEL),
             top_chunks=good, confidence=conf, confidence_score=cscore,
             response_style=style)

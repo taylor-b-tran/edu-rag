@@ -4,17 +4,23 @@
 # Three-tier decision rule
 #   No GPU                              -> LowVramModel  (llama3.2, 3B)  — CPU-only compose
 #   0 < VRAM < VramThresholdGb (12)     -> MidVramModel  (qwen2.5:7b)    — GPU overlay
-#   VRAM >= VramThresholdGb             -> HighVramModel (qwen3:14b)     — GPU overlay
+#   VRAM >= VramThresholdGb             -> HighVramModel (gemma4:12b)    — GPU overlay
 #
 # MidVramModel targets 8 GB-class cards: qwen2.5:7b (Q4_K_M, ~4.7 GB) fits
-# fully in VRAM with headroom to spare, unlike qwen3:14b whose ~10 GB working
-# set partially offloads to RAM below 12 GB and loses the speedup it's picked
-# for. See docs/sprint5_implementation_summary.md §5 for the qwen3:14b
-# threshold rationale.
+# fully in VRAM with headroom to spare, unlike a 12B-class model whose ~11 GB
+# working set partially offloads to RAM below 12 GB and loses the speedup it's
+# picked for. See docs/sprint5_implementation_summary.md §5 for the threshold
+# rationale.
+#
+# HighVramModel is gemma4:12b, chosen by evaluation against this corpus.
+# Keep it in step with docker-compose.yml and .env.example: this script
+# rewrites DEFAULT_OLLAMA_MODEL in .env, so a value that disagrees with them is
+# silently undone the next time anyone runs it. test_default_model_config.py
+# fails if the four drift apart.
 
 [CmdletBinding()]
 param(
-    [string]$HighVramModel   = "qwen3:14b",
+    [string]$HighVramModel   = "gemma4:12b",
     [string]$MidVramModel    = "qwen2.5:7b",
     [string]$LowVramModel    = "llama3.2",
     [int]   $VramThresholdGb = 12,
