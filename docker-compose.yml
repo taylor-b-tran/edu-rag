@@ -208,7 +208,11 @@ services:
 
   ollama:
     restart: unless-stopped
-    image: ollama/ollama@sha256:d3d553bdfbcc7f55dd5ddf42c4cbe3a927aa9bb1802710d35e94656ca5aea02b
+    # ollama/ollama:0.34.0, pinned by digest so every machine runs the same
+    # build. Was 0.21.0, which is too old for the models the team wants to
+    # compare against qwen3:14b. Pulled models live in the ollama_data volume
+    # below, so changing the image does not re-download them.
+    image: ollama/ollama@sha256:684d8674b4315fa18f4f0e973a118ec2652ed96f67563277839985175858e0ba
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       # Ollama sizes its KV cache as num_ctx x num_parallel. Left unset it
