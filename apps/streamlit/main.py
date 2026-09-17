@@ -444,7 +444,6 @@ class _SessionAPIClient:
 
 
 api = _SessionAPIClient()
-DEFAULT_COURSE_ID = "CSIT321"
 # Live selectors are populated from authorized course data, never seeded codes.
 COURSE_FALLBACKS = []
 LOGIN_COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "components", "login_form")
@@ -510,12 +509,48 @@ def _course_options_for_user(user: dict) -> list[str]:
     return list(dict.fromkeys(options))
 
 
-def _default_course_for_user(user: dict) -> str:
-    """The course to open on, or "" when the user is in none."""
-    options = _course_options_for_user(user)
+# Apply the preferred course only within the user's available options.
+_PREFERRED_COURSE = "CSIT321"
+
+
+def _preferred_from(options: list[str]) -> str:
+    """Pick from courses the user may open, or "" when there are none."""
     if not options:
         return ""
-    return DEFAULT_COURSE_ID if DEFAULT_COURSE_ID in options else options[0]
+    return _PREFERRED_COURSE if _PREFERRED_COURSE in options else options[0]
+
+
+def _default_course_for_user(user: dict) -> str:
+    """The course to open on, or "" when the user is in none."""
+    return _preferred_from(_course_options_for_user(user))
+
+
+def _active_course() -> str:
+    """Choose an available course, refreshing options for an uncached selection."""
+    current = st.session_state.get("course_id") or ""
+    # Cached selections avoid a courses request on each rerun. A new selection
+    # may refer to a course created or reactivated since login.
+    options = st.session_state.get("course_options") or []
+    if not options or (current and current not in options):
+        try:
+            options = _course_options_for_user(st.session_state.get("user") or {})
+            st.session_state.course_options = options
+        except Exception:
+            # Preserve the selection on a failed read. Authorization remains
+            # enforced by the API for each operation.
+            return current
+    if current and current in options:
+        return current
+    return _preferred_from(options)
+
+
+def _reconcile_active_course() -> str:
+    """Synchronize page and picker state before the sidebar and page render."""
+    resolved = _active_course()
+    if resolved != (st.session_state.get("course_id") or ""):
+        st.session_state.course_id = resolved
+        st.session_state.selected_course_id = resolved
+    return resolved
 
 
 def _course_display_label(course_code: str) -> str:
@@ -547,9 +582,9 @@ def init_session_state():
         "sessions": [],
         "active_session_id": None,
         "session_id": None,
-        "course_id": DEFAULT_COURSE_ID,
+        "course_id": "",
         "course_options": COURSE_FALLBACKS,
-        "selected_course_id": DEFAULT_COURSE_ID,
+        "selected_course_id": "",
         "login_error": None,
         "signup_error": None,
         "last_login_nonce": None,
@@ -614,7 +649,9 @@ def _hydrate_sessions_from_server() -> None:
             "backend_session_id": sid,
             "title": first[:40] + ("..." if len(first) > 40 else ""),
             "messages": messages,
-            "course_id": item.get("course_id") or DEFAULT_COURSE_ID,
+            # "" rather than a default: switch_session below reads it back
+            # the same way, and _active_course resolves it per screen.
+            "course_id": item.get("course_id") or "",
             "created_at": (item.get("created_at") or "")[:16].replace("T", " "),
             "message_count": len(messages),
         })
@@ -652,9 +689,9 @@ def _change_chat_course() -> None:
     create_new_session()
 
 
-def create_new_session(title="New Chat"):
+def create_new_session(title="New Chat", *, course_transition=False):
     """Create a new chat session and make it active."""
-    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    course_id = st.session_state.get("course_id") or ""
     session = {
         "session_id": str(uuid.uuid4())[:8],
         "backend_session_id": None,
@@ -663,6 +700,7 @@ def create_new_session(title="New Chat"):
         "course_id": course_id,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "message_count": 0,
+        "course_transition_notice": course_transition,
     }
     st.session_state.sessions.append(session)
     st.session_state.active_session_id = session["session_id"]
@@ -693,7 +731,7 @@ def switch_session(session_id):
             st.session_state.active_session_id = session_id
             st.session_state.messages = s["messages"]
             st.session_state.session_id = s.get("backend_session_id")
-            st.session_state.course_id = s.get("course_id", DEFAULT_COURSE_ID)
+            st.session_state.course_id = s.get("course_id") or ""
             st.session_state.selected_course_id = st.session_state.course_id
             _remember_chat_selection()
             return
@@ -703,7 +741,7 @@ def switch_session(session_id):
 
 def get_ai_response(query: str) -> dict:
     """Query the RAG pipeline via the API client."""
-    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    course_id = _active_course()
     session_id = st.session_state.get("session_id")
     style = st.session_state.get("response_style")
     return api.query(query, course_id=course_id, session_id=session_id,
@@ -717,7 +755,7 @@ def get_suggested_prompts() -> list:
     that reference the user's selected course and its indexed documents.
     Cached per course so the buttons don't reshuffle on every re-run.
     """
-    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    course_id = _active_course()
 
     # Return cached prompts if the course hasn't changed
     cached = st.session_state.get("_cached_prompts_course")
@@ -1022,8 +1060,15 @@ def render_sidebar():
 
         # ── Loaded documents ──
         st.markdown("**Loaded Documents**")
-        course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
-        docs = api.get_documents(course_id)
+        course_id = _active_course()
+        docs = []
+        if course_id:
+            try:
+                docs = api.get_documents(course_id)
+            except APIReadError:
+                st.warning("Course documents could not be loaded. You can still use My Courses or sign out.")
+        else:
+            st.caption("Join a course in My Courses to view its materials.")
         for doc in docs[:5]:
             doc_name = doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown"
             status = str(doc.get("status", "pending")).lower()
@@ -1126,7 +1171,7 @@ def _send_message(text: str, append_user: bool = True):
         st.session_state.session_id = backend_session_id
         if session:
             session["backend_session_id"] = backend_session_id
-            session["course_id"] = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+            session["course_id"] = _active_course()
         _remember_chat_selection()
 
     msg = {
@@ -1160,46 +1205,54 @@ def _send_message(text: str, append_user: bool = True):
 def _render_no_courses_notice() -> None:
     """Shown instead of the chat when the account is enrolled in nothing.
 
-    Signup creates an account with no enrolments and self-enrolment (T8-05)
-    does not exist yet, so this is a real state a new user lands in. Saying so
-    is better than sending questions to a course they cannot read and printing
-    the 403 as an answer.
+    New accounts can browse available courses and join before asking questions.
     """
     st.markdown("### 💬 Ask your course materials")
     st.info(
         "**You are not enrolled in any course yet.**"
     )
     st.write(
-        "Ask your lecturer or the unit coordinator to add you, and this "
-        "page will work as soon as they do."
+        "Open My Courses and join an available course to start asking questions."
     )
     st.caption("Nothing is wrong with your account - it just has no courses on it.")
+    if st.button("Browse courses", key="browse_courses_empty", type="primary"):
+        st.session_state.current_page = "courses"
+        st.rerun()
 
 
 def render_chat_page():
-    session = get_active_session()
-    if session["course_id"] != st.session_state.get("course_id"):
-        session = create_new_session()
-
     if not _course_options_for_user(st.session_state.get("user") or {}):
         _render_no_courses_notice()
         return
 
-    active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    active_cid = _reconcile_active_course()
+    session = get_active_session()
+    # Only a local chat may acquire its first course. Persisted conversations
+    # retain their original course, including a legacy missing course.
+    if not session.get("course_id") and not session.get("backend_session_id"):
+        session["course_id"] = active_cid
+    elif session.get("course_id") != active_cid:
+        # Store the notice before updating URL state so it survives reruns.
+        session = create_new_session(course_transition=True)
+
+    if session.get("course_transition_notice"):
+        if st.button("Dismiss notification", key="dismiss_course_transition"):
+            session["course_transition_notice"] = False
+            st.rerun()
+        else:
+            st.info("This conversation cannot continue in the selected course. "
+                    "A new chat has been opened; the previous conversation is unchanged.")
 
     col1, col2, col3, col4, col5 = st.columns([4, 3, 2, 2, 2])
     with col1:
         st.markdown("### 💬 Ask your course materials")
         st.caption(f"Querying **{_course_display_label(active_cid)}**")
     with col2:
-        current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
-        live_docs = api.get_documents(current_course)
+        # Fetch materials for the course displayed in the header.
+        live_docs = api.get_documents(active_cid)
         indexed_live = _document_indexed_count(live_docs)
-        # T8-07: this said "ollama/llama3" whenever the API was unreachable,
-        # which stopped being true in Sprint 8 -- the host runs qwen3:14b. Every
-        # answer already reports the model that produced it, so the badge shows
-        # the last real one rather than a guess, and only falls back to a
-        # neutral label when nothing has been answered yet.
+        # Show the model reported by the last answer, or a neutral API label
+        # before the first answer arrives.
         model_label = "Live API" if api.is_live else "Offline"
         for _msg in reversed(st.session_state.get("messages", [])):
             if _msg.get("role") == "assistant" and _msg.get("model_used") and not _msg.get("error_type"):
@@ -1212,11 +1265,11 @@ def render_chat_page():
         )
     with col3:
         course_options = st.session_state.get("course_options") or COURSE_FALLBACKS
-        if current_course not in course_options:
-            course_options = [current_course] + list(course_options)
+        if active_cid not in course_options:
+            course_options = [active_cid] + list(course_options)
         # Widget keys can be discarded when the login page reruns. Reconcile
         # immediately before declaration, with no competing default index.
-        st.session_state.selected_course_id = current_course
+        st.session_state.selected_course_id = active_cid
         selected_course = st.selectbox(
             "Course",
             course_options,
@@ -1564,9 +1617,10 @@ def render_history_page():
 # ─── UPLOADS PAGE (Student view) ──────────────────────────────────
 
 def render_uploads_page():
-    # Called "My Uploads" until it was pointed out that a student uploads
-    # nothing here, and could not open anything either, which left the screen
-    # with no reason to exist.
+    if not _active_course():
+        _render_no_courses_notice()
+        return
+    # Students can read materials; upload and removal belong to lecturers.
     st.markdown("### 📚 Course Materials")
     st.caption("Everything your lecturer has added for this course. Open any of "
                "them to read; only a lecturer can add or remove them.")
@@ -1581,7 +1635,10 @@ def render_doc_manager_page():
     st.markdown(f"<span class='status-badge badge-processing'>{role} View</span>", unsafe_allow_html=True)
 
     course_options = st.session_state.get("course_options") or _course_options_for_user(st.session_state.user)
-    current_course = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    current_course = _active_course()
+    if not current_course:
+        st.info("You are not in any course yet, so there is nothing to manage here.")
+        return
     if current_course not in course_options:
         course_options = [current_course] + list(course_options)
 
@@ -1768,7 +1825,11 @@ def _document_totals(docs) -> tuple[int, int]:
 
 def _render_document_table(student_view: bool = False):
     """Render document list with status badges (shared by uploads + doc manager)."""
-    course_id = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    # Both student and lecturer views require an available course.
+    course_id = _active_course()
+    if not course_id:
+        st.caption("Join a course to see its materials.")
+        return
     docs = api.get_documents(course_id)
 
     headers = ["File Name", "Type", "Size", "Status", "Uploaded", "Open"]
@@ -2271,7 +2332,7 @@ def render_courses_page():
 
     user = st.session_state.get("user") or {}
     role = user.get("role", "Student")
-    active_cid = st.session_state.get("course_id") or DEFAULT_COURSE_ID
+    active_cid = st.session_state.get("course_id")
     courses = _all_courses()
 
     if not courses:
@@ -2376,8 +2437,8 @@ def render_courses_page():
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-                    docs = api.get_documents(code)
-                    st.caption(f"📄 {len(docs)} docs · 🟢 Active")
+                    # Materials are private until the user joins this course.
+                    st.caption("🟢 Active · Join to access course materials")
 
                     if st.button(f"Join {code}", key=f"join_{code}", type="primary",
                                  use_container_width=True):
@@ -2387,23 +2448,19 @@ def render_courses_page():
                                 st.session_state.user["enrolled_courses"] = result["enrolled_courses"]
                             _refresh_course_options()
                             # The first course a student joins becomes the
-                            # active one. Without this the chat page falls back
-                            # to DEFAULT_COURSE_ID, and every question in a
-                            # course they did not join comes back refused.
+                            # active one, so the chat page has something to
+                            # resolve to rather than reopening on nothing.
                             if not st.session_state.get("course_id"):
                                 st.session_state.course_id = code
+                                st.session_state.selected_course_id = code
                             st.success(f"Enrolled in {code}!")
                             st.rerun()
                         else:
                             st.error(result.get("error", "Enrolment failed."))
 
     st.divider()
-    st.info(
-        # _course_display_label already reads "CSIT321 — Project"; prefixing the
-        # code again rendered "CSIT321 — CSIT321 — Project".
-        f"All queries and uploads are currently scoped to **{_course_display_label(active_cid)}**. "
-        "ChromaDB retrieval uses `course_id` filtering so only documents from this course are searched."
-    )
+    if active_cid:
+        st.info(f"Your questions and materials are scoped to **{_course_display_label(active_cid)}**.")
 
 
 def render_course_management():
@@ -2664,6 +2721,9 @@ def _render_app():
 
     if st.session_state.get("history_load_pending"):
         _hydrate_sessions_from_server()
+    # Before anything reads it. Every screen below, and the sidebar beside
+    # them, then works from the same answer.
+    _reconcile_active_course()
     render_sidebar()
 
     page = st.session_state.current_page
