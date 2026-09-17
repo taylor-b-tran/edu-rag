@@ -58,7 +58,14 @@ def test_url_hint_cannot_restore_unowned_archived_or_unenrolled_chat(ui, sid):
     ui._hydrate_sessions_from_server()
     assert ui.st.session_state.session_id is None
     assert ui.st.session_state.messages == []
-    assert ui.st.session_state.course_id == "CSIT321"
+    # The point of the assertion is that the refused course is not adopted.
+    # It used to read == "CSIT321", which was pinning the pre-login default
+    # rather than anything about this refusal; that default is now "" and the
+    # course is resolved per screen by _active_course against courses the user
+    # may actually open. Landing on a hardcoded CSIT321 here would itself have
+    # named a course this account might not be in.
+    assert ui.st.session_state.course_id != "REMOVED101"
+    assert ui.st.session_state.course_id == ""
     assert "chat" not in ui.st.query_params
 
 def test_empty_history_clears_previous_account_data(ui):
