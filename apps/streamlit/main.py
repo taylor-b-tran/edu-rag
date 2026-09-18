@@ -683,9 +683,14 @@ def _remember_chat_selection() -> None:
 
 
 def _change_chat_course() -> None:
-    if st.session_state.selected_course_id == st.session_state.course_id:
+    chosen = st.session_state.selected_course_id
+    # A rerun the picker did not cause can still deliver the picker's value,
+    # and that value can be empty. Naming no course is not a request to change
+    # course; treating it as one moves the chat to whichever course the
+    # resolution rule falls back to.
+    if not chosen or chosen == st.session_state.course_id:
         return
-    st.session_state.course_id = st.session_state.selected_course_id
+    st.session_state.course_id = chosen
     create_new_session()
 
 
@@ -1268,12 +1273,14 @@ def render_chat_page():
         if active_cid not in course_options:
             course_options = [active_cid] + list(course_options)
         # Widget keys can be discarded when the login page reruns. Reconcile
-        # immediately before declaration, with no competing default index.
+        # immediately before declaration, and default to the course the rest of
+        # the page is using, so the picker cannot come up empty while the header
+        # beside it names a course.
         st.session_state.selected_course_id = active_cid
         selected_course = st.selectbox(
             "Course",
             course_options,
-            index=None,
+            index=course_options.index(active_cid),
             format_func=_course_display_label,
             label_visibility="collapsed",
             key="selected_course_id",
