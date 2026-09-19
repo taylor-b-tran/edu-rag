@@ -328,89 +328,143 @@ _DEMO_COURSES = [
 ]
 
 
-def _seed_demo_auth_data() -> None:
-    with connect() as conn:
-        with conn.cursor() as cur:
-            for username, email, role, password, from_env in _DEMO_USERS:
-                password_hash = bcrypt.hashpw(
-                    password.encode("utf-8"), bcrypt.gensalt()
-                ).decode("utf-8")
-                conflict = (
-                    "DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()"
-                    if from_env else "DO NOTHING"
-                )
-                cur.execute(
-                    f"""
-                    INSERT INTO users (username, email, role, password_hash)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (email) {conflict}
-                    """,
-                    (username, email, role, password_hash),
-                )
-            for course_code, course_name in _DEMO_COURSES:
-                cur.execute(
-                    """
-                    INSERT INTO courses (course_code, course_name)
-                    VALUES (%s, %s)
-                    ON CONFLICT (course_code) DO NOTHING
-                    """,
-                    (course_code, course_name),
-                )
-            # The demo student and lecturer are members of both demo courses,
-            # matching fixtures/sample_responses.json so behaviour doesn't
-            # change depending on which backend actually answered the login.
-            #
-            # Only those accounts and only those courses (T8-05). This used to
-            # pair every student and lecturer with every course on every start,
-            # so a restart put anyone who had left a course back in it, gave each
-            # new account every course - inactive ones included - and made every
-            # lecturer a member of courses they do not teach. A demo account that
-            # leaves a demo course still gets it back at the next start, which
-            # keeps the demo in a known state.
-            cur.execute(
-                """
-                INSERT INTO course_memberships (user_id, course_id, membership_role)
-                SELECT u.id, c.id, u.role
-                  FROM users u
-                  JOIN courses c ON c.course_code = ANY(%s)
-                 WHERE u.email = ANY(%s)
-                   AND u.role IN ('student', 'lecturer')
-                ON CONFLICT (user_id, course_id) DO NOTHING
-                """,
-                (
-                    [code for code, _name in _DEMO_COURSES],
-                    [email for _username, email, role, _password, _from_env in _DEMO_USERS
-                     if role in ("student", "lecturer")],
-                ),
-            )
-            # T8-04/T8-09: the demo courses were seeded with no owner, so no
-            # lecturer could manage them and the per-course tuning screen was
-            # empty for the only lecturer account that exists. A lecturer who
-            # teaches a subject should own it.
-            #
-            # Only fills nulls: a course that already has a real owner is left
-            # exactly as it is, so this can never take a course off someone.
-            cur.execute(
-                """
-                UPDATE courses
-                   SET owner_id = (SELECT id FROM users WHERE role = 'lecturer'
-                                    ORDER BY created_at LIMIT 1)
-                 WHERE owner_id IS NULL
-                   AND course_code = ANY(%s)
-                """,
-                ([code for code, _name in _DEMO_COURSES],),
-            )
+def _demo_seed_rows() -> list[tuple]:
+    """Hash the demo passwords before the schema transaction is opened.
+
+    Hashing is deliberately slow, and that transaction holds table locks other
+    requests need. Doing it inside would stall the other worker's reads of those
+    tables for as long as the hashing takes.
+    """
+    return [(username, email, role,
+             bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+             from_env)
+            for username, email, role, password, from_env in _DEMO_USERS]
+
+
+def _seed_demo_auth_data(cur, rows) -> None:
+    """Write the demo accounts, courses and memberships.
+
+    Takes the caller's cursor: this runs inside the same locked transaction
+    as the schema itself. The inserts name one conflict target each, so two
+    workers running this at the same time collide on a different constraint
+    than the one being handled -- `users.username` is unique too.
+    """
+    for username, email, role, password_hash, from_env in rows:
+        conflict = (
+            "DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()"
+            if from_env else "DO NOTHING"
+        )
+        cur.execute(
+            f"""
+            INSERT INTO users (username, email, role, password_hash)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (email) {conflict}
+            """,
+            (username, email, role, password_hash),
+        )
+    for course_code, course_name in _DEMO_COURSES:
+        cur.execute(
+            """
+            INSERT INTO courses (course_code, course_name)
+            VALUES (%s, %s)
+            ON CONFLICT (course_code) DO NOTHING
+            """,
+            (course_code, course_name),
+        )
+    # The demo student and lecturer are members of both demo courses,
+    # matching fixtures/sample_responses.json so behaviour doesn't
+    # change depending on which backend actually answered the login.
+    #
+    # Only those accounts and only those courses (T8-05). This used to
+    # pair every student and lecturer with every course on every start,
+    # so a restart put anyone who had left a course back in it, gave each
+    # new account every course - inactive ones included - and made every
+    # lecturer a member of courses they do not teach. A demo account that
+    # leaves a demo course still gets it back at the next start, which
+    # keeps the demo in a known state.
+    cur.execute(
+        """
+        INSERT INTO course_memberships (user_id, course_id, membership_role)
+        SELECT u.id, c.id, u.role
+          FROM users u
+          JOIN courses c ON c.course_code = ANY(%s)
+         WHERE u.email = ANY(%s)
+           AND u.role IN ('student', 'lecturer')
+        ON CONFLICT (user_id, course_id) DO NOTHING
+        """,
+        (
+            [code for code, _name in _DEMO_COURSES],
+            [email for _username, email, role, _password, _from_env in _DEMO_USERS
+             if role in ("student", "lecturer")],
+        ),
+    )
+    # T8-04/T8-09: the demo courses were seeded with no owner, so no
+    # lecturer could manage them and the per-course tuning screen was
+    # empty for the only lecturer account that exists. A lecturer who
+    # teaches a subject should own it.
+    #
+    # Only fills nulls: a course that already has a real owner is left
+    # exactly as it is, so this can never take a course off someone.
+    cur.execute(
+        """
+        UPDATE courses
+           SET owner_id = (SELECT id FROM users WHERE role = 'lecturer'
+                            ORDER BY created_at LIMIT 1)
+         WHERE owner_id IS NULL
+           AND course_code = ANY(%s)
+        """,
+        ([code for code, _name in _DEMO_COURSES],),
+    )
+
+
+# One worker builds the schema at a time. CREATE TABLE IF NOT EXISTS reads the
+# catalogue and then inserts into it, so two workers starting together can both
+# find the table missing and both try to create it; the loser gets a
+# UniqueViolation on pg_type. The number is arbitrary and only has to stay the
+# same across versions.
+_SCHEMA_LOCK_KEY = 0x45647552616730
+
+
+class SchemaLockBusy(RuntimeError):
+    """Another worker is building the schema and did not finish in time.
+
+    Deliberately not an OperationalError: `connect` treats those as the database
+    being unreachable and opens its circuit for every caller in this process.
+    Contending for a lock is not an outage, and start-up only has to try again.
+    """
 
 
 def init_schema() -> None:
     try:
+        demo_rows = _demo_seed_rows()
         with connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(SCHEMA)
-                cur.execute(AUTH_SCHEMA)
-                cur.execute(SESSION_SCHEMA)
-                cur.execute(FEEDBACK_SCHEMA)
-        _seed_demo_auth_data()
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    # Bounded, so a worker that wedges while holding the lock
+                    # cannot make every other worker wait forever: waiting past
+                    # this raises, and the caller's retry loop already knows what
+                    # to do with a start-up that failed. The lock is held for
+                    # the statements below and nothing else, which is a few
+                    # milliseconds, so this is not a limit anyone reaches.
+                    cur.execute("SET LOCAL lock_timeout = '30s'")
+                    try:
+                        cur.execute("SELECT pg_advisory_xact_lock(%s)",
+                                    (_SCHEMA_LOCK_KEY,))
+                    except psycopg.errors.LockNotAvailable as exc:
+                        raise SchemaLockBusy(
+                            "another worker has held the schema lock for over 30s"
+                        ) from exc
+                    # The bound above was for that wait alone. The statements
+                    # below take ordinary table locks and have always waited for
+                    # them; timing those out would turn a restart during normal
+                    # traffic into a failed start, reported as an unreachable
+                    # database.
+                    cur.execute("SET LOCAL lock_timeout = 0")
+                    cur.execute(SCHEMA)
+                    cur.execute(AUTH_SCHEMA)
+                    cur.execute(SESSION_SCHEMA)
+                    cur.execute(FEEDBACK_SCHEMA)
+                    _seed_demo_auth_data(cur, demo_rows)
         logger.info(
             "Postgres schema initialised (uploaded_documents, indexing_jobs, "
             "users, courses, course_memberships, access_tokens, refresh_tokens, "
