@@ -181,12 +181,17 @@ class APIState:
 
     def get_generator(self):
         if self._generator is None:
+            from src.document_processor.ingest_corpus import EmbedderMismatchError
             try:
                 from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
                 self._retriever = VectorRetriever()
                 self._generator = LLMResponseGeneration(retriever=self._retriever)
                 self._backend_mode = "chromadb"
                 print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
+            except EmbedderMismatchError:
+                self._retriever = None
+                self._backend_mode = "embedder_mismatch"
+                raise
             except Exception as exc:
                 print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
                 self._generator = _FixtureGenerator(self)
