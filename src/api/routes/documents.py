@@ -152,6 +152,8 @@ def upload_document():
     uploaded_file = request.files.get("file")
     raw_course_id = request.form.get("course_id") or request.args.get("course_id") or "CSIT321"
     _uuid_form, code_form = _state().resolve_course(raw_course_id)
+    if not code_form:
+        return jsonify({"error": "Course not found."}), 404
     course_id = code_form or raw_course_id
     if uploaded_file is None:
         return jsonify({"error": "file is required"}), 400
@@ -199,12 +201,21 @@ def upload_document():
         }), 400
 
     import copy
-    result = _state().queue_upload(
-        filename=stored_name,
-        file_size=file_size,
-        course_id=course_id,
-        original_filename=original_filename,
-    )
+    # The file is on disk from here on, and queue_upload resolves the course
+    # again -- which now refuses rather than guessing when the database is
+    # unreachable. Any failure below would otherwise leave a file that no row,
+    # job or id refers to, and that nobody can see or delete. Re-raise after
+    # removing it, so an outage still answers 503 rather than a false 202.
+    try:
+        result = _state().queue_upload(
+            filename=stored_name,
+            file_size=file_size,
+            course_id=course_id,
+            original_filename=original_filename,
+        )
+    except Exception:
+        file_path.unlink(missing_ok=True)
+        raise
     response_payload = copy.deepcopy(result)
 
     # Queue background indexing on the bounded pool instead of an unbounded per-request thread (T8-31).
@@ -224,12 +235,28 @@ def list_documents():
     user, err = _require_auth()
     if err:
         return err
-    course_id = request.args.get("course_id")
+    course_id = (request.args.get("course_id") or "").strip() or None
     if course_id and not _state().is_enrolled(user, course_id):
         logger.warning("User %s requested documents for unauthorised course %s",
                        user.get("user_id"), course_id)
         return jsonify({"documents": [], "error": "Not enrolled in this course."}), 403
-    return jsonify({"documents": _state().list_documents(course_id)})
+    documents = _state().list_documents(course_id)
+    if user.get("role") != "admin":
+        permitted = {}
+        visible = []
+        for document in documents:
+            ref = _document_course(document)
+            if ref not in permitted:
+                permitted[ref] = bool(ref) and _state().is_enrolled(user, ref)
+            if permitted[ref]:
+                visible.append(document)
+        documents = visible
+    # Files are served through the authorized download route, never by path.
+    return jsonify({"documents": [
+        {key: value for key, value in document.items()
+         if key not in {"storage_path", "uploaded_by"}}
+        for document in documents
+    ]})
 
 
 @documents_bp.get("/document/<doc_id>")

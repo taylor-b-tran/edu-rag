@@ -172,6 +172,13 @@ def query():
         logger.warning("User %s attempted access to unauthorised course %s", user.get("user_id"), course_id)
         return jsonify({"error": "Not enrolled in this course."}), 403
 
+    # The enrolment check above has already resolved this course and refused
+    # anything it could not find, so an unknown course leaves as 403 like any
+    # other course the caller may not read. Resolving again here only turns a
+    # UUID into its course code for the retrieval and session that follow.
+    _, canonical_code = state.resolve_course(course_id)
+    course_id = canonical_code or course_id
+
     # Resolved per request: a course override, then the global setting, then
     # the environment default. This is what makes T8-08 take effect without a
     # restart. An explicit response_style in the body still wins, because that

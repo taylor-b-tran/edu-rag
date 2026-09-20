@@ -18,6 +18,10 @@ def create_app() -> Flask:
     app.config["EDURAG_API_STATE"] = APIState()
     register_routes(app)
 
+    @app.errorhandler(503)
+    def _unavailable(err):
+        return jsonify({"error": "service_unavailable", "message": err.description}), 503
+
     @app.errorhandler(413)
     def _too_large(_err):
         """Answer oversized uploads as JSON like every other error.

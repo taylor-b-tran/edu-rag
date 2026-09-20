@@ -27,6 +27,11 @@ OUTSIDE_COURSE = "CSIT999"
 def client():
     app = create_app()
     app.config.update(TESTING=True)
+    app.config["EDURAG_API_STATE"].fixtures.setdefault("courses", []).append({
+        "course_id": "99999999-9999-4999-8999-999999999999",
+        "course_code": OUTSIDE_COURSE,
+        "name": "Restricted materials",
+    })
     return app.test_client()
 
 

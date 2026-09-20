@@ -89,6 +89,9 @@ def client(monkeypatch, current, postgres):
     state.indexing_jobs.clear()
 
     from src.api import db
+    monkeypatch.setattr(db, "get_course_by_ref", lambda ref:
+                        {"id": CSIT321_UUID, "course_code": "CSIT321"}
+                        if ref in ("CSIT321", CSIT321_UUID) else None)
     # Fresh dicts each call, so a test mutating a result cannot rewrite history.
     monkeypatch.setattr(db, "load_all_documents",
                         lambda: [dict(d) for d in postgres["documents"]])

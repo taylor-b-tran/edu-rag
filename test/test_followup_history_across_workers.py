@@ -108,6 +108,9 @@ def client(monkeypatch, generator, current):
     state.sessions.clear()
 
     from src.api import db
+    monkeypatch.setattr(db, "get_course_by_ref", lambda ref:
+                        {"id": "project-course-id", "course_code": "CSIT321"}
+                        if ref in ("CSIT321", "project-course-id") else None)
     monkeypatch.setattr(db, "get_settings", lambda scope: {})
     monkeypatch.setattr(
         db, "get_chat_session",

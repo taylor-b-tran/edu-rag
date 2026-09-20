@@ -801,6 +801,19 @@ def get_course_by_code(course_code: str) -> dict[str, Any] | None:
     return _normalize_course_row(row) if row is not None else None
 
 
+def get_course_by_ref(course_ref: str) -> dict[str, Any] | None:
+    """Look up a course code or UUID without casting untrusted input to UUID."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {_COURSE_COLUMNS} FROM courses "
+                "WHERE course_code = %s OR id::text = %s",
+                (course_ref, course_ref),
+            )
+            row = cur.fetchone()
+    return _normalize_course_row(row) if row is not None else None
+
+
 def list_courses_owned_by(user_id: str | None) -> list[dict[str, Any]]:
     """Courses this lecturer owns, for GET /api/courses' `can_manage` flag.
 
