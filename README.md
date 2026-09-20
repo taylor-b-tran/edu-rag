@@ -78,10 +78,10 @@ When the setup is complete, your machine will be running a **five-service Docker
 | `streamlit` | Student / lecturer / admin web UI (Paedia) | `8501` | `edurag-streamlit-1` |
 | `api` | Flask REST API (auth, query, upload, sessions) | `5000` | `edurag-api-1` |
 | `chromadb` | Vector database — stores chunk embeddings | `8000` | `edurag-chromadb-1` |
-| `ollama` | Local LLM inference (`qwen3:14b` or `llama3.2`) | `11434` | `edurag-ollama-1` |
+| `ollama` | Local LLM inference (`gemma4:12b` by default) | `11434` | `edurag-ollama-1` |
 | `postgres` | Relational DB — auth, sessions, upload metadata | `5432` | `edurag-postgres-1` |
 
-The Streamlit UI talks to the Flask API. The API talks to ChromaDB (retrieval), Ollama (generation), and PostgreSQL (persistence). Nothing leaves your machine — both the embedding model (`all-MiniLM-L6-v2`) and the LLM (`qwen3:14b`) run locally.
+The Streamlit UI talks to the Flask API. The API talks to ChromaDB (retrieval), Ollama (generation), and PostgreSQL (persistence). Nothing leaves your machine — both the embedding model (`all-MiniLM-L6-v2`) and the default LLM (`gemma4:12b`) run locally.
 
 End-to-end demo flow:
 
@@ -99,8 +99,8 @@ End-to-end demo flow:
 |---|---|---|---|
 | **OS** | Windows 11 23H2 | Windows 11 24H2 | Tested on Windows 11 Pro 26200. Linux/macOS work but this guide is PowerShell-first |
 | **CPU** | 4 cores | 8 cores | Inference is mostly GPU, but PDF chunking + embeddings use CPU |
-| **RAM** | 16 GB | 32 GB | Ollama needs ~10 GB for `qwen3:14b` working set, leave 6 GB for other services |
-| **Disk** | 25 GB free | 40 GB free | `qwen3:14b` ~9 GB, `qwen2.5:7b` ~4.7 GB, `llama3.2` ~2 GB, Docker images ~6 GB, ChromaDB+Postgres ~1 GB, source ~500 MB, model cache ~5 GB |
+| **RAM** | 16 GB | 32 GB | Leave enough headroom for the configured Ollama model and the other services |
+| **Disk** | 25 GB free | 40 GB free | Allow for Ollama models, Docker images, ChromaDB, PostgreSQL, source, and the embedding cache |
 | **GPU** | None (CPU-only works, slow) | NVIDIA RTX with **≥ 12 GB VRAM** | Three supported tiers — see below. RTX 5080 (16 GB) is the dev host |
 | **Network** | Once for image pulls + model download | — | After first setup the stack runs fully offline |
 
@@ -110,9 +110,9 @@ End-to-end demo flow:
 |---|---|---|---|
 | Low | No GPU (CPU-only) | `llama3.2` (3B) | 60–180 s/query |
 | Mid | NVIDIA GPU, < 12 GB VRAM (e.g. RTX 5060 8 GB) | `qwen2.5:7b` (7.6B) | ~1–2 s/query, ~71 tok/s |
-| High | NVIDIA GPU, ≥ 12 GB VRAM (e.g. RTX 5080) | `qwen3:14b` (14B) | ~10 s/query |
+| High | NVIDIA GPU, ≥ 12 GB VRAM (e.g. RTX 5080) | `gemma4:12b` (12B) | Measure on your workload |
 
-> **Why the tiers split at 12 GB:** `qwen3:14b`'s ~10 GB KV cache + weights need that much VRAM to stay fully resident. Below 12 GB it partially offloads layers to CPU and loses the latency advantage it's picked for — worse than just running a smaller model that fits entirely in VRAM. `qwen2.5:7b` (~4.7 GB) is sized to fit comfortably in 8 GB-class cards with headroom for context, which is why it's the mid-tier pick rather than a scaled-down `qwen3`.
+> **Why the tiers split at 12 GB:** the high-tier model needs more VRAM to stay resident. Below that point it can offload work to the CPU and lose its latency advantage. `qwen2.5:7b` is the mid-tier choice because it fits comfortably on typical 8 GB cards with context headroom.
 
 ---
 
@@ -264,7 +264,7 @@ Edit `.env` if you need non-default ports — most teammates leave it as-is. Def
 | `POSTGRES_PORT` | `5432` | Change if you have local Postgres running |
 | `CHROMA_PORT` | `8000` | Change if 8000 is in use (Jupyter often grabs this) |
 | `OLLAMA_PORT` | `11434` | Rarely conflicts |
-| `DEFAULT_OLLAMA_MODEL` | `qwen3:14b` | The wrapper script in §6.1 will **overwrite** this automatically based on your GPU tier. Only set this by hand if you are running §6.2 manual compose — use `qwen2.5:7b` on an 8 GB-class GPU or `llama3.2` with no GPU, otherwise `qwen3:14b` partially offloads to RAM and silently loses the speedup |
+| `DEFAULT_OLLAMA_MODEL` | `gemma4:12b` | The wrapper script in §6.1 overwrites this automatically based on your GPU tier. Set it manually only when using §6.2 manual compose. |
 | `POSTGRES_PASSWORD` | `edurag_dev_password` | Dev-only password. Do not commit changes |
 
 > **Never commit `.env`** — it is gitignored. If you add secrets (e.g. `OPENAI_API_KEY` for optional GPT fallback), they stay local.
@@ -290,7 +290,7 @@ This is the only path that **automatically detects your GPU** and picks the righ
 
    | Detected VRAM | Compose overlay | Selected model | Why |
    |---|---|---|---|
-   | **≥ 12 GB** (high tier) | `docker-compose.gpu.yml` | `qwen3:14b` | Full 14 B model fits in VRAM; ~10 s/query |
+   | **≥ 12 GB** (high tier) | `docker-compose.gpu.yml` | `gemma4:12b` | Current high-tier default; measure latency on your workload |
    | **0 < VRAM < 12 GB** (mid tier) | `docker-compose.gpu.yml` | `qwen2.5:7b` | Fits fully in VRAM (~4.7 GB) with headroom — no CPU offload; ~1–2 s/query |
    | **No NVIDIA GPU** (low tier) | base Compose only (CPU mode) | `llama3.2` | ~60–180 s/query — slow but functional |
 3. **Writes `DEFAULT_OLLAMA_MODEL=<chosen>` into `.env`** (creates `.env` from `.env.example` if missing; **overwrites** any existing value of that key). After this step, plain `docker compose up -d` will use the right model without re-running the wrapper.
@@ -330,7 +330,7 @@ pwsh scripts/start_stack.ps1 `
 
 Use this if you are debugging the stack itself, or you have specific requirements the wrapper does not cover (multi-GPU, non-default ports, custom models).
 
-**Important:** manual compose **does not detect anything**. It uses `DEFAULT_OLLAMA_MODEL` from your `.env` as-is. If you have an 8 GB GPU and you forgot to edit `.env`, you will silently get `qwen3:14b` partially-offloaded and queries will be slow. Either:
+**Important:** manual compose **does not detect anything**. It uses `DEFAULT_OLLAMA_MODEL` from your `.env` as-is. If you have an 8 GB GPU and keep the `gemma4:12b` default, it may partially offload and queries may be slow. Either:
 
 - Edit `.env` to set `DEFAULT_OLLAMA_MODEL=qwen2.5:7b` (8 GB-class GPU) or `llama3.2` (no GPU) before bringing the stack up, OR
 - Run `pwsh scripts/start_stack.ps1` once first (just for the detection), then drop back to manual.
@@ -366,6 +366,37 @@ If anything is `Restarting` or `Exited`, jump to [§12 Troubleshooting](#12-trou
 
 ---
 
+### Provision the embedding model cache
+
+The embedding cache lives at `./models/embedder_cache` by default, or at
+`EMBEDDER_CACHE_DIR` when configured. The `models/` directory is deliberately
+gitignored, so a fresh clone does not contain `all-MiniLM-L6-v2`.
+
+On a host with internet access, populate the cache once from the API image:
+
+```powershell
+docker compose run --rm --no-deps -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0 api python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', cache_folder=os.getenv('EMBEDDER_CACHE_DIR', './models/embedder_cache'))"
+```
+
+Preserve the complete Hugging Face cache layout. Snapshot files may link to
+weight blobs, so copying only part of the directory can leave the weights
+present but unusable. A complete cache may be mounted read-only at runtime.
+
+The embedder loads lazily on the first retrieval request. Afterwards,
+`GET /api/health` should report `embedder.status: "ok"`,
+`model_name: "all-MiniLM-L6-v2"`, `dim: 384`, and
+`retrieval_quality: "ok"`. Before first use, `embedder.status: "not_loaded"`
+is expected. If it reports `offline_fallback`, read the accompanying `reason`;
+retrieval is degraded even if `rag_available` is still true.
+
+Collections record the embedder that created their vectors. A different active
+embedder is refused until the matching model is restored or the collection is
+deliberately rebuilt. A legacy collection without a stamp adopts the active
+model with a warning; that adoption does not prove the provenance of its old
+vectors.
+
+---
+
 ## 7. Pull the LLM model
 
 If you used §6.1 (auto-wrapper), this is already done — skip to §8. If you used §6.2 (manual compose), pull the model yourself.
@@ -374,7 +405,7 @@ If you used §6.1 (auto-wrapper), this is already done — skip to §8. If you u
 # Pick ONE based on your tier (see §2):
 
 # High tier — RTX 5080 / 4080 / 3090 (>= 12 GB VRAM):
-docker compose exec ollama ollama pull qwen3:14b
+docker compose exec ollama ollama pull gemma4:12b
 
 # Mid tier — RTX 5060 / 4060 / 3060 (< 12 GB VRAM):
 docker compose exec ollama ollama pull qwen2.5:7b
@@ -606,7 +637,7 @@ docker compose logs ollama --tail=50           # any errors?
 Common fix:
 
 ```powershell
-docker compose exec ollama ollama pull qwen3:14b   # or llama3.2
+docker compose exec ollama ollama pull gemma4:12b   # or llama3.2
 docker compose restart api
 ```
 
@@ -752,7 +783,7 @@ Student / Lecturer / Admin
         │        ▼                │      ChromaDB        │
         │  ┌─────────────┐        │   (port 8000)       │
         │  │   Ollama    │        │  course_id-scoped   │
-        │  │ qwen3:14b   │        │  vector store       │
+        │  │ gemma4:12b  │        │  vector store       │
         │  │ (port 11434)│        └──────────┬──────────┘
         │  └─────────────┘                   │ top-k chunks
         │                          ┌─────────▼─────────┐
@@ -775,7 +806,7 @@ Student / Lecturer / Admin
 3. Embedding: query string → `all-MiniLM-L6-v2` → 384-dim vector.
 4. Retrieval: `VectorRetriever.search(query, course_id, top_k=5)` against ChromaDB with metadata filter `where={"course_id": {"$eq": course_id}}`.
 5. Confidence: average similarity of retrieved chunks → Low/Medium/High.
-6. Prompt: chunks + question + system instruction → `qwen3:14b` via Ollama.
+6. Prompt: chunks + question + system instruction → the configured LLM (`gemma4:12b` by default) via Ollama.
 7. Response: answer text + source_references (file + page + similarity) + confidence + latency.
 
 **Data flow on upload** (`POST /api/upload`):
@@ -862,7 +893,7 @@ edu-rag/
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 5.4.1 | 384-dim, fully local, ~22 MB model |
 | Vector store | ChromaDB | 1.5.8 | Metadata filtering, simple HTTP API, Docker-ready |
 | Relational DB | PostgreSQL | 16-alpine | Standard; auth/sessions/audit; psycopg3 with `dict_row` |
-| Local LLM | Ollama + `qwen3:14b` (16 GB GPU) or `llama3.2` (8 GB or CPU) | Latest | Self-hosted; no external API; GPU-optional |
+| Local LLM | Ollama + `gemma4:12b` (high tier), `qwen2.5:7b` (mid tier), or `llama3.2` (CPU) | Latest | Self-hosted; no external API; GPU-optional |
 | Containerisation | Docker Compose | v2 | CPU + GPU overlay variants |
 | Testing | Pytest + labelled query corpus | 8.3.3 | Unit, integration, retrieval evaluation; 112 tests pass on rev 3 |
 | CI | GitHub Actions | — | Python tests + fixture validation + Compose validation + Sprint 5 integration gate |

@@ -1,3 +1,4 @@
+import logging
 import os, time
 # chromadb imported lazily inside get_chroma_client() — CI has no chromadb installed
 from src.document_processor.seed_documents import SEED_DOCUMENTS
@@ -117,11 +118,35 @@ def get_chroma_client():
     print(f"[INFO] Using local ChromaDB PersistentClient at {CHROMA_PATH}")
     return chromadb.PersistentClient(path=CHROMA_PATH)
 
+class EmbedderMismatchError(RuntimeError):
+    """The collection and the active embedder use incompatible vector spaces."""
+
+
 def get_or_create_collection(client):
-    return client.get_or_create_collection(
+    _, model_name, _ = _load_embedder()
+    collection = client.get_or_create_collection(
         name=COLLECTION,
-        metadata={"hnsw:space": "cosine"},
+        metadata={"hnsw:space": "cosine", "embedder_model": model_name},
     )
+    metadata = dict(collection.metadata or {})
+    if "embedder_model" not in metadata:
+        # Chroma 1.5.8 rejects hnsw:space in modify(), even when unchanged.
+        # The distance metric remains in collection.configuration; omit only
+        # that legacy metadata key and preserve all other user metadata.
+        metadata.pop("hnsw:space", None)
+        metadata["embedder_model"] = model_name
+        collection.modify(metadata=metadata)
+        logging.getLogger(__name__).warning(
+            "Adopted unstamped collection %s with embedder %s; prior vector provenance is unknown.",
+            COLLECTION, model_name,
+        )
+    elif metadata["embedder_model"] != model_name:
+        raise EmbedderMismatchError(
+            f"Collection {COLLECTION!r} was built with embedder "
+            f"{metadata['embedder_model']!r}, but the active embedder is {model_name!r}. "
+            "Restore the matching embedder or deliberately rebuild the collection."
+        )
+    return collection
 
 def ingest(force_reload: bool = False) -> dict:
 
