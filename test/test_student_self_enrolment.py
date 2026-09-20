@@ -63,6 +63,10 @@ def backend(monkeypatch):
 
     store = Backend()
     courses = {c["course_code"]: c for c in (OPEN, CLOSED)}
+    identities = {code: {**course, "id": f"course-{code}"}
+                  for code, course in courses.items()}
+    monkeypatch.setattr(db, "get_course_by_ref", lambda ref: next(
+        (row for code, row in identities.items() if ref in (code, row["id"])), None))
     emails = {u["user_id"]: u["email"] for u in (STUDENT, LECTURER, ADMIN)}
 
     def add(code, email, role):

@@ -89,6 +89,9 @@ def client(monkeypatch, store, generator):
                         lambda self, **kw: "sess-1")
 
     from src.api import db
+    monkeypatch.setattr(db, "get_course_by_ref", lambda ref:
+                        {**OWNED, "id": "owned-course-id"}
+                        if ref in ("OWNED101", "owned-course-id") else None)
     monkeypatch.setattr(db, "get_course_by_code", lambda code: OWNED)
     monkeypatch.setattr(db, "get_settings",
                         lambda scope: {k[1]: v for k, v in store.items() if k[0] == scope})

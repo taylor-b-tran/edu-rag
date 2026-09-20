@@ -25,3 +25,9 @@ os.environ.pop("PAEDIA_DB_STARTUP_TIMEOUT_SECONDS", None)
 # only credential store, and logging in with them is refused unless this is set.
 # That keeps those committed passwords from working on a deployed instance.
 os.environ.setdefault("PAEDIA_ALLOW_FIXTURE_AUTH", "1")
+
+# The isolated suite uses explicit sample data; production-mode tests opt out.
+# setdefault, not assignment, so a run that sets this explicitly is honoured --
+# otherwise the production default this ships with could never be exercised
+# suite-wide, only in the one file that overrides it per test.
+os.environ.setdefault("PAEDIA_USE_FIXTURES", "true")

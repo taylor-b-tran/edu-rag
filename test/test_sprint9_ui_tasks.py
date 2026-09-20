@@ -167,7 +167,7 @@ class TestAPIClientMethods:
         sys.path.insert(0, os.path.join(os.path.dirname(__file__),
                                         "..", "apps", "streamlit"))
         from api_client import PaediaAPIClient, APIConfig
-        cfg = APIConfig(base_url="http://localhost:5000", timeout=5)
+        cfg = APIConfig(base_url="http://localhost:5000", timeout=5, use_fixtures=False)
         return PaediaAPIClient(config=cfg)
 
     def test_delete_session_success(self, monkeypatch):

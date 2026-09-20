@@ -33,6 +33,10 @@ OWNED = {"course_code": "OWNED101", "course_name": "Owned", "owner_id": LECTURER
 FOREIGN = {"course_code": "FOREIGN101", "course_name": "Theirs",
            "owner_id": OTHER_LECTURER["user_id"]}
 _COURSES = {c["course_code"]: c for c in (OWNED, FOREIGN)}
+# resolve_course answers from the courses table, which carries a UUID these
+# fixtures have no reason to invent, so give each one a stable stand-in id.
+_IDENTITIES = {code: {**course, "id": f"course-{code}"}
+               for code, course in _COURSES.items()}
 
 AUTH = {"Authorization": "Bearer stub"}
 
@@ -60,6 +64,8 @@ def client(monkeypatch, store):
                         or cid in (user.get("enrolled_courses") or []))
 
     from src.api import db
+    monkeypatch.setattr(db, "get_course_by_ref", lambda ref: next(
+        (row for code, row in _IDENTITIES.items() if ref in (code, row["id"])), None))
     monkeypatch.setattr(db, "get_course_by_code", lambda code: _COURSES.get(code))
     monkeypatch.setattr(db, "get_settings",
                         lambda scope: {k[1]: v for k, v in store.items() if k[0] == scope})
