@@ -238,6 +238,14 @@ def read_course(course_code: str):
     if not _state().is_enrolled(user, course_code):
         return jsonify({"error": "Not enrolled in this course."}), 403
 
+    # The enrolment check resolves the reference, so a UUID reaches this line
+    # having passed the gate. Canonicalising it before it becomes the scope is
+    # what keeps this screen and the answers agreeing: /api/query does the same
+    # thing to the same reference, and without it a UUID reads the global
+    # defaults here while the query applies the course override.
+    _, canonical_code = _state().resolve_course(course_code)
+    course_code = canonical_code or course_code
+
     return jsonify({
         "scope": course_code,
         "settings": _stored(course_code),

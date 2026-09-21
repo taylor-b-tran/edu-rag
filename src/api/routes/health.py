@@ -25,16 +25,21 @@ def _require_admin():
 def health():
     state = _state()
     from src.document_processor.ingest_corpus import embedder_status
+    embedder = embedder_status()
     return jsonify(
         {
             "status": "ok",
             "mode": state.backend_mode,
             "rag_available": state.rag_available,
+            "retrieval_quality": (
+                "ok" if state.rag_available and embedder.get("status") == "ok"
+                else "degraded"
+            ),
             # Reachable is not usable: a worker that started without Postgres
             # refuses every login yet still answers here. Say which this one is.
             "database": "connected" if state.db_available else "unavailable",
             "fixture_loaded": state.fixture_loaded,
-            "embedder": embedder_status(),
+            "embedder": embedder,
             "warmup": getattr(state, "warmup_status", {"status": "unknown"}),
             "routes": [
                 "/api/auth/login",

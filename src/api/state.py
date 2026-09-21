@@ -12,6 +12,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from functools import wraps
+from werkzeug.exceptions import ServiceUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,12 @@ class APIState:
 
     @property
     def fixture_loaded(self) -> bool:
-        return bool(self.fixtures)
+        return self.use_fixtures and bool(self.fixtures)
+
+    @property
+    def use_fixtures(self) -> bool:
+        """Sample data requires an explicit opt-in, independent of demo login."""
+        return os.environ.get("PAEDIA_USE_FIXTURES", "").strip().lower() in {"1", "true", "yes"}
 
     @property
     def backend_mode(self) -> str:
@@ -181,12 +187,17 @@ class APIState:
 
     def get_generator(self):
         if self._generator is None:
+            from src.document_processor.ingest_corpus import EmbedderMismatchError
             try:
                 from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
                 self._retriever = VectorRetriever()
                 self._generator = LLMResponseGeneration(retriever=self._retriever)
                 self._backend_mode = "chromadb"
                 print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
+            except EmbedderMismatchError:
+                self._retriever = None
+                self._backend_mode = "embedder_mismatch"
+                raise
             except Exception as exc:
                 print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
                 self._generator = _FixtureGenerator(self)
@@ -539,14 +550,22 @@ class APIState:
     def is_enrolled(self, user: dict[str, Any], course_id: str) -> bool:
         if user.get("role") == "admin":
             return True
-        enrolled = user.get("enrolled_courses", [])
-        if course_id in enrolled:
-            return True
-        for course in self.fixtures.get("courses", []):
-            if course.get("course_code") == course_id or course.get("course_id") == course_id:
-                if course["course_id"] in enrolled or course.get("course_code") in enrolled:
-                    return True
-        return False
+        uuid_form, code_form = self.resolve_course(course_id)
+        if not code_form:
+            return False
+        enrolled = user.get("enrolled_courses") or []
+        token_enrolled = code_form in enrolled or (uuid_form is not None and uuid_form in enrolled)
+        if self._db_available:
+            if not user.get("user_id"):
+                return False
+            try:
+                from src.api import db
+                enrolled = db.get_enrolled_course_codes(user["user_id"])
+            except Exception as exc:
+                raise ServiceUnavailable("Course membership is temporarily unavailable.") from exc
+        # Require both token propagation and current membership: a failed join
+        # confirmation must not grant access, and a stale token cannot undo leave.
+        return token_enrolled and (code_form in enrolled or (uuid_form is not None and uuid_form in enrolled))
 
     def list_courses(self) -> list[dict[str, Any]]:
         """Courses for the subject selector — Postgres when available (T03),
@@ -579,17 +598,35 @@ class APIState:
         ]
 
     def resolve_course(self, course_ref: str | None) -> tuple[str | None, str | None]:
-        """Resolve a course code or UUID to (course_id_uuid, course_code).
+        """Return authoritative (UUID, code), or (None, None) for unknown input.
 
-        Returns (None, None) if not found. If the ref is unknown but truthy,
-        returns it back unchanged in the code slot so callers can still filter.
+        Postgres is authoritative when connected. Only explicit fixture mode
+        permits offline fixture identity; database failures never grant access.
         """
         if not course_ref:
             return None, None
-        for course in self.fixtures.get("courses", []):
-            if course.get("course_code") == course_ref or course.get("course_id") == course_ref:
-                return course.get("course_id"), course.get("course_code")
-        return None, course_ref
+        course_ref = str(course_ref).strip()
+        if not course_ref:
+            return None, None
+        try:
+            course_ref = str(uuid.UUID(course_ref))
+        except ValueError:
+            pass
+        if self._db_available:
+            try:
+                from src.api import db
+                course = db.get_course_by_ref(course_ref)
+            except Exception as exc:
+                raise ServiceUnavailable("Course information is temporarily unavailable.") from exc
+            if course is None:
+                return None, None
+            return str(course["id"]), course["course_code"]
+        if self.use_fixtures:
+            for course in self.fixtures.get("courses", []):
+                if course.get("course_code") == course_ref or course.get("course_id") == course_ref:
+                    return course.get("course_id"), course.get("course_code")
+            return None, None
+        raise ServiceUnavailable("Course information is temporarily unavailable.")
 
     def query_fixture(self, question: str) -> dict[str, Any]:
         responses = self.fixtures.get("responses", {})
@@ -892,9 +929,13 @@ class APIState:
         return result
 
     def list_documents(self, course_id: str | None = None) -> list[dict[str, Any]]:
-        documents = list(self.fixtures.get("documents", [])) + self._refresh_documents()
+        documents = list(self._refresh_documents())
+        if self.use_fixtures:
+            documents = list(self.fixtures.get("documents", [])) + documents
         if course_id:
             uuid_form, code_form = self.resolve_course(course_id)
+            if not code_form:
+                return []
             targets = {course_id}
             if uuid_form:
                 targets.add(uuid_form)
