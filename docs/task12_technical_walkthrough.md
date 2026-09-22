@@ -12,8 +12,8 @@
 > through enrollment check, retrieval, answer generation, citation rendering,
 > and session persistence — six stops in the pipeline."
 
-**Show:** the running app at `http://100.85.155.119:8501/` — a student
-logged in, CSIT321 selected, chat page visible.
+**Show:** the running app — a student logged in, CSIT321 selected,
+chat page visible.
 
 ---
 
@@ -54,9 +54,11 @@ logged in, CSIT321 selected, chat page visible.
 >
 > Then it calls `self._retriever.search(search_query, course_id=course_id,
 > top_k=top_k)` (line 539). This hits ChromaDB, which stores 384-dimensional
-> vectors from `all-MiniLM-L6-v2`, scoped by `course_id` as the collection
-> name. Only chunks with similarity above the threshold are kept (line 541).
-> If nothing passes the threshold, the response is marked as a fallback."
+> vectors from `all-MiniLM-L6-v2` in a single collection called
+> `edurag_course`, scoped by a `where={"course_id": {"$eq": course_id}}`
+> metadata filter (line 270). Only chunks with similarity above the
+> threshold are kept (line 541). If nothing passes the threshold, the
+> response is marked as a fallback."
 
 ---
 

@@ -108,8 +108,8 @@ text, 3:1 for large text (≥18pt or ≥14pt bold).
 | Session meta (#94A3B8 on #1B2A4A sidebar) | 5.55:1 | 4.5:1 | ✅ Pass |
 | User message (white on #0D9488 gradient) | 3.74:1 | 3:1 (large/bold) | ✅ Pass* |
 | Primary button (white on #0D9488) | 3.74:1 | 3:1 (large/bold) | ✅ Pass* |
-| **Timestamp (#94A3B8 on #FFFFFF)** | **2.56:1** | 4.5:1 | **⚠️ Fail** |
-| **Msg time in AI bubble (#94A3B8 on #FFFFFF)** | **2.56:1** | 4.5:1 | **⚠️ Fail** |
+| **Msg time in user bubble (rgba white 0.85 on #0D9488)** | **≈3.15:1** | 4.5:1 | **⚠️ Fail** |
+| Msg time in AI bubble (#64748B on #FFFFFF) | 4.76:1 | 4.5:1 | ✅ Pass (fixed) |
 
 *User message text is 0.95rem (≈15px) at font-weight 500, and the
 user's own words — the primary content is their intent, not reading
@@ -118,14 +118,22 @@ threshold.
 
 ### Contrast failures
 
-**C-01 — Timestamp text (#94A3B8) on white background: 2.56:1.**
-Appears on line 256 (`.user-msg .msg-time`) and line 268
-(`.ai-msg .msg-time`). This is supplementary metadata (the time a
-message was sent), not primary content, so the impact on usability
-is low. To fix: darken to #64748B (4.76:1) or #57687A (5.5:1).
+**C-01a — User-bubble timestamp: rgba(255,255,255,0.85) on teal
+gradient (#0D9488): ≈3.15:1.** Line 256 (`.user-msg .msg-time`).
+Font size is 0.72rem (≈11.5px), below the large-text threshold, so
+4.5:1 is required. Pure white on #0D9488 maxes out at 3.74:1 — no
+opacity adjustment alone can reach AA at this font size. This is
+supplementary metadata (message timestamp), not primary content.
+**Known limitation** — the teal brand colour cannot reach 4.5:1
+with white text at small sizes.
 
-**Recommendation:** Change `.msg-time` colour from `#94A3B8` to
-`#64748B` (already used for caption text, passes AA at 4.76:1).
+**C-01b — AI-bubble timestamp (fixed):** `.ai-msg .msg-time` and
+`.ai-msg-fallback .msg-time` changed from `#94A3B8` to `#64748B`
+(4.76:1 on white) — now passes AA.
+
+**Recommendation:** Accept the user-bubble timestamp (C-01a) as a
+known limitation, or increase its font size to ≥14pt bold / ≥18pt
+regular so the large-text threshold (3:1, already met) applies.
 
 ---
 
@@ -175,7 +183,7 @@ Impact: very low (admin functions are typically used on desktop).
 |-------|--------|
 | Keyboard navigation | ✅ All interactive elements reachable via Tab |
 | Form labels | ✅ All inputs have labels (visible or aria) |
-| Colour contrast | ⚠️ C-01: timestamp text below AA (supplementary) |
+| Colour contrast | ⚠️ C-01a: user-bubble timestamp below AA (known limitation) |
 | Text overflow | ✅ Chat and course pages work at all widths |
 
 ### Lecturer
@@ -184,7 +192,7 @@ Impact: very low (admin functions are typically used on desktop).
 |-------|--------|
 | Keyboard navigation | ✅ All controls reachable |
 | Form labels | ✅ All inputs labelled |
-| Colour contrast | ⚠️ C-01: same timestamp issue |
+| Colour contrast | ⚠️ C-01a: same user-bubble timestamp issue |
 | Text overflow | ⚠️ O-01: doc table tight at 375px |
 
 ### Admin
@@ -193,16 +201,16 @@ Impact: very low (admin functions are typically used on desktop).
 |-------|--------|
 | Keyboard navigation | ✅ All controls reachable |
 | Form labels | ✅ All inputs labelled |
-| Colour contrast | ⚠️ C-01: same timestamp issue |
+| Colour contrast | ⚠️ C-01a: same user-bubble timestamp issue |
 | Text overflow | ⚠️ O-01 + O-02: tables tight at 375px |
 
 ---
 
 ## 6. Recommendations
 
-1. **C-01 (contrast):** Change `.msg-time` and `.ai-msg .msg-time`
-   colour from `#94A3B8` to `#64748B`. Single CSS change, no logic
-   impact.
+1. **C-01a (contrast — known limitation):** User-bubble timestamp
+   (rgba white on teal) cannot reach AA at 0.72rem. AI-bubble
+   timestamp already fixed to `#64748B` (C-01b, passes AA).
 2. **O-01/O-02 (mobile tables):** Consider adding horizontal scroll
    wrapper for the document table and member table, or switching to a
    stacked card layout at narrow widths. Low priority — these views
