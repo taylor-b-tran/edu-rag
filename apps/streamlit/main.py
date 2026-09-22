@@ -253,7 +253,7 @@ button[data-testid="stBaseButton-primary"]:hover {
     font-size: 0.95rem; line-height: 1.5;
     box-shadow: 0 2px 8px rgba(13, 148, 136, 0.2);
 }
-.user-msg .msg-time { color: rgba(255,255,255,0.7); font-size: 0.72rem; margin-top: 6px; }
+.user-msg .msg-time { color: rgba(255,255,255,0.85); font-size: 0.72rem; margin-top: 6px; }
 
 .ai-msg {
     background: #FFFFFF; color: #1E293B;
@@ -265,7 +265,7 @@ button[data-testid="stBaseButton-primary"]:hover {
 }
 .ai-msg strong { color: #1B2A4A; }
 .ai-msg code { background: #F1F5F9; padding: 2px 6px; border-radius: 4px; font-size: 0.88rem; color: #334155; }
-.ai-msg .msg-time { color: #94A3B8; font-size: 0.72rem; margin-top: 6px; }
+.ai-msg .msg-time { color: #64748B; font-size: 0.72rem; margin-top: 6px; }
 
 .ai-msg-fallback {
     background: #FFFBEB; color: #1E293B;
@@ -275,7 +275,7 @@ button[data-testid="stBaseButton-primary"]:hover {
     border: 2px solid #D4A843;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
-.ai-msg-fallback .msg-time { color: #94A3B8; font-size: 0.72rem; margin-top: 6px; }
+.ai-msg-fallback .msg-time { color: #64748B; font-size: 0.72rem; margin-top: 6px; }
 
 .fallback-label {
     display: inline-flex; align-items: center; gap: 6px;
@@ -1046,12 +1046,12 @@ def render_sidebar():
         for s in reversed(st.session_state.sessions[-5:]):
             is_active = s["session_id"] == st.session_state.active_session_id
             card_class = "session-card session-card-active" if is_active else "session-card"
-            title = s["title"][:30] + ("..." if len(s["title"]) > 30 else "")
+            title = _html.escape(s["title"][:30] + ("..." if len(s["title"]) > 30 else ""))
             msg_count = len(s.get("messages", []))
             st.markdown(
                 f"<div class='{card_class}'>"
                 f"<div class='session-title'>💬 {title}</div>"
-                f"<div class='session-meta'>{msg_count} msgs · {s.get('created_at', '')}</div>"
+                f"<div class='session-meta'>{msg_count} msgs · {_html.escape(s.get('created_at', ''))}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -1075,7 +1075,7 @@ def render_sidebar():
         else:
             st.caption("Join a course in My Courses to view its materials.")
         for doc in docs[:5]:
-            doc_name = doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown"
+            doc_name = _html.escape(doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown")
             status = str(doc.get("status", "pending")).lower()
             status_color = "#10B981" if status in ("indexed", "completed") else ("#F59E0B" if status == "processing" else "#EF4444")
             st.markdown(
@@ -1111,7 +1111,7 @@ def render_sidebar():
 
         # ── User info + logout ──
         st.markdown("---")
-        initials = "".join(w[0] for w in st.session_state.user.get("name", "U").split()[:2])
+        initials = _html.escape("".join(w[0] for w in st.session_state.user.get("name", "U").split()[:2]))
         col1, col2 = st.columns([1, 4])
         with col1:
             st.markdown(
@@ -1553,11 +1553,11 @@ def render_history_page():
     visible = all_sessions[:shown]
 
     for i, session in enumerate(visible):
-        title = session.get("title", "Untitled")
-        course = session.get("course_id", "CSIT214")
-        created = session.get("created_at", "—")
+        title = _html.escape(session.get("title", "Untitled"))
+        course = _html.escape(session.get("course_id", "CSIT214"))
+        created = _html.escape(session.get("created_at", "—"))
         msg_count = session.get("message_count", len(session.get("messages", [])))
-        preview = session.get("preview", f"{msg_count} messages in this session")
+        preview = _html.escape(session.get("preview", f"{msg_count} messages in this session"))
         color = accent_colors[i % len(accent_colors)]
 
         st.markdown(f"""
@@ -1756,7 +1756,7 @@ def _run_real_upload_and_indexing(f, course_id):
         else:
             msg = stages.get(status, "⏳ Processing...")
             progress_placeholder.markdown(
-                f'<div class="upload-progress"><strong>{filename}</strong> ({file_size / 1024:.1f} KB)<br>'
+                f'<div class="upload-progress"><strong>{_html.escape(filename)}</strong> ({file_size / 1024:.1f} KB)<br>'
                 f'<div class="upload-step upload-step-active">{msg} ({progress}%)</div>'
                 f'</div>',
                 unsafe_allow_html=True
@@ -1857,6 +1857,7 @@ def _render_document_table(student_view: bool = False):
         doc_type = str(doc_type).upper()
         if "/" in doc_type:
             doc_type = doc_type.split("/")[-1].replace("VND.OPENXMLFORMATS-OFFICEDOCUMENT.PRESENTATIONML.PRESENTATION", "pptx").replace("VND.OPENXMLFORMATS-OFFICEDOCUMENT.WORDPROCESSINGML.DOCUMENT", "docx")
+        doc_type = _html.escape(doc_type)
 
         size_bytes = doc.get("file_size_bytes") or doc.get("size_bytes") or 0
         doc_size = f"{size_bytes / (1024*1024):.1f} MB" if size_bytes else "—"
@@ -2364,9 +2365,9 @@ def render_courses_page():
                 with st.container(border=True):
                     st.markdown(
                         f"<div style='{border_style} padding-left: 12px; background: {bg}; border-radius: 4px;'>"
-                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{'✅ ' if is_active else ''}{code}</span><br/>"
-                        f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
-                        f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
+                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{'✅ ' if is_active else ''}{_html.escape(code)}</span><br/>"
+                        f"<span style='font-size:0.85rem; color:#475569;'>{_html.escape(course.get('name', ''))}</span><br/>"
+                        f"<span style='font-size:0.78rem; color:#64748B;'>{_html.escape(course.get('description', '') or 'No description.')}</span>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
@@ -2438,9 +2439,9 @@ def render_courses_page():
                 with st.container(border=True):
                     st.markdown(
                         f"<div style='border-left: 4px solid #D4A843; padding-left: 12px; border-radius: 4px;'>"
-                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{code}</span><br/>"
-                        f"<span style='font-size:0.85rem; color:#475569;'>{course.get('name', '')}</span><br/>"
-                        f"<span style='font-size:0.78rem; color:#64748B;'>{course.get('description', '') or 'No description.'}</span>"
+                        f"<span style='font-size:1.1rem; font-weight:700; color:#1B2A4A;'>{_html.escape(code)}</span><br/>"
+                        f"<span style='font-size:0.85rem; color:#475569;'>{_html.escape(course.get('name', ''))}</span><br/>"
+                        f"<span style='font-size:0.78rem; color:#64748B;'>{_html.escape(course.get('description', '') or 'No description.')}</span>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
