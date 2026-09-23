@@ -33,7 +33,7 @@ interpret a stack trace mid-demo-prep.
 
 ```
 Paedia demo readiness check
-================================
+======
 [PASS] postgres (container)         state=running health=healthy
 [PASS] chromadb (container)         state=running health=n/a
 [PASS] chromadb (heartbeat)         heartbeat ok
@@ -44,7 +44,7 @@ Paedia demo readiness check
 [PASS] streamlit (container)        state=running health=healthy
 [PASS] streamlit (/_stcore/health)  http 200 ok
 [FAIL] demo question ('What is retrieval-augmented generation?'...) demo question returned the FALLBACK answer, not a grounded one — this is exactly the failure mode task 4 exists to catch. answer[:150]='Based on general knowledge — not verified against course materials.\n\n[LLM Error: 500 Server Error: Internal Server Error for url: http://ollama:11434/'
-================================
+======
 FAIL - see the [FAIL] lines above. Check `docker compose logs <service>`.
 ```
 
