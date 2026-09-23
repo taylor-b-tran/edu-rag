@@ -137,6 +137,73 @@ def check_ollama() -> tuple[str, str]:
     return PASS, f"models available: {names}"
 
 
+# T10-04 (Tung): the sprint plan's done-when for demo reliability is "one
+# complete run-through has been performed live, end to end" and "choose a
+# question the corpus genuinely answers well and verify the sources it
+# returns". The checks above confirm the services are *up*; this confirms
+# the actual demo question still gets a real, grounded, non-fallback answer
+# — the thing that would embarrass the team live on 23 Sept if it silently
+# regressed between rehearsal and the workshop.
+DEMO_COURSE = os.environ.get("PAEDIA_DEMO_COURSE", "CSIT321")
+DEMO_QUESTION = os.environ.get(
+    "PAEDIA_DEMO_QUESTION",
+    "What is retrieval-augmented generation?",
+)
+DEMO_STUDENT_EMAIL = os.environ.get("PAEDIA_DEMO_STUDENT_EMAIL", "student@uow.edu.au")
+DEMO_STUDENT_PASSWORD = os.environ.get("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")
+
+
+def _http_post_json(url: str, payload: dict, headers: dict | None = None,
+                     timeout: float = 60.0) -> tuple[int, dict | None, str]:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = resp.status
+            body = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, None, exc.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return 0, None, str(exc)
+    try:
+        return status, json.loads(body), body
+    except json.JSONDecodeError:
+        return status, None, body
+
+
+def check_demo_question() -> tuple[str, str]:
+    login_status, login_body, login_raw = _http_post_json(
+        f"http://localhost:{API_PORT}/api/auth/login",
+        {"email": DEMO_STUDENT_EMAIL, "password": DEMO_STUDENT_PASSWORD},
+    )
+    if login_body is None or "access_token" not in login_body:
+        return FAIL, f"could not log in as {DEMO_STUDENT_EMAIL} ({login_raw[:150]!r})"
+    token = login_body["access_token"]
+
+    q_status, q_body, q_raw = _http_post_json(
+        f"http://localhost:{API_PORT}/api/query",
+        {"query": DEMO_QUESTION, "course_id": DEMO_COURSE},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=90.0,  # generation is slower than a health check; don't false-FAIL on a cold model
+    )
+    if q_body is None:
+        return FAIL, f"POST /api/query failed (status={q_status}, {q_raw[:200]!r})"
+    if q_body.get("is_fallback"):
+        return FAIL, (
+            f"demo question returned the FALLBACK answer, not a grounded one "
+            f"— this is exactly the failure mode task 4 exists to catch. "
+            f"answer[:150]={q_body.get('answer', '')[:150]!r}"
+        )
+    sources = q_body.get("source_references") or []
+    if not sources:
+        return FAIL, "answer returned but source_references is empty — not citable, don't use this question live"
+    names = ", ".join(str(s) for s in sources[:3])
+    return PASS, f"grounded answer, {len(sources)} source(s): {names}"
+
+
 def main() -> int:
     print("Paedia demo readiness check\n" + "=" * 32)
 
@@ -153,6 +220,7 @@ def main() -> int:
         ("api (/api/health)", check_api()),
         ("streamlit (container)", container_results.get("streamlit", (FAIL, "n/a"))),
         ("streamlit (/_stcore/health)", check_streamlit()),
+        (f"demo question ({DEMO_QUESTION[:40]!r}...)", check_demo_question()),
     ]
 
     worst = PASS
@@ -165,12 +233,16 @@ def main() -> int:
 
     print("=" * 32)
     if worst == PASS:
-        print("READY - all services healthy. Open http://localhost:%s to demo." % APP_PORT)
+        print("READY - all services healthy and the demo question is grounded. Open http://localhost:%s to demo." % APP_PORT)
         return 0
     if worst == WARN:
         print("NOT READY YET - one or more services still warming up. Wait ~15s and re-run.")
         return 0
     print("FAIL - see the [FAIL] lines above. Check `docker compose logs <service>`.")
+    print("If only the demo question failed: try a different question before assuming the stack is broken —")
+    print("set PAEDIA_DEMO_QUESTION to test alternatives, e.g.:")
+    print('  $env:PAEDIA_DEMO_QUESTION = "Explain the chunking strategy used in this course"')
+    print("  python scripts/check_demo_ready.py")
     return 1
 
 
