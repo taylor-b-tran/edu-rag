@@ -261,7 +261,15 @@ class APIState:
             },
         }
 
-    def validate_bearer(self, authorization: str | None, *, report_store_error: bool = False) -> dict[str, Any] | None:
+    def validate_bearer(self, authorization: str | None, *, report_store_error: bool = True) -> dict[str, Any] | None:
+        """The caller's token payload, or None when there is no valid token.
+
+        A token store that cannot be read is not the same as a token that does
+        not exist. Answering it with None made every route say 401 during a
+        database outage, and the interface treats 401 as "signed out" - so a
+        brief outage ended real sessions. It now raises ServiceUnavailable,
+        which the app answers as 503: retry, still signed in.
+        """
         if not authorization:
             return None
         scheme, _, token = authorization.partition(" ")
@@ -298,7 +306,8 @@ class APIState:
                 logger.warning("Token lookup failed (%s: %s); refusing cached credentials.",
                                type(exc).__name__, exc)
                 if report_store_error:
-                    raise
+                    raise ServiceUnavailable(
+                        "Your sign-in could not be checked just now. Please retry.") from exc
                 return None
         else:
             payload = store.get(token)
