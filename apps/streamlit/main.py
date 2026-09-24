@@ -814,13 +814,24 @@ def get_model_badge(model_used: str) -> str:
     return f'<span class="model-badge model-unknown">🔧 {model_used}</span>'
 
 
+# The pipeline decides the confidence band and returns it with every answer
+# (CONFIDENCE_HIGH / CONFIDENCE_MEDIUM in src/document_processor/rag_pipeline.py).
+# These copies exist only for messages that carry a bare score, and a test keeps them
+# equal to the pipeline's: when the two scales differed, a 0.64 answer was labelled
+# "High confidence" by the pipeline and painted gold by this page.
+_CONFIDENCE_HIGH = 0.60
+_CONFIDENCE_MEDIUM = 0.35
+_BAND_COLOURS = {"High": "#10B981", "Medium": "#D4A843", "Low": "#EF4444"}
+
+
 def _confidence_score(confidence, confidence_score=None) -> float:
     if isinstance(confidence_score, (int, float)):
         return max(0.0, min(float(confidence_score), 1.0))
     if isinstance(confidence, (int, float)):
         return max(0.0, min(float(confidence), 1.0))
     if isinstance(confidence, str):
-        label_scores = {"high": 0.9, "medium": 0.6, "low": 0.3}
+        # Mid-band widths, so a bar drawn from a label alone sits inside its own band.
+        label_scores = {"high": 0.8, "medium": 0.5, "low": 0.2}
         lowered = confidence.lower()
         if lowered in label_scores:
             return label_scores[lowered]
@@ -831,18 +842,26 @@ def _confidence_score(confidence, confidence_score=None) -> float:
     return 0.0
 
 
+def _confidence_band(confidence, confidence_score=None):
+    """The band the pipeline assigned, or the same band derived from a bare score."""
+    if isinstance(confidence, str) and confidence.strip().lower() in {"high", "medium", "low"}:
+        return confidence.strip().capitalize()
+    if confidence is None and confidence_score is None:
+        return None
+    score = _confidence_score(confidence, confidence_score)
+    if score >= _CONFIDENCE_HIGH:
+        return "High"
+    if score >= _CONFIDENCE_MEDIUM:
+        return "Medium"
+    if score > 0:
+        return "Low"
+    return None
+
+
 def get_confidence_label(confidence) -> str:
     """Return human-readable confidence label."""
-    if isinstance(confidence, str) and confidence.lower() in {"high", "medium", "low"}:
-        return f"{confidence.capitalize()} confidence"
-    confidence = _confidence_score(confidence)
-    if confidence >= 0.8:
-        return "High confidence"
-    elif confidence >= 0.5:
-        return "Medium confidence"
-    elif confidence > 0:
-        return "Low confidence"
-    return "No confidence data"
+    band = _confidence_band(confidence)
+    return f"{band} confidence" if band else "No confidence data"
 
 
 def _clear_identity_state() -> None:
@@ -1422,9 +1441,11 @@ def render_chat_page():
                             )
 
                     confidence = _confidence_score(msg.get("confidence"), msg.get("confidence_score"))
-                    conf_color = "#10B981" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EF4444")
+                    # Label and colour come from one band, so they cannot disagree.
+                    band = _confidence_band(msg.get("confidence"), msg.get("confidence_score"))
+                    conf_color = _BAND_COLOURS.get(band, _BAND_COLOURS["Low"])
                     conf_pct = int(confidence * 100)
-                    conf_label = get_confidence_label(msg.get("confidence", confidence))
+                    conf_label = f"{band} confidence" if band else "No confidence data"
                     has_confidence = msg.get("confidence") is not None or msg.get("confidence_score") is not None
                     confidence_html = (
                         f'<div class="confidence-bar"><div class="confidence-fill" '
