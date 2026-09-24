@@ -1214,6 +1214,30 @@ def revoke_login(access: str | None, refresh: str | None) -> None:
             cur.execute("DELETE FROM refresh_tokens WHERE token = %s", (refresh,))
 
 
+def prune_expired_tokens() -> int:
+    """Remove credentials that can no longer do anything; return how many went.
+
+    Nothing removed rows by expiry, so every login left two rows behind for
+    good. An expired access token is NOT always dead, though: revoke_login
+    resolves a family through it, so a user whose hour-long access token has
+    lapsed can still log out and take the fortnight-long refresh token with it.
+    An expired access token therefore goes only once its family has no live
+    refresh token left. An expired refresh token can do nothing, and goes.
+    """
+    with connect() as conn, conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM refresh_tokens WHERE expires_at <= NOW()")
+            removed = cur.rowcount or 0
+            cur.execute(
+                """DELETE FROM access_tokens a
+                   WHERE a.expires_at <= NOW()
+                     AND NOT EXISTS (
+                         SELECT 1 FROM refresh_tokens r
+                         WHERE r.family_id = a.family_id AND r.expires_at > NOW())""")
+            removed += cur.rowcount or 0
+    return removed
+
+
 def load_all_access_tokens() -> dict[str, dict[str, Any]]:
     return _load_all_tokens("access_tokens")
 

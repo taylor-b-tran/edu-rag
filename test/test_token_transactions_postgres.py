@@ -150,3 +150,54 @@ def test_schema_invalidates_only_legacy_credentials_idempotently(pg):
         conn.execute(db.SESSION_SCHEMA)
     assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 1
     assert db.get_token("refresh_tokens", "refresh-old") is not None
+
+
+# --- pruning expired credentials ----------------------------------------------
+
+def _pair(access, refresh, family, access_ttl, refresh_ttl):
+    db.insert_token_pair(access, refresh, {**PAYLOAD, "family_id": family},
+                         access_ttl, refresh_ttl)
+
+
+def test_prune_removes_a_login_whose_credentials_have_all_expired(pg):
+    _pair("access-dead", "refresh-dead", "family-dead", -120, -60)
+    assert db.prune_expired_tokens() == 2
+    assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 0
+
+
+def test_prune_keeps_live_credentials(pg):
+    issue()
+    assert db.prune_expired_tokens() == 0
+    assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 1
+
+
+def test_prune_keeps_an_expired_access_token_while_its_refresh_token_lives(pg):
+    # The access token is the logout handle: revoke_login finds the family
+    # through it, so removing it would leave the live refresh token unrevokable.
+    _pair("access-lapsed", "refresh-live", "family-live", -120, 86400)
+    assert db.prune_expired_tokens() == 0
+    assert db.get_token("access_tokens", "access-lapsed") is not None
+
+
+def test_logout_through_a_lapsed_access_token_still_works_after_pruning(pg):
+    _pair("access-lapsed", "refresh-live", "family-live", -120, 86400)
+    db.prune_expired_tokens()
+    db.revoke_login("access-lapsed", None)
+    assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 0
+
+
+def test_prune_touches_only_the_dead_family(pg):
+    _pair("access-dead", "refresh-dead", "family-dead", -120, -60)
+    _pair("access-live", "refresh-live", "family-live", 3600, 86400)
+    assert db.prune_expired_tokens() == 2
+    assert db.get_token("access_tokens", "access-live") is not None
+    assert db.get_token("refresh_tokens", "refresh-live") is not None
+    assert db.get_token("access_tokens", "access-dead") is None
+
+
+def test_an_expired_refresh_token_goes_even_if_its_access_token_does_not_exist(pg):
+    _pair("access-dead", "refresh-dead", "family-dead", -120, -60)
+    with pg() as conn:
+        conn.execute("DELETE FROM access_tokens")
+    assert db.prune_expired_tokens() == 1
+    assert count(pg, "refresh_tokens") == 0
