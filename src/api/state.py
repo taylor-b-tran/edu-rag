@@ -238,6 +238,13 @@ class APIState:
                     return None
             else:
                 db.insert_token_pair(*args)
+                # A new login is a natural moment to clear credentials that can
+                # no longer be used. Best effort: a login never fails over it.
+                try:
+                    db.prune_expired_tokens()
+                except Exception as exc:
+                    logger.warning("Expired-token pruning failed (%s: %s).",
+                                   type(exc).__name__, exc)
         elif refresh_token_to_rotate:
             # The caller holds _auth_lock across validation, consume and issue.
             if self.consume_refresh_token(refresh_token_to_rotate) is None:
