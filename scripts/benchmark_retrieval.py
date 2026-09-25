@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath("."))
 
 from src.document_processor.rag_pipeline import VectorRetriever, SIMILARITY_THRESHOLD
 
-SPRINT = os.getenv("BENCHMARK_SPRINT", "8")
+SPRINT = os.getenv("BENCHMARK_SPRINT", "10")
 
 EVAL_SET_PATH = Path("tests/retrieval_eval_set.json")
 OUT_JSON = Path(f"docs/retrieval_benchmark_sprint{SPRINT}.json")
@@ -61,6 +61,14 @@ def run_benchmark(eval_set: list, retriever: VectorRetriever) -> list:
         best_similarity = chunks[0].similarity if chunks else 0.0
         would_fallback = best_similarity < SIMILARITY_THRESHOLD
 
+        # T17: which topics the top-5 results actually belong to.
+        # If a question's top results come from a different topic than
+        # its own, that's the "citations from unrelated topics" issue
+        # from Sprint 10 - worth catching automatically every run,
+        # not just when someone happens to notice it.
+        top5_topics = [c.topic for c in chunks[:P_AT_K] if c.topic]
+        off_topic_hits = sorted({t for t in top5_topics if t and t != item["topic"]})
+
         results.append({
             "id": item["id"],
             "question": item["question"],
@@ -73,6 +81,9 @@ def run_benchmark(eval_set: list, retriever: VectorRetriever) -> list:
             "is_off_topic_query": len(relevant) == 0,
             "correctly_triggered_fallback": (len(relevant) == 0 and would_fallback),
             "best_similarity": round(best_similarity, 3),
+            "top5_topics": top5_topics,
+            "topic_dispersion_flag": bool(off_topic_hits) and len(relevant) > 0,
+            "unrelated_topics_hit": off_topic_hits,
         })
     return results
 
@@ -88,7 +99,52 @@ def theoretical_max_precision_at_5(in_corpus: list) -> float:
     return round(sum(per_query_max) / len(per_query_max), 3)
 
 
-def summarise(results: list, corpus_size: int = None) -> dict:
+def corpus_document_distribution(collection) -> dict:
+    """How indexed passages are spread across source documents.
+
+    T17: retrieval figures on their own can look better than the testing
+    actually was if most of the corpus -- and therefore most chances to
+    retrieve something relevant -- comes from one document. This has to be
+    reported alongside every accuracy number, not just noted once.
+
+    Reads metadata directly rather than iterating chunk-by-chunk with
+    n_results, since a ChromaDB collection.get() with no query returns every
+    record's metadata in one call.
+    """
+    try:
+        got = collection.get(include=["metadatas"])
+    except Exception:
+        return {"available": False}
+
+    metas = got.get("metadatas") or []
+    total = len(metas)
+    if not total:
+        return {"available": False}
+
+    counts: dict[str, int] = {}
+    for m in metas:
+        source = (m or {}).get("source_file", "Unknown")
+        counts[source] = counts.get(source, 0) + 1
+
+    ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+    top_file, top_count = ranked[0]
+    top_share = round(top_count / total, 3)
+
+    return {
+        "available": True,
+        "total_chunks": total,
+        "n_documents": len(counts),
+        "top_document": top_file,
+        "top_document_chunks": top_count,
+        "top_document_share": top_share,
+        "by_document": [
+            {"source_file": f, "chunks": c, "share": round(c / total, 3)}
+            for f, c in ranked
+        ],
+    }
+
+
+def summarise(results: list, corpus_size: int = None, distribution: dict = None) -> dict:
     # Split into normal questions (have ground truth) vs off-topic controls (shouldn't match anything)
     in_corpus = [r for r in results if not r["is_off_topic_query"]]
     off_topic = [r for r in results if r["is_off_topic_query"]]
@@ -100,8 +156,14 @@ def summarise(results: list, corpus_size: int = None) -> dict:
     avg_p5 = avg([r["precision_at_5"] for r in in_corpus])
     max_p5 = theoretical_max_precision_at_5(in_corpus)
 
+    imbalance_flag = bool(
+        distribution and distribution.get("available") and distribution["top_document_share"] > 0.4
+    )
+
     return {
         "corpus_size": corpus_size,
+        "corpus_distribution": distribution,
+        "corpus_imbalance_flagged": imbalance_flag,
         "n_queries": len(results),
         "n_in_corpus_queries": len(in_corpus),
         "n_off_topic_queries": len(off_topic),
@@ -177,6 +239,19 @@ def build_interpretation(summary: dict, results: list) -> list:
         )
         lines.append("")
 
+    # T17: flag any question whose top-5 results included another topic.
+    # This is what "citations from unrelated topics" looks like in the
+    # numbers - worth checking even when precision/recall look fine,
+    # since a wrong-topic chunk can still rank high alongside good ones.
+    dispersed = [r for r in results if r.get("topic_dispersion_flag")]
+    if dispersed:
+        lines.append(f"**Topic dispersion ({len(dispersed)}):** questions whose top-5 results "
+                      "included chunks from a different topic than the question itself:")
+        lines.append("")
+        for r in dispersed:
+            lines.append(f"- {r['id']} ({r['topic']}): also pulled in {', '.join(r['unrelated_topics_hit'])}")
+        lines.append("")
+
     lines.append(
         f"**Bottom line:** MRR = {summary['mrr']} means the correct chunk is ranked "
         f"first for the large majority of questions, and Recall@{R_AT_K} = "
@@ -199,6 +274,21 @@ def write_markdown(summary: dict, results: list, path: Path, title: str = None):
         f"If this doesn't match what you expect, the collection wasn't reseeded before "
         f"this ran -- see `ingest(force_reload=True)` in `src/document_processor/ingest_corpus.py`.",
         "",
+    ]
+    dist = summary.get("corpus_distribution")
+    if dist and dist.get("available"):
+        pct = int(round(dist["top_document_share"] * 100))
+        warn = " **This is the corpus-imbalance caveat noted in Sprint 10 task 17.**" if summary.get("corpus_imbalance_flagged") else ""
+        lines += [
+            f"**Corpus balance: one document, `{dist['top_document']}`, accounts for "
+            f"{pct}% of all {dist['total_chunks']} indexed passages "
+            f"({dist['top_document_chunks']} chunks) across {dist['n_documents']} documents.**{warn} "
+            "Any accuracy figure below should be read with this in mind: it reflects how well "
+            "retrieval works on the material that dominates the corpus, not how broadly it has "
+            "been tested across documents.",
+            "",
+        ]
+    lines += [
         f"Labelled set: `tests/retrieval_eval_set.json` "
         f"({summary['n_in_corpus_queries']} in-corpus questions + "
         f"{summary['n_off_topic_queries']} off-topic control questions)",
@@ -264,9 +354,17 @@ def main():
         sys.exit(1)
     print(f"Collection has {corpus_size} chunks.")
 
+    print("\nChecking corpus document distribution...")
+    distribution = corpus_document_distribution(retriever._collection)
+    if distribution.get("available"):
+        pct = int(round(distribution["top_document_share"] * 100))
+        print(f"  Top document '{distribution['top_document']}' = {pct}% of {distribution['total_chunks']} chunks")
+        if distribution["top_document_share"] > 0.4:
+            print("  WARNING: corpus is imbalanced -- see the caveat in the markdown report.")
+
     print("\nRunning retrieval benchmark (no LLM calls needed)...")
     results = run_benchmark(eval_set, retriever)
-    summary = summarise(results, corpus_size=corpus_size)
+    summary = summarise(results, corpus_size=corpus_size, distribution=distribution)
 
     print("\n=== Summary ===")
     print(json.dumps(summary, indent=2))
