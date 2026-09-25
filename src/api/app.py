@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 
 from flask import Flask, jsonify
 
@@ -9,6 +10,18 @@ from src.api.state import APIState
 
 
 def create_app() -> Flask:
+    # Configure the application's namespace even when the WSGI server already
+    # owns root logging. Leave third-party handlers and levels alone.
+    app_logger = logging.getLogger("src")
+    for handler in list(app_logger.handlers):
+        if getattr(handler, "_paedia_console", False):
+            app_logger.removeHandler(handler)
+            handler.close()
+    console = logging.StreamHandler()
+    console._paedia_console = True
+    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    app_logger.addHandler(console)
+    app_logger.setLevel(logging.INFO)
     app = Flask(__name__)
     # Cap the request body. Without this, an upload of any size was read whole
     # into memory, so a single request could exhaust the container. Flask

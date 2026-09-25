@@ -224,14 +224,13 @@ def query():
             num_predict=cfg.get("num_predict"),
         )
     except Exception as exc:
-        logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
+        logger.exception("Generation failed for user %s", user.get("user_id"))
         return jsonify({
             "error": "generation_unavailable",
             "message": (
                 "The answer generation service is temporarily unavailable. "
-                "Please ensure Ollama is running (`ollama serve`) and try again."
+                "Please try again shortly."
             ),
-            "detail": str(exc),
         }), 503
 
     # A citation names the file as its uploader did. The stored name stays in

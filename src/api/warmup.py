@@ -105,6 +105,23 @@ def warmup_ollama(
     return result
 
 
+def warmup_retrieval(state) -> None:
+    """Warm each worker before serving requests; an outage remains retryable."""
+    from src.document_processor.ingest_corpus import _load_embedder, get_chroma_client
+
+    try:
+        embedder, _, _ = _load_embedder()
+        embedder.encode(["Course material warm-up"])
+    except Exception:
+        logger.exception("Embedder warm-up failed; the next query will retry.")
+        return
+    try:
+        get_chroma_client().heartbeat()
+        state.get_generator()
+    except Exception:
+        logger.exception("Retrieval warm-up unavailable; the next query will retry.")
+
+
 def warmup_async(state) -> threading.Thread | None:
     """Run warmup_ollama in a background thread and stash the result on state."""
     if os.environ.get("EDURAG_OLLAMA_WARMUP", "true").lower() in {"0", "false", "no"}:

@@ -21,6 +21,10 @@ os.environ["POSTGRES_HOST"] = "postgres-disabled-during-tests.invalid"
 # start-up wait set the variable themselves.
 os.environ.pop("PAEDIA_DB_STARTUP_TIMEOUT_SECONDS", None)
 
+# Worker-start retrieval is exercised with explicit stubs and disposable services.
+# The offline suite must not contact a vector service when creating APIState.
+os.environ.setdefault("EDURAG_RETRIEVAL_WARMUP", "false")
+
 # With no database, the demo accounts in fixtures/sample_responses.json are the
 # only credential store, and logging in with them is refused unless this is set.
 # That keeps those committed passwords from working on a deployed instance.
