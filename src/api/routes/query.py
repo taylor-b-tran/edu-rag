@@ -234,9 +234,19 @@ def query():
             "detail": str(exc),
         }), 503
 
+    # A citation names the file as its uploader did. The stored name stays in
+    # source_file: the vector store finds a document's chunks by it.
+    source_refs = [dict(ref) if isinstance(ref, dict) else ref
+                   for ref in (generated.source_refs or [])]
+    stored_names = [ref.get("source_file") for ref in source_refs if isinstance(ref, dict)]
+    display = state.display_filenames(stored_names) if any(stored_names) else {}
+    for ref in source_refs:
+        if isinstance(ref, dict) and ref.get("source_file"):
+            ref["filename"] = display[ref["source_file"]]
+
     result = {
         "answer": generated.answer,
-        "source_references": generated.source_refs,
+        "source_references": source_refs,
         "confidence": generated.confidence,
         "confidence_score": generated.confidence_score,
         "model_used": generated.model_used,

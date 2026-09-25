@@ -792,6 +792,24 @@ class APIState:
                                "this worker's cache.", type(exc).__name__, exc)
         return self.uploaded_documents
 
+    def display_filenames(self, stored_names) -> dict[str, str]:
+        """What each stored file was called by the person who uploaded it.
+
+        Chunks carry the stored name, which has a suffix so two uploads of the
+        same file stay apart, and which deletion uses to find a document's
+        chunks. A citation built from a chunk therefore showed
+        "notes-bc36086a.pdf" for a file the lecturer uploaded as "notes.pdf",
+        while the document table showed "notes.pdf". A name with no row maps to
+        itself, so a citation is never lost for want of a display name.
+        """
+        wanted = {name for name in stored_names if name}
+        names = {name: name for name in wanted}
+        for doc in self._refresh_documents():
+            stored = doc.get("filename")
+            if stored in wanted and doc.get("original_filename"):
+                names[stored] = doc["original_filename"]
+        return names
+
     def list_indexing_jobs(self) -> dict[str, dict[str, Any]]:
         """Read authoritative jobs; deleting a document cascades to its jobs."""
         if self._db_available:
