@@ -122,7 +122,7 @@ request timeout.
 **Fix — trigger warm-up again by hand, with a timeout long enough for a
 cold load:**
 ```powershell
-$login = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" -Method Post -ContentType "application/json" -Body '{"email":"lecturer@uow.edu.au","password":"lecturer123"}'
+$login = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" -Method Post -ContentType "application/json" -Body (@{email="lecturer@uow.edu.au"; password=$env:PAEDIA_DEMO_LECTURER_PASSWORD} | ConvertTo-Json) # Load the password from this stack's .env.
 $token = $login.access_token
 Invoke-RestMethod -Uri "http://localhost:5000/api/warmup" -Method Post -Headers @{Authorization = "Bearer $token"} -TimeoutSec 600
 python scripts/check_demo_ready.py

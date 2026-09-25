@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -150,7 +151,7 @@ def check_ollama() -> tuple[str, str]:
 DEMO_COURSE = os.environ.get("PAEDIA_DEMO_COURSE", "CSIT321")
 DEMO_QUESTION = os.environ.get(
     "PAEDIA_DEMO_QUESTION",
-    "What is retrieval-augmented generation?",
+    "What is a decision tree?",
 )
 DEMO_STUDENT_EMAIL = os.environ.get("PAEDIA_DEMO_STUDENT_EMAIL", "student@uow.edu.au")
 # No default: the demo accounts have no known password unless this stack's .env
@@ -200,6 +201,13 @@ def check_demo_question() -> tuple[str, str]:
     )
     if q_body is None:
         return FAIL, f"POST /api/query failed (status={q_status}, {q_raw[:200]!r})"
+    answer = (q_body.get("answer") or "").strip()
+    if answer.startswith("["):
+        return FAIL, "answer contains a service outage hint"
+    if "cannot be verified from the available course materials" in answer.lower():
+        return FAIL, "the course materials do not cover the demo question"
+    if not re.search(r"\[S[1-9]\d*\]", answer):
+        return FAIL, "answer has no inline source citation"
     if q_body.get("is_fallback"):
         return FAIL, (
             f"demo question returned the FALLBACK answer, not a grounded one "
