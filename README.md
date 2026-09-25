@@ -1000,6 +1000,7 @@ This section is a fast path for grading. It assumes you've already done the setu
 ```powershell
 docker compose up -d --build
 docker compose exec api python -m src.document_processor.ingest_corpus   # once, if not already seeded
+$env:PAEDIA_DEMO_STUDENT_PASSWORD = "<the value in your .env>"            # the readiness check signs in as the student
 python scripts/check_demo_ready.py                                       # confirms all 5 services are healthy
 ```
 

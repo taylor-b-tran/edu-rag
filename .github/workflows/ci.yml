@@ -111,13 +111,13 @@ jobs:
       - name: Run pytest
         run: python -m pytest -q
 
-      - name: Verify token transactions and course joining on isolated PostgreSQL schemas
+      - name: Verify token transactions, course joining and demo account seeding on isolated PostgreSQL schemas
         env:
           PAEDIA_TEST_POSTGRES_HOST: 127.0.0.1
           POSTGRES_USER: edurag_test
           POSTGRES_PASSWORD: ci_disposable_password
           POSTGRES_DB: edurag_test
-        run: python -m pytest test/test_token_transactions_postgres.py test/test_student_self_enrolment_postgres.py -q
+        run: python -m pytest test/test_token_transactions_postgres.py test/test_student_self_enrolment_postgres.py test/test_demo_accounts_postgres.py -q
 
   docker-compose-validate:
     name: Docker Compose validation
