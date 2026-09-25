@@ -10,6 +10,13 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course materials."
 
+# Confidence bands, by mean similarity of the chunks kept. These are the only thresholds: the
+# interface colours its bar from the band returned with each answer, and a test pins its copy
+# for bare scores to these values. Two scales that disagreed once put "High confidence" on a
+# gold bar.
+CONFIDENCE_HIGH = 0.60
+CONFIDENCE_MEDIUM = 0.35
+
 # T8-18: matches inline citations like [S1], [S2] in the model's answer, and
 # the trailing "Sources: S1, S2" line the evidence_cited/few_shot_cited
 # prompts ask the model to produce.
@@ -498,7 +505,7 @@ class LLMResponseGeneration:
         # Confidence is based on how close the retrieved chunks are, not on the LLM itself
         if not chunks: return "Low", 0.0
         avg = sum(c.similarity for c in chunks) / len(chunks)
-        label = "High" if avg >= 0.60 else ("Medium" if avg >= 0.35 else "Low")
+        label = "High" if avg >= CONFIDENCE_HIGH else ("Medium" if avg >= CONFIDENCE_MEDIUM else "Low")
         return label, round(avg, 3)
 
     @staticmethod
