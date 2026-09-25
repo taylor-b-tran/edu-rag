@@ -12,6 +12,7 @@ qa_checklist_sprint5.md (flipping the Status column from SKIP to PASS/FAIL).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -19,7 +20,8 @@ from pathlib import Path
 import requests
 
 API = "http://localhost:5000"
-LOGIN = {"email": "student@uow.edu.au", "password": "student123"}
+LOGIN = {"email": "student@uow.edu.au",
+         "password": (os.environ.get("PAEDIA_DEMO_STUDENT_PASSWORD") or "").strip()}
 
 SECTION_4 = [
     ("R-01", "What does RAG stand for?", "live retrieval; backend_mode=chromadb"),
@@ -41,6 +43,8 @@ SECTION_5 = [
 
 
 def login() -> str:
+    if not LOGIN["password"]:
+        sys.exit("Set PAEDIA_DEMO_STUDENT_PASSWORD to the student password in the stack's .env.")
     r = requests.post(f"{API}/api/auth/login", json=LOGIN, timeout=10)
     r.raise_for_status()
     return r.json()["access_token"]

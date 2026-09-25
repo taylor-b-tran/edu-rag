@@ -221,8 +221,13 @@ def test_session_store_outage_is_503_not_an_expired_cookie(server, monkeypatch):
     monkeypatch.setattr(db, "get_token", Mock(side_effect=ConnectionError("database unavailable")))
     response = client.get("/api/auth/me", headers={"Authorization": "Bearer " + issued["access_token"]})
     assert response.status_code == 503
-    # Existing authorization callers still fail closed, and never use RAM credentials.
-    assert state.validate_bearer("Bearer " + issued["access_token"]) is None
+    # Authorization callers still fail closed and never use RAM credentials: by
+    # default the outage is raised as a 503 (still signed in, retry), and a caller
+    # that opts out gets None - in neither case the cached payload.
+    from werkzeug.exceptions import ServiceUnavailable
+    with pytest.raises(ServiceUnavailable):
+        state.validate_bearer("Bearer " + issued["access_token"])
+    assert state.validate_bearer("Bearer " + issued["access_token"], report_store_error=False) is None
 
 
 def test_restored_widget_event_for_same_course_keeps_backend_session(ui):

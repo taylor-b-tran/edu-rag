@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -294,28 +295,25 @@ CREATE TABLE IF NOT EXISTS message_feedback (
 CREATE INDEX IF NOT EXISTS message_feedback_message_idx ON message_feedback (message_id);
 """
 
-# Same three demo accounts the fixture file has always used, now with a
-# distinct real bcrypt hash per password instead of one shared placeholder.
-# Demo account passwords come from the environment. They used to be literals
-# here, printed on the login screen and listed in the README, which made every
-# one of them public knowledge - including the admin. The fallbacks keep a
-# local checkout usable; any instance more than one person can reach must set
-# these in its own .env.
-def _demo_password(env_key: str, fallback: str) -> tuple[str, bool]:
+# Same three demo accounts the fixture file has always used. Their passwords
+# come only from the environment. They used to fall back to literals printed on
+# the login screen and listed in the README - public knowledge, the admin
+# included - so a deployment that forgot to set them seeded exactly those. An
+# unset variable now gives a NEW account a random password nobody knows: the
+# account exists and cannot be signed into until the variable is set. Closed by
+# default rather than open.
+def _demo_password(env_key: str) -> tuple[str, bool]:
     """Return (password, came_from_env). Only an explicitly configured password
     is written over an existing account - otherwise every restart would reset
     whatever the instance had been changed to."""
     value = (os.environ.get(env_key) or "").strip()
-    return (value, True) if value else (fallback, False)
+    return (value, True) if value else (secrets.token_urlsafe(32), False)
 
 
 _DEMO_USERS = [
-    ("admin_demo", "admin@uow.edu.au", "admin",
-     *_demo_password("PAEDIA_DEMO_ADMIN_PASSWORD", "admin123")),
-    ("lecturer_demo", "lecturer@uow.edu.au", "lecturer",
-     *_demo_password("PAEDIA_DEMO_LECTURER_PASSWORD", "lecturer123")),
-    ("student_demo", "student@uow.edu.au", "student",
-     *_demo_password("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")),
+    ("admin_demo", "admin@uow.edu.au", "admin", "PAEDIA_DEMO_ADMIN_PASSWORD"),
+    ("lecturer_demo", "lecturer@uow.edu.au", "lecturer", "PAEDIA_DEMO_LECTURER_PASSWORD"),
+    ("student_demo", "student@uow.edu.au", "student", "PAEDIA_DEMO_STUDENT_PASSWORD"),
 ]
 # The two subjects that carry real, indexed course material. CSIT214, CSCI369
 # and MATH202 were seeded here and in the fixtures but never received any:
@@ -335,10 +333,13 @@ def _demo_seed_rows() -> list[tuple]:
     requests need. Doing it inside would stall the other worker's reads of those
     tables for as long as the hashing takes.
     """
-    return [(username, email, role,
-             bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
-             from_env)
-            for username, email, role, password, from_env in _DEMO_USERS]
+    rows = []
+    for username, email, role, env_key in _DEMO_USERS:
+        password, from_env = _demo_password(env_key)
+        rows.append((username, email, role,
+                     bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+                     from_env, env_key))
+    return rows
 
 
 def _seed_demo_auth_data(cur, rows) -> None:
@@ -349,7 +350,7 @@ def _seed_demo_auth_data(cur, rows) -> None:
     workers running this at the same time collide on a different constraint
     than the one being handled -- `users.username` is unique too.
     """
-    for username, email, role, password_hash, from_env in rows:
+    for username, email, role, password_hash, from_env, env_key in rows:
         conflict = (
             "DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()"
             if from_env else "DO NOTHING"
@@ -359,9 +360,13 @@ def _seed_demo_auth_data(cur, rows) -> None:
             INSERT INTO users (username, email, role, password_hash)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (email) {conflict}
+            RETURNING email
             """,
             (username, email, role, password_hash),
         )
+        if cur.fetchone() is not None and not from_env:
+            logger.warning("Created %s with a random password because %s is not set; "
+                           "set it and restart to sign in with this account.", email, env_key)
     for course_code, course_name in _DEMO_COURSES:
         cur.execute(
             """
@@ -394,7 +399,7 @@ def _seed_demo_auth_data(cur, rows) -> None:
         """,
         (
             [code for code, _name in _DEMO_COURSES],
-            [email for _username, email, role, _password, _from_env in _DEMO_USERS
+            [email for _username, email, role, _env_key in _DEMO_USERS
              if role in ("student", "lecturer")],
         ),
     )

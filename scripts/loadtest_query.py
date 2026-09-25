@@ -28,8 +28,9 @@ Requires:
     - Postgres reachable (signup and course enrollment both need it -
       db_available must be true, or signup returns 503).
     - An admin account. Defaults to the seeded demo admin
-      (admin@uow.edu.au); password comes from PAEDIA_DEMO_ADMIN_PASSWORD if
-      set on the api container, else the seeded fallback "admin123".
+      (admin@uow.edu.au); its password comes from --admin-password or
+      PAEDIA_DEMO_ADMIN_PASSWORD, the value set in the stack's .env. There is
+      no default: an unset variable seeds a password nobody knows.
 
 Usage (see docs/loadtest_sprint8_t8_26.md for full walkthrough):
 
@@ -229,9 +230,13 @@ def main() -> int:
     parser.add_argument("--concurrency-levels", default="1,2,4,8,16",
                          help="Comma-separated list of concurrency levels to sweep.")
     parser.add_argument("--admin-email", default="admin@uow.edu.au")
-    parser.add_argument("--admin-password", default=os.environ.get("PAEDIA_DEMO_ADMIN_PASSWORD") or "admin123")
+    parser.add_argument("--admin-password",
+                        default=(os.environ.get("PAEDIA_DEMO_ADMIN_PASSWORD") or "").strip())
     parser.add_argument("--output", default=str(REPO_ROOT / "docs" / "loadtest_sprint8_t8_26.json"))
     args = parser.parse_args()
+    if not args.admin_password:
+        parser.error("set PAEDIA_DEMO_ADMIN_PASSWORD, or pass --admin-password, to the admin "
+                     "password in the stack's .env")
 
     if args.requests_per_user > 10:
         print(
