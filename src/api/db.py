@@ -1223,17 +1223,30 @@ def prune_expired_tokens() -> int:
     lapsed can still log out and take the fortnight-long refresh token with it.
     An expired access token therefore goes only once its family has no live
     refresh token left. An expired refresh token can do nothing, and goes.
+
+    Pruning never waits for a row another request holds. revoke_login locks a
+    family's access row and then its refresh row; pruning the tables the other
+    way round let a logout and a login each hold the row the other needed, and
+    PostgreSQL aborted one of them. Access rows therefore go first, and a row
+    that is locked is skipped and left for the next login. NOW() is fixed for
+    the transaction, so the order does not change which rows qualify.
     """
     with connect() as conn, conn.transaction():
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM refresh_tokens WHERE expires_at <= NOW()")
+            cur.execute(
+                """DELETE FROM access_tokens WHERE token IN (
+                       SELECT a.token FROM access_tokens a
+                       WHERE a.expires_at <= NOW()
+                         AND NOT EXISTS (
+                             SELECT 1 FROM refresh_tokens r
+                             WHERE r.family_id = a.family_id AND r.expires_at > NOW())
+                       FOR UPDATE SKIP LOCKED)""")
             removed = cur.rowcount or 0
             cur.execute(
-                """DELETE FROM access_tokens a
-                   WHERE a.expires_at <= NOW()
-                     AND NOT EXISTS (
-                         SELECT 1 FROM refresh_tokens r
-                         WHERE r.family_id = a.family_id AND r.expires_at > NOW())""")
+                """DELETE FROM refresh_tokens WHERE token IN (
+                       SELECT token FROM refresh_tokens
+                       WHERE expires_at <= NOW()
+                       FOR UPDATE SKIP LOCKED)""")
             removed += cur.rowcount or 0
     return removed
 

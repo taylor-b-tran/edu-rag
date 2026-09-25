@@ -4,6 +4,7 @@ Run with PAEDIA_TEST_POSTGRES_HOST=postgres inside the API container. Normal
 unit tests leave this unset. Each test uses fresh connections, like workers.
 """
 import os
+import time
 import uuid
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -201,3 +202,40 @@ def test_an_expired_refresh_token_goes_even_if_its_access_token_does_not_exist(p
         conn.execute("DELETE FROM access_tokens")
     assert db.prune_expired_tokens() == 1
     assert count(pg, "refresh_tokens") == 0
+
+
+def test_prune_does_not_wait_for_a_row_another_request_holds(pg):
+    # Waiting behind a logout is what let the two deadlock. A held row is left
+    # for the next login instead.
+    _pair("access-dead", "refresh-dead", "family-dead", -120, -60)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with pg() as holder, holder.transaction():
+            holder.execute("SELECT 1 FROM access_tokens WHERE token = 'access-dead' FOR UPDATE")
+            assert pool.submit(db.prune_expired_tokens).result(timeout=5) == 1
+    assert db.get_token("access_tokens", "access-dead") is not None
+    assert db.prune_expired_tokens() == 1
+    assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 0
+
+
+def test_a_logout_and_a_prune_of_the_same_expired_login_both_finish(pg):
+    # The logout below repeats revoke_login's statements in its order - the family's
+    # access row, then its refresh row - with a pause between them, because
+    # revoke_login itself cannot be paused there. Pruning took the rows the other way
+    # round, and PostgreSQL aborted one of the two. It reproduces the incident only
+    # if prune starts inside the pause; the test above is the strict guard.
+    _pair("access-dead", "refresh-dead", "family-dead", -120, -60)
+    holding = Event()
+
+    def logout():
+        with pg() as conn, conn.transaction():
+            conn.execute("DELETE FROM access_tokens WHERE family_id = 'family-dead'")
+            holding.set()
+            time.sleep(0.5)
+            conn.execute("DELETE FROM refresh_tokens WHERE family_id = 'family-dead'")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        revocation = pool.submit(logout)
+        assert holding.wait(10)
+        pool.submit(db.prune_expired_tokens).result(timeout=10)
+        revocation.result(timeout=10)
+    assert count(pg, "access_tokens") == count(pg, "refresh_tokens") == 0
