@@ -1,9 +1,17 @@
+import logging
 import os, re, requests
 from dataclasses import dataclass, field
 from typing import List, Optional
 from src.document_processor.ingest_corpus import (
     CHROMA_PATH, COLLECTION, COURSE_ID, SIMILARITY_THRESHOLD, _load_embedder
 )
+
+logger = logging.getLogger(__name__)
+
+
+class GenerationUnavailable(RuntimeError):
+    """The model did not produce an answer; callers must not persist a turn."""
+
 
 TOP_K = int(os.getenv("TOP_K", "5"))
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -527,28 +535,9 @@ class LLMResponseGeneration:
                 timeout=240)
             resp.raise_for_status()
             return resp.json().get("response","").strip(), True
-        except requests.exceptions.ConnectionError:
-            # Ollama isn't running — fall back to showing the raw retrieved text instead of failing completely
-            context_lines = (
-                "\n".join(f"\u2022 {c.citation_label()}: {c.text[:200]}\u2026" for c in chunks)
-                if chunks else "  (no chunks retrieved)"
-            )
-            return (
-                "[Ollama not running] Start with: ollama serve && ollama pull llama3.2\n\n"
-                "Retrieved context (retrieval succeeded):\n" + context_lines
-            ), False
-        except requests.exceptions.Timeout:
-            context_lines = (
-                "\n".join(f"\u2022 {c.citation_label()}: {c.text[:200]}\u2026" for c in chunks)
-                if chunks else "  (no chunks retrieved)"
-            )
-            return (
-                "[Ollama response timed out. On CPU-only machines a full answer can take up to "
-                "~180s (see README.md Hardware Requirements) \u2014 please try again.]\n\n"
-                "Retrieved context (retrieval succeeded):\n" + context_lines
-            ), False
-        except Exception as exc:
-            return f"[LLM Error: {exc}]", False
+        except Exception:
+            logger.exception("Answer generation request failed.")
+            return "", False
 
     @staticmethod
     def _confidence(chunks):
@@ -600,6 +589,9 @@ class LLMResponseGeneration:
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
+        if not ok:
+            logger.error("Answer generation unavailable; no answer will be returned.")
+            raise GenerationUnavailable("The answer service is temporarily unavailable.")
         if ok:
             raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
         conf, cscore= self._confidence(good)
@@ -609,7 +601,11 @@ class LLMResponseGeneration:
         # the model never mentioned in its answer. If nothing can be confidently
         # extracted, keep the full list rather than guessing and hiding a real citation.
         cited = _extract_cited_source_indices(raw, len(good)) if ok else set()
-        shown_order = sorted(cited) if cited else list(range(1, len(good) + 1))
+        refused = not cited and "cannot be verified from the available course materials" in raw.lower()
+        if refused:
+            is_fallback = True
+            conf, cscore = "Low", 0.0
+        shown_order = [] if refused else (sorted(cited) if cited else list(range(1, len(good) + 1)))
         used_chunks = [good[i - 1] for i in shown_order]
         refs, positions = self._refs_with_positions(used_chunks)
 
