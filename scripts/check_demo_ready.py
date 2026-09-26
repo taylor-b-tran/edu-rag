@@ -201,19 +201,20 @@ def check_demo_question() -> tuple[str, str]:
     )
     if q_body is None:
         return FAIL, f"POST /api/query failed (status={q_status}, {q_raw[:200]!r})"
-    answer = (q_body.get("answer") or "").strip()
-    if answer.startswith("["):
-        return FAIL, "answer contains a service outage hint"
-    if "cannot be verified from the available course materials" in answer.lower():
-        return FAIL, "the course materials do not cover the demo question"
-    if not re.search(r"\[S[1-9]\d*\]", answer):
-        return FAIL, "answer has no inline source citation"
     if q_body.get("is_fallback"):
         return FAIL, (
             f"demo question returned the FALLBACK answer, not a grounded one "
             f"— this is exactly the failure mode task 4 exists to catch. "
             f"answer[:150]={q_body.get('answer', '')[:150]!r}"
         )
+    answer = (q_body.get("answer") or "").strip()
+    excerpt = f"answer[:150]={answer[:150]!r}"
+    if re.search(r"(?m)^\[(Ollama not running\]|Ollama response timed out|LLM Error:)", answer):
+        return FAIL, f"answer contains a service outage hint; {excerpt}"
+    if "cannot be verified from the available course material" in " ".join(answer.lower().split()):
+        return FAIL, f"the course materials do not cover the demo question; {excerpt}"
+    if not re.search(r"\[S[1-9]\d*\]", answer):
+        return FAIL, f"answer has no inline source citation; {excerpt}"
     sources = q_body.get("source_references") or []
     if not sources:
         return FAIL, "answer returned but source_references is empty — not citable, don't use this question live"
@@ -264,7 +265,7 @@ def main() -> int:
         return 1
     print("If only the demo question failed: try a different question before assuming the stack is broken —")
     print("set PAEDIA_DEMO_QUESTION to test alternatives, e.g.:")
-    print('  $env:PAEDIA_DEMO_QUESTION = "Explain the chunking strategy used in this course"')
+    print('  $env:PAEDIA_DEMO_QUESTION = "What is a constraint satisfaction problem?"')
     print("  python scripts/check_demo_ready.py")
     return 1
 
