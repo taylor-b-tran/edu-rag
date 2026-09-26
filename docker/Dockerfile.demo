@@ -16,3 +16,26 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
 COPY . .
+
+# T10-15: the image ran as root with no reason to. Nothing here needs to bind
+# a privileged port (gunicorn/streamlit both bind >1024) or write outside its
+# own working tree, so a dedicated, unprivileged user is enough.
+#
+# Ownership caveat: docker-compose.yml bind-mounts the repo over /workspace
+# at runtime (./:/workspace), which replaces what COPY put in the image --
+# ownership then follows the host directory, not this chown. On Windows/Mac
+# Docker Desktop the bind mount is translated through a layer that is
+# writable by any container UID, so this is expected to just work; on a
+# native Linux host it can fail with a permission error if the host
+# directory's owning UID differs from 10001. If that happens, either run
+# `sudo chown -R 10001:10001 .` on the host once, or add
+# `user: "${UID}:${GID}"` to the affected service in docker-compose.yml to
+# match the host user instead of the image's fixed uid. uploads_data is a
+# named volume, not a bind mount, so the chown below is what actually takes
+# effect for it.
+RUN groupadd --gid 10001 edurag \
+    && useradd --uid 10001 --gid edurag --no-create-home --shell /usr/sbin/nologin edurag \
+    && mkdir -p /workspace/data/uploads /workspace/models/embedder_cache \
+    && chown -R edurag:edurag /workspace
+
+USER edurag
