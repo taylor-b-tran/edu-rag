@@ -158,7 +158,7 @@ def query():
         return jsonify({"error": "course_id is required"}), 400
 
     if _is_ambiguous(question):
-        logger.info("Ambiguous query from user %s: %r", user.get("user_id"), question)
+        logger.info("Ambiguous query rejected.")
         return jsonify({
             "error": "ambiguous_query",
             "message": (
@@ -223,7 +223,7 @@ def query():
             temperature=cfg.get("temperature"),
             num_predict=cfg.get("num_predict"),
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("Generation failed for user %s", user.get("user_id"))
         return jsonify({
             "error": "generation_unavailable",

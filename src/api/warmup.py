@@ -9,6 +9,7 @@ from typing import Any
 import requests
 
 logger = logging.getLogger(__name__)
+RETRIEVAL_WARMUP_WAIT_SECONDS = 3.0
 
 
 def _ollama_host() -> str:
@@ -106,20 +107,31 @@ def warmup_ollama(
 
 
 def warmup_retrieval(state) -> None:
-    """Warm each worker before serving requests; an outage remains retryable."""
+    """Encode before serving; bound the wait for vector-service initialization."""
     from src.document_processor.ingest_corpus import _load_embedder, get_chroma_client
 
     try:
         embedder, _, _ = _load_embedder()
         embedder.encode(["Course material warm-up"])
     except Exception:
-        logger.exception("Embedder warm-up failed; the next query will retry.")
+        logger.exception("Embedder warm-up did not complete.")
         return
-    try:
-        get_chroma_client().heartbeat()
-        state.get_generator()
-    except Exception:
-        logger.exception("Retrieval warm-up unavailable; the next query will retry.")
+
+    def _build() -> None:
+        try:
+            get_chroma_client().heartbeat()
+            state.get_generator()
+        except Exception:
+            logger.exception("Retrieval warm-up did not initialize the pipeline.")
+
+    # The Chroma client has unbounded calls during construction as well as
+    # heartbeat and collection access. Keep all of them off the boot thread.
+    # A late successful build shares get_generator's lock with query requests.
+    thread = threading.Thread(target=_build, name="retrieval-warmup", daemon=True)
+    thread.start()
+    thread.join(RETRIEVAL_WARMUP_WAIT_SECONDS)
+    if thread.is_alive():
+        logger.warning("Retrieval warm-up is still running; serving requests while it completes.")
 
 
 def warmup_async(state) -> threading.Thread | None:

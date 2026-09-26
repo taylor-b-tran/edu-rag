@@ -159,9 +159,9 @@ class APIState:
 
         try:
             from src.api import warmup
+            warmup.warmup_async(self)
             if not self.use_fixtures and os.environ.get("EDURAG_RETRIEVAL_WARMUP", "true").lower() not in {"0", "false", "no"}:
                 warmup.warmup_retrieval(self)
-            warmup.warmup_async(self)
         except Exception as exc:
             logger.warning("Failed to schedule Ollama warm-up: %s", exc)
             self.warmup_status = {"status": "failed",

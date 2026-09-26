@@ -10,8 +10,8 @@ from src.api.state import APIState
 
 
 def create_app() -> Flask:
-    # Configure the application's namespace even when the WSGI server already
-    # owns root logging. Leave third-party handlers and levels alone.
+    # Gunicorn configures its own loggers, so configure the application's
+    # namespace here. Leave third-party handlers and levels alone.
     app_logger = logging.getLogger("src")
     for handler in list(app_logger.handlers):
         if getattr(handler, "_paedia_console", False):
@@ -19,7 +19,8 @@ def create_app() -> Flask:
             handler.close()
     console = logging.StreamHandler()
     console._paedia_console = True
-    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
+                                          datefmt="%Y-%m-%dT%H:%M:%S%z"))
     app_logger.addHandler(console)
     app_logger.setLevel(logging.INFO)
     app = Flask(__name__)

@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
+from threading import Event
 from unittest.mock import Mock
 
 import pytest
@@ -104,3 +105,73 @@ def test_application_log_output_has_error_level(monkeypatch, state, capsys):
     create_app()
     logging.getLogger("src.api").error("format check")
     assert "ERROR" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("stage", ["client", "heartbeat", "pipeline"])
+def test_stalled_vector_initialization_does_not_block_worker_boot(monkeypatch, state, stage):
+    release, finished = Event(), Event()
+    monkeypatch.setattr(warmup, "RETRIEVAL_WARMUP_WAIT_SECONDS", 0.05, raising=False)
+    monkeypatch.setattr(ingest_corpus, "_load_embedder", lambda: (Mock(), "test", 384))
+    def stalled():
+        try:
+            release.wait(0.8)
+            raise TimeoutError("vector service not responding")
+        finally:
+            finished.set()
+    client = Mock()
+    if stage == "heartbeat":
+        client.heartbeat.side_effect = stalled
+    monkeypatch.setattr(ingest_corpus, "get_chroma_client", stalled if stage == "client" else lambda: client)
+    build = Mock(side_effect=stalled if stage == "pipeline" else None)
+    monkeypatch.setattr(state, "get_generator", build)
+    started = time.monotonic()
+    try:
+        warmup.warmup_retrieval(state)
+        assert time.monotonic() - started < 0.4
+        if stage != "pipeline":
+            build.assert_not_called()
+    finally:
+        release.set()
+        assert finished.wait(1)
+
+
+def test_explicit_fixture_mode_skips_retrieval_warmup(monkeypatch, state):
+    monkeypatch.setenv("PAEDIA_USE_FIXTURES", "true")
+    monkeypatch.setenv("EDURAG_RETRIEVAL_WARMUP", "true")
+    warm = Mock()
+    monkeypatch.setattr(warmup, "warmup_retrieval", warm)
+    APIState()
+    warm.assert_not_called()
+
+
+def test_ollama_warmup_starts_before_retrieval(monkeypatch, state):
+    monkeypatch.setenv("EDURAG_RETRIEVAL_WARMUP", "true")
+    events = []
+    monkeypatch.setattr(warmup, "warmup_async", lambda _: events.append("ollama"))
+    monkeypatch.setattr(warmup, "warmup_retrieval", lambda _: events.append("retrieval"))
+    APIState()
+    assert events == ["ollama", "retrieval"]
+
+
+def test_info_logs_do_not_include_question_text(monkeypatch, state, caplog):
+    client = client_for(monkeypatch, state)
+    question = "tell me everything about private student details"
+    with caplog.at_level(logging.INFO):
+        response = client.post("/api/query", json={"query": question})
+    assert response.status_code == 422
+    assert question not in caplog.text
+
+
+def test_signup_info_logs_do_not_include_email(monkeypatch, state, caplog):
+    import secrets
+    from src.api import db
+    client = client_for(monkeypatch, state)
+    state._db_available = True
+    email = "private-student@example.invalid"
+    monkeypatch.setattr(db, "create_user", lambda **kw: ({"email": email}, None))
+    monkeypatch.setattr(state, "issue_tokens", lambda _: {})
+    with caplog.at_level(logging.INFO):
+        response = client.post("/api/auth/signup", json={"email": email,
+            "username": "private-student", "password": secrets.token_urlsafe(24)})
+    assert response.status_code == 201
+    assert email not in caplog.text
