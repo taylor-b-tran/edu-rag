@@ -537,10 +537,10 @@ class LLMResponseGeneration:
             resp.raise_for_status()
             payload = resp.json()
             if "error" in payload:
-                raise GenerationUnavailable("The model returned an error payload.")
+                raise GenerationUnavailable(f"The model returned an error: {payload['error']}")
             return payload.get("response", "").strip(), True
-        except Exception:
-            logger.exception("Answer generation request failed.")
+        except Exception as exc:
+            logger.exception("Answer generation request failed: %s", exc)
             return "", False
 
     @staticmethod
@@ -593,21 +593,23 @@ class LLMResponseGeneration:
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
-        if not ok or not raw.strip():
-            logger.error("Answer generation unavailable; no answer will be returned.")
+        if not ok:
             raise GenerationUnavailable("The answer service is temporarily unavailable.")
-        if ok:
-            raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
+        raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
+        substantive = _SOURCES_LINE_RE.sub("", _INLINE_CITATION_RE.sub("", raw))
+        if not re.search(r"\w", substantive):
+            logger.error("Answer generation returned an empty response after citation cleanup.")
+            raise GenerationUnavailable("The answer service is temporarily unavailable.")
         conf, cscore= self._confidence(good)
         
         # T8-18: only report sources the model actually cited -- previously
         # source_references listed every chunk retrieval surfaced, even ones
         # the model never mentioned in its answer. If nothing can be confidently
         # extracted, keep the full list rather than guessing and hiding a real citation.
-        cited = _extract_cited_source_indices(raw, len(good)) if ok else set()
+        cited = _extract_cited_source_indices(raw, len(good))
         normalized = " ".join(raw.lower().split())
         refused = not cited and (REFUSAL_SENTENCE in normalized
-                                 or "course materials do not contain" in normalized)
+                                 or normalized.startswith("the course materials do not contain"))
         if refused:
             is_fallback = True
             conf, cscore = "Low", 0.0
@@ -617,9 +619,8 @@ class LLMResponseGeneration:
 
         # The numbering the reader sees. Built after de-duplication, because
         # that is the step that decides how long the list actually is.
-        if ok:
-            raw = _renumber_citations(
-                raw, {orig: positions[k] for k, orig in enumerate(shown_order)})
+        raw = _renumber_citations(
+            raw, {orig: positions[k] for k, orig in enumerate(shown_order)})
 
         answer = (f"{FALLBACK_LABEL}\n\n{raw}" if is_fallback else raw)
         return GeneratedResponse(

@@ -42,6 +42,8 @@ def test_model_outage_is_503_without_persisting(monkeypatch, caplog, error):
     ("The COURSE MATERIALS\nDO NOT CONTAIN an explanation of stride.", False),
     ("A decision tree splits on features.", True),
     ("The claim cannot be verified from the available course materials [S1].", True),
+    ("Decision trees split on feature values. The course materials do not contain a worked pruning example.", True),
+    ("Decision trees split on feature values [S1]. The course materials do not contain a worked pruning example.", True),
 ])
 def test_only_uncited_refusal_clears_sources(monkeypatch, answer, covered):
     gen = generator()
@@ -50,6 +52,7 @@ def test_only_uncited_refusal_clears_sources(monkeypatch, answer, covered):
     if covered:
         assert len(result.source_refs) == (1 if "[S1]" in answer else 2)
         assert not result.is_fallback
+        assert not result.answer.startswith(rp.FALLBACK_LABEL)
     else:
         assert result.source_refs == []
         assert (result.confidence, result.confidence_score) == ("Low", 0.0)
@@ -75,6 +78,36 @@ def test_empty_or_error_success_response_is_not_persisted(monkeypatch, caplog, p
     record.assert_not_called()
     assert "detail" not in response.json
     assert any(r.name == "src.document_processor.rag_pipeline" and r.levelname == "ERROR" for r in caplog.records)
+
+
+@pytest.mark.parametrize("answer", ["[S9]", "Sources: S9", "[S1]", "[S1]\nSources: S1"])
+def test_marker_only_response_is_unavailable(monkeypatch, answer):
+    gen = generator()
+    monkeypatch.setattr(gen, "_call_ollama", lambda *a, **kw: (answer, True))
+    with pytest.raises(rp.GenerationUnavailable):
+        gen.generate("Explain decision trees")
+
+
+def test_ollama_error_text_is_logged_once_at_pipeline_level(monkeypatch, caplog):
+    gen = generator()
+    response = Mock(json=lambda: {"error": "the model rejected the request"})
+    monkeypatch.setattr(rp.requests, "post", Mock(return_value=response))
+    with pytest.raises(rp.GenerationUnavailable):
+        gen.generate("Explain decision trees")
+    pipeline_errors = [r for r in caplog.records if r.name == "src.document_processor.rag_pipeline"
+                       and r.levelname == "ERROR"]
+    assert len(pipeline_errors) == 1
+    assert "the model rejected the request" in pipeline_errors[0].getMessage()
+
+
+def test_outage_logs_once_at_pipeline_level(monkeypatch, caplog):
+    gen = generator()
+    monkeypatch.setattr(rp.requests, "post", Mock(side_effect=requests.ConnectionError("offline")))
+    with pytest.raises(rp.GenerationUnavailable):
+        gen.generate("Explain decision trees")
+    pipeline_errors = [r for r in caplog.records if r.name == "src.document_processor.rag_pipeline"
+                       and r.levelname == "ERROR"]
+    assert len(pipeline_errors) == 1
 
 
 @pytest.mark.parametrize("strategy", ["baseline", "evidence_cited", "few_shot_cited"])
