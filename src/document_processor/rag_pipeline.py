@@ -172,6 +172,24 @@ def _strip_invalid_citation_markers(text: str, num_chunks: int) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
+def _strip_citations_for_history(text: str) -> str:
+    """Removes inline [Sn] markers and the trailing "Sources: ..." line from
+    a *past* answer before it gets replayed into a new prompt as history.
+
+    Those numbers only ever meant something against that earlier turn's own
+    retrieved chunks -- S2 in an old answer has nothing to do with S2 in the
+    current one. Carried forward unchanged they're just noise at best, and
+    at worst they can be read as citations against the current turn's chunk
+    list, pointing at the wrong source entirely.
+    """
+    if not text:
+        return text
+    cleaned = _INLINE_CITATION_RE.sub("", text)
+    cleaned = _SOURCES_LINE_RE.sub("", cleaned)
+    cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
@@ -374,7 +392,7 @@ class LLMResponseGeneration:
             lines = []
             for t in history[-3:]:
                 lines += [f"Student: {_sanitize_untrusted_text(t.get('question',''))}",
-                          f"Paedia: {_sanitize_untrusted_text(t.get('answer',''))}"]
+                          f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer','')))}"]
             hist = "\n[HISTORY]\n" + "\n".join(lines) + "\n"
 
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
@@ -416,7 +434,7 @@ class LLMResponseGeneration:
             lines = []
             for t in history[-3:]:
                 lines += [f"Student: {_sanitize_untrusted_text(t.get('question',''))}",
-                          f"Paedia: {_sanitize_untrusted_text(t.get('answer',''))}"]
+                          f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer','')))}"]
             hist = "\n[HISTORY]\n" + "\n".join(lines) + "\n"
 
         return (
@@ -457,9 +475,11 @@ class LLMResponseGeneration:
             return query
         recent = history[-2:]
         turns = "\n".join(
-            f"Student: {t.get('question', '')}\nPaedia: {t.get('answer', '')}"
+            f"Student: {_sanitize_untrusted_text(t.get('question', ''))}\n"
+            f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer', '')))}"
             for t in recent
         )
+        query = _sanitize_untrusted_text(query)
         rewrite_prompt = (
             "Rewrite the student's latest question as a single, fully "
             "self-contained question with no pronouns or references back to "
