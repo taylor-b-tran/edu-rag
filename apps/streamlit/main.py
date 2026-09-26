@@ -31,15 +31,27 @@ Sprint 9 updates:
 import streamlit as st
 import streamlit.components.v1 as components
 import json
+import logging
 import os
 import html as _html
 import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from functools import lru_cache
 
 from api_client import PaediaAPIClient, APIConfig, APIReadError
+
+
+@lru_cache(maxsize=None)
+def _display_zone(name):
+    """Resolve each configured zone once and warn once if it cannot be used."""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logging.getLogger(__name__).warning("Invalid PAEDIA_TIMEZONE %r; using Australia/Sydney.", name)
+        return ZoneInfo("Australia/Sydney")
 
 
 def _local(ts):
@@ -56,7 +68,7 @@ def _local(ts):
         return None
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(ZoneInfo(os.environ.get("PAEDIA_TIMEZONE", "Australia/Sydney")))
+    return value.astimezone(_display_zone(os.environ.get("PAEDIA_TIMEZONE", "Australia/Sydney").strip()))
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -1906,7 +1918,8 @@ def _render_document_table(student_view: bool = False):
         status, badge_class, status_note = _document_status(doc)
 
         uploaded_at = doc.get("uploaded_at") or doc.get("uploaded") or "—"
-        doc_uploaded = uploaded_at.split("T")[0] if "T" in uploaded_at else uploaded_at
+        uploaded_local = _local(uploaded_at)
+        doc_uploaded = uploaded_local.strftime("%Y-%m-%d") if uploaded_local else "—"
 
         cols = st.columns(_document_table_ratio(student_view))
         cols[0].markdown(f"📄 {doc_name}")
