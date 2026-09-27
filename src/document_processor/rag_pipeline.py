@@ -534,10 +534,19 @@ class LLMResponseGeneration:
                                   "top_p": OLLAMA_TOP_P,
                                   "num_predict": num_predict}},
                 timeout=240)
+            # Read the body before the status: Ollama explains a 404 or 500
+            # ("model 'x' not found") in its JSON, and raise_for_status alone
+            # would log only "404 Client Error".
+            try:
+                payload = resp.json()
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict) and "error" in payload:
+                raise GenerationUnavailable(
+                    f"The model returned an error (HTTP {resp.status_code}): {payload['error']}")
             resp.raise_for_status()
-            payload = resp.json()
-            if "error" in payload:
-                raise GenerationUnavailable(f"The model returned an error: {payload['error']}")
+            if not isinstance(payload, dict):
+                raise GenerationUnavailable("The model returned a response that is not JSON.")
             return payload.get("response", "").strip(), True
         except Exception as exc:
             logger.exception("Answer generation request failed: %s", exc)
