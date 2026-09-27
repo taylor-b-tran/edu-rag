@@ -12,6 +12,10 @@ generation raises `GenerationUnavailable`. The API returns a neutral HTTP 503,
 logs the failure, and stores no chat message. An uncited refusal that the course
 materials do not cover the question has no sources, Low / 0.0 confidence, and
 `is_fallback: true`. Uncited normal answers retain their retrieved sources.
+The refusal sentence is matched anywhere in an uncited answer, because gemma4:12b
+ends its refusals with it. An uncited answer that uses that exact sentence part-way
+through is therefore also treated as a refusal, and a refusal that cites a source
+keeps that source.
 
 ## 3. Remaining Risks
 | Risk | Severity | Status |
