@@ -1,5 +1,14 @@
 """Sprint 10, Task 16 — remove the duplicate/orphaned ChromaDB collection (Tung).
 
+STATUS (27 Sept 2026): DONE. The orphaned `csit321_course` collection was
+backed up and deleted from the live host on 24 Sept 2026 — see Taylor's
+27 Sept review of PR #134, point 5. This script is kept only as a reference
+for how it was done and as a `--list`/`--verify` health check for the
+future; there is nothing left to delete, and `--dry-run`/`--confirm-delete`
+against `csit321_course` will now just report it doesn't exist (see
+`dry_run`/`confirm_delete` below — that is the expected, harmless outcome,
+not an error).
+
 Per src/document_processor/ingest_corpus.py's own T8-13 comment, the live
 collection was renamed csit321_course -> edurag_course (COLLECTION constant)
 in Sprint 8, when the corpus grew to hold four subjects. Nothing in the
@@ -7,34 +16,35 @@ codebase references "csit321_course" any more -- confirmed with:
 
     grep -rn "csit321_course" src/ apps/ scripts/
 
--- so on the live host, that old collection (~2,200 passages per the sprint
-plan) is dead weight left over from the rename, duplicating content that
-already exists under edurag_course.
+-- so it was dead weight left over from the rename, duplicating content that
+already existed under edurag_course.
 
 This script only READS and (with --confirm-delete) deletes; it takes no
 opinion on which collection is "current" beyond ingest_corpus.COLLECTION, so
 if that constant ever changes, this script's target renames with it instead
 of drifting out of sync.
 
-Usage (run these in order, on the host that can reach ChromaDB — either the
-GPU host directly, or your machine with CHROMA_HOST/CHROMA_PORT pointed at it
-over Tailscale):
+Usage that was actually run on 24 Sept (kept for the record — do not repeat
+step 4, there is nothing left to delete):
 
-    # 1. Back up the ChromaDB volume FIRST. Do this before anything else.
-    docker compose exec chromadb sh -c "tar -C /data -czf /tmp/chromadb_backup_$(date +%Y%m%d_%H%M).tar.gz ." 
+    # 1. Backup the ChromaDB volume FIRST. Done before anything else on 24/9.
+    docker compose exec chromadb sh -c "tar -C /data -czf /tmp/chromadb_backup_$(date +%Y%m%d_%H%M).tar.gz ."
     docker cp <chromadb_container>:/tmp/chromadb_backup_<timestamp>.tar.gz ./chromadb_backup_<timestamp>.tar.gz
 
-    # 2. List collections and counts (read-only, safe to run any time).
+    # 2. List collections and counts (read-only, still safe to run any time).
     python scripts/cleanup_duplicate_collection.py --list
 
     # 3. Dry run against the specific orphaned collection (still read-only).
     python scripts/cleanup_duplicate_collection.py --target csit321_course --dry-run
 
-    # 4. Actually delete it, once the backup from step 1 exists.
+    # 4. Already done on 24/9 -- do not re-run against a live host expecting
+    #    a fresh collection to delete; it will correctly report there is
+    #    nothing there.
     python scripts/cleanup_duplicate_collection.py --target csit321_course --confirm-delete
 
     # 5. Verify through the query path (a different component from the one
-    #    that deleted it), per the sprint plan's done-when condition:
+    #    that deleted it), per the sprint plan's done-when condition -- still
+    #    useful to re-run any time as a health check:
     python scripts/cleanup_duplicate_collection.py --verify
 """
 from __future__ import annotations
@@ -72,7 +82,9 @@ def dry_run(client, target: str) -> None:
         coll = client.get_collection(target)
     except Exception as exc:
         print(f"'{target}' does not exist on this ChromaDB instance ({exc}). "
-              f"Nothing to do -- run --list first to see what's actually there.")
+              f"Nothing to do -- run --list first to see what's actually there. "
+              f"If this is csit321_course, that's expected: it was already "
+              f"deleted on 24 Sept 2026.")
         sys.exit(1)
     count = coll.count()
     sample = coll.peek(limit=3)
@@ -93,7 +105,9 @@ def confirm_delete(client, target: str) -> None:
     try:
         coll = client.get_collection(target)
     except Exception as exc:
-        print(f"'{target}' does not exist ({exc}). Nothing to delete.")
+        print(f"'{target}' does not exist ({exc}). Nothing to delete. "
+              f"If this is csit321_course, that's expected: it was already "
+              f"deleted on 24 Sept 2026 -- see the module docstring.")
         sys.exit(1)
     count = coll.count()
     answer = input(
@@ -112,6 +126,7 @@ def verify(client) -> None:
     """The sprint plan's done-when: 'a question still returns a properly
     grounded answer', checked through a different component from the one
     that made the change — i.e. the actual retrieval path, not just a count.
+    Safe and useful to re-run any time as an ongoing health check.
     """
     from src.document_processor.rag_pipeline import VectorRetriever
     retriever = VectorRetriever()
