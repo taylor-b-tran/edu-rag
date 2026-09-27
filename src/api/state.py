@@ -76,6 +76,7 @@ class APIState:
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
     _db_available: bool = field(default=False, init=False, repr=False)
+    _generator_lock: Any = field(default_factory=threading.Lock, init=False, repr=False)
     _auth_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
     warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
                                           init=False, repr=False)
@@ -159,6 +160,8 @@ class APIState:
         try:
             from src.api import warmup
             warmup.warmup_async(self)
+            if not self.use_fixtures and os.environ.get("EDURAG_RETRIEVAL_WARMUP", "true").lower() not in {"0", "false", "no"}:
+                warmup.warmup_retrieval(self)
         except Exception as exc:
             logger.warning("Failed to schedule Ollama warm-up: %s", exc)
             self.warmup_status = {"status": "failed",
@@ -186,23 +189,30 @@ class APIState:
         return self._db_available
 
     def get_generator(self):
-        if self._generator is None:
-            from src.document_processor.ingest_corpus import EmbedderMismatchError
-            try:
-                from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
-                self._retriever = VectorRetriever()
-                self._generator = LLMResponseGeneration(retriever=self._retriever)
-                self._backend_mode = "chromadb"
-                print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
-            except EmbedderMismatchError:
-                self._retriever = None
-                self._backend_mode = "embedder_mismatch"
-                raise
-            except Exception as exc:
-                print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
-                self._generator = _FixtureGenerator(self)
-                self._backend_mode = "fixture"
-        return self._generator
+        with self._generator_lock:
+            if self._generator is None:
+                from src.document_processor.ingest_corpus import EmbedderMismatchError
+                try:
+                    from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
+                    retriever = VectorRetriever()
+                    generator = LLMResponseGeneration(retriever=retriever)
+                    self._retriever = retriever
+                    self._generator = generator
+                    self._backend_mode = "chromadb"
+                    logger.info("RAG pipeline initialised (ChromaDB mode).")
+                except EmbedderMismatchError:
+                    self._retriever = None
+                    self._backend_mode = "embedder_mismatch"
+                    raise
+                except Exception:
+                    self._retriever = None
+                    if not self.use_fixtures:
+                        self._backend_mode = "not_initialized"
+                        raise
+                    logger.warning("RAG pipeline unavailable; explicit fixture mode enabled.")
+                    self._generator = _FixtureGenerator(self)
+                    self._backend_mode = "fixture"
+            return self._generator
 
     @_auth_synchronized
     def issue_tokens(self, user: dict[str, Any],

@@ -158,7 +158,7 @@ def query():
         return jsonify({"error": "course_id is required"}), 400
 
     if _is_ambiguous(question):
-        logger.info("Ambiguous query from user %s: %r", user.get("user_id"), question)
+        logger.info("Ambiguous query rejected.")
         return jsonify({
             "error": "ambiguous_query",
             "message": (
@@ -223,15 +223,14 @@ def query():
             temperature=cfg.get("temperature"),
             num_predict=cfg.get("num_predict"),
         )
-    except Exception as exc:
-        logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
+    except Exception:
+        logger.exception("Generation failed for user %s", user.get("user_id"))
         return jsonify({
             "error": "generation_unavailable",
             "message": (
                 "The answer generation service is temporarily unavailable. "
-                "Please ensure Ollama is running (`ollama serve`) and try again."
+                "Please try again shortly."
             ),
-            "detail": str(exc),
         }), 503
 
     # A citation names the file as its uploader did. The stored name stays in

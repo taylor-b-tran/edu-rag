@@ -89,7 +89,7 @@ def signup():
             "message": f"That {taken} is already registered.",
         }), 409
 
-    logger.info("New %s account created: %s", role, email)
+    logger.info("New %s account created.", role)
     try:
         return jsonify(state.issue_tokens(user)), 201
     except Exception:
