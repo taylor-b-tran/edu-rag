@@ -158,7 +158,7 @@ def query():
         return jsonify({"error": "course_id is required"}), 400
 
     if _is_ambiguous(question):
-        logger.info("Ambiguous query from user %s: %r", user.get("user_id"), question)
+        logger.info("Ambiguous query rejected.")
         return jsonify({
             "error": "ambiguous_query",
             "message": (
@@ -223,20 +223,29 @@ def query():
             temperature=cfg.get("temperature"),
             num_predict=cfg.get("num_predict"),
         )
-    except Exception as exc:
-        logger.error("Generation failed for user %s: %s", user.get("user_id"), exc)
+    except Exception:
+        logger.exception("Generation failed for user %s", user.get("user_id"))
         return jsonify({
             "error": "generation_unavailable",
             "message": (
                 "The answer generation service is temporarily unavailable. "
-                "Please ensure Ollama is running (`ollama serve`) and try again."
+                "Please try again shortly."
             ),
-            "detail": str(exc),
         }), 503
+
+    # A citation names the file as its uploader did. The stored name stays in
+    # source_file: the vector store finds a document's chunks by it.
+    source_refs = [dict(ref) if isinstance(ref, dict) else ref
+                   for ref in (generated.source_refs or [])]
+    stored_names = [ref.get("source_file") for ref in source_refs if isinstance(ref, dict)]
+    display = state.display_filenames(stored_names) if any(stored_names) else {}
+    for ref in source_refs:
+        if isinstance(ref, dict) and ref.get("source_file"):
+            ref["filename"] = display[ref["source_file"]]
 
     result = {
         "answer": generated.answer,
-        "source_references": generated.source_refs,
+        "source_references": source_refs,
         "confidence": generated.confidence,
         "confidence_score": generated.confidence_score,
         "model_used": generated.model_used,

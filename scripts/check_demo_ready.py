@@ -8,6 +8,9 @@ Usage (from the repo root, after the stack is up):
 
     python scripts/check_demo_ready.py
 
+The demo-question check signs in as the student, so set PAEDIA_DEMO_STUDENT_PASSWORD
+in the shell to the value in .env first; the script does not read .env itself.
+
 Exit code is 0 if everything is ready to demo, 1 otherwise (so this can also be
 used as a CI/script gate, not just an interactive check).
 
@@ -18,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -147,10 +151,13 @@ def check_ollama() -> tuple[str, str]:
 DEMO_COURSE = os.environ.get("PAEDIA_DEMO_COURSE", "CSIT321")
 DEMO_QUESTION = os.environ.get(
     "PAEDIA_DEMO_QUESTION",
-    "What is retrieval-augmented generation?",
+    "What is a decision tree?",
 )
 DEMO_STUDENT_EMAIL = os.environ.get("PAEDIA_DEMO_STUDENT_EMAIL", "student@uow.edu.au")
-DEMO_STUDENT_PASSWORD = os.environ.get("PAEDIA_DEMO_STUDENT_PASSWORD", "student123")
+# No default: the demo accounts have no known password unless this stack's .env
+# sets one, so a built-in guess would only fail with a misleading login error.
+# Stripped the same way the API strips it when seeding.
+DEMO_STUDENT_PASSWORD = (os.environ.get("PAEDIA_DEMO_STUDENT_PASSWORD") or "").strip()
 
 
 def _http_post_json(url: str, payload: dict, headers: dict | None = None,
@@ -175,6 +182,9 @@ def _http_post_json(url: str, payload: dict, headers: dict | None = None,
 
 
 def check_demo_question() -> tuple[str, str]:
+    if not DEMO_STUDENT_PASSWORD:
+        return FAIL, ("PAEDIA_DEMO_STUDENT_PASSWORD is not set - set it to the student "
+                      "password in this stack's .env and re-run")
     login_status, login_body, login_raw = _http_post_json(
         f"http://localhost:{API_PORT}/api/auth/login",
         {"email": DEMO_STUDENT_EMAIL, "password": DEMO_STUDENT_PASSWORD},
@@ -197,6 +207,14 @@ def check_demo_question() -> tuple[str, str]:
             f"— this is exactly the failure mode task 4 exists to catch. "
             f"answer[:150]={q_body.get('answer', '')[:150]!r}"
         )
+    answer = (q_body.get("answer") or "").strip()
+    excerpt = f"answer[:150]={answer[:150]!r}"
+    if re.search(r"(?m)^\[(Ollama not running\]|Ollama response timed out|LLM Error:)", answer):
+        return FAIL, f"answer contains a service outage hint; {excerpt}"
+    if "cannot be verified from the available course material" in " ".join(answer.lower().split()):
+        return FAIL, f"the course materials do not cover the demo question; {excerpt}"
+    if not re.search(r"\[S[1-9]\d*\]", answer):
+        return FAIL, f"answer has no inline source citation; {excerpt}"
     sources = q_body.get("source_references") or []
     if not sources:
         return FAIL, "answer returned but source_references is empty — not citable, don't use this question live"
@@ -239,9 +257,15 @@ def main() -> int:
         print("NOT READY YET - one or more services still warming up. Wait ~15s and re-run.")
         return 0
     print("FAIL - see the [FAIL] lines above. Check `docker compose logs <service>`.")
+    if not DEMO_STUDENT_PASSWORD:
+        print("The demo question needs the student password: set PAEDIA_DEMO_STUDENT_PASSWORD in this")
+        print("shell to the value in .env, e.g.:")
+        print('  $env:PAEDIA_DEMO_STUDENT_PASSWORD = "<the student password from .env>"')
+        print("  python scripts/check_demo_ready.py")
+        return 1
     print("If only the demo question failed: try a different question before assuming the stack is broken —")
     print("set PAEDIA_DEMO_QUESTION to test alternatives, e.g.:")
-    print('  $env:PAEDIA_DEMO_QUESTION = "Explain the chunking strategy used in this course"')
+    print('  $env:PAEDIA_DEMO_QUESTION = "What is a constraint satisfaction problem?"')
     print("  python scripts/check_demo_ready.py")
     return 1
 

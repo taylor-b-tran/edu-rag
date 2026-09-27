@@ -1,4 +1,4 @@
-# Auto-select the Ollama model based on detected GPU VRAM, then bring up
+﻿# Auto-select the Ollama model based on detected GPU VRAM, then bring up
 # the full Paedia / EduRAG Docker stack on Windows / PowerShell.
 #
 # Three-tier decision rule

@@ -31,14 +31,44 @@ Sprint 9 updates:
 import streamlit as st
 import streamlit.components.v1 as components
 import json
+import logging
 import os
 import html as _html
 import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from functools import lru_cache
 
 from api_client import PaediaAPIClient, APIConfig, APIReadError
+
+
+@lru_cache(maxsize=None)
+def _display_zone(name):
+    """Resolve each configured zone once and warn once if it cannot be used."""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logging.getLogger(__name__).warning("Invalid PAEDIA_TIMEZONE %r; using Australia/Sydney.", name)
+        return ZoneInfo("Australia/Sydney")
+
+
+def _local(ts):
+    """Convert server timestamps (naive values are UTC) to the display zone.
+
+    PAEDIA_TIMEZONE overrides Australia/Sydney; zoneinfo handles daylight saving.
+    Missing or malformed legacy timestamps remain unknown.
+    """
+    if not ts:
+        return None
+    try:
+        value = ts if isinstance(ts, datetime) else datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(_display_zone(os.environ.get("PAEDIA_TIMEZONE", "Australia/Sydney").strip()))
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────
 
@@ -632,8 +662,10 @@ def _hydrate_sessions_from_server() -> None:
         messages = []
         for turn in turns:
             stamp = turn.get("created_at") or ""
+            local_stamp = _local(stamp)
+            display_time = local_stamp.strftime("%I:%M %p") if local_stamp else ""
             messages.append({"role": "user", "content": turn.get("question", ""),
-                             "timestamp": "", "timestamp_full": stamp})
+                             "timestamp": display_time, "timestamp_full": stamp})
             messages.append({"role": "assistant", "content": turn.get("answer", ""),
                              "source_references": turn.get("sources") or [],
                              **{key: value for key, value in (turn.get("response_metadata") or {}).items()
@@ -641,7 +673,7 @@ def _hydrate_sessions_from_server() -> None:
                                            "is_fallback", "backend_mode", "retrieval_metadata",
                                            "token_count", "response_style")},
                              "from_api": True,
-                             "timestamp": "", "timestamp_full": stamp})
+                             "timestamp": display_time, "timestamp_full": stamp})
 
         first = turns[0].get("question") or "Chat"
         restored.append({
@@ -652,7 +684,7 @@ def _hydrate_sessions_from_server() -> None:
             # "" rather than a default: switch_session below reads it back
             # the same way, and _active_course resolves it per screen.
             "course_id": item.get("course_id") or "",
-            "created_at": (item.get("created_at") or "")[:16].replace("T", " "),
+            "created_at": _local(item["created_at"]).strftime("%Y-%m-%d %H:%M") if _local(item.get("created_at")) else "",
             "message_count": len(messages),
         })
 
@@ -703,7 +735,7 @@ def create_new_session(title="New Chat", *, course_transition=False):
         "title": title,
         "messages": [],
         "course_id": course_id,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "created_at": _local(datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M"),
         "message_count": 0,
         "course_transition_notice": course_transition,
     }
@@ -814,13 +846,24 @@ def get_model_badge(model_used: str) -> str:
     return f'<span class="model-badge model-unknown">🔧 {model_used}</span>'
 
 
+# The pipeline decides the confidence band and returns it with every answer
+# (CONFIDENCE_HIGH / CONFIDENCE_MEDIUM in src/document_processor/rag_pipeline.py).
+# These copies exist only for messages that carry a bare score, and a test keeps them
+# equal to the pipeline's: when the two scales differed, a 0.64 answer was labelled
+# "High confidence" by the pipeline and painted gold by this page.
+_CONFIDENCE_HIGH = 0.60
+_CONFIDENCE_MEDIUM = 0.35
+_BAND_COLOURS = {"High": "#10B981", "Medium": "#D4A843", "Low": "#EF4444"}
+
+
 def _confidence_score(confidence, confidence_score=None) -> float:
     if isinstance(confidence_score, (int, float)):
         return max(0.0, min(float(confidence_score), 1.0))
     if isinstance(confidence, (int, float)):
         return max(0.0, min(float(confidence), 1.0))
     if isinstance(confidence, str):
-        label_scores = {"high": 0.9, "medium": 0.6, "low": 0.3}
+        # Mid-band widths, so a bar drawn from a label alone sits inside its own band.
+        label_scores = {"high": 0.8, "medium": 0.5, "low": 0.2}
         lowered = confidence.lower()
         if lowered in label_scores:
             return label_scores[lowered]
@@ -831,18 +874,26 @@ def _confidence_score(confidence, confidence_score=None) -> float:
     return 0.0
 
 
+def _confidence_band(confidence, confidence_score=None):
+    """The band the pipeline assigned, or the same band derived from a bare score."""
+    if isinstance(confidence, str) and confidence.strip().lower() in {"high", "medium", "low"}:
+        return confidence.strip().capitalize()
+    if confidence is None and confidence_score is None:
+        return None
+    score = _confidence_score(confidence, confidence_score)
+    if score >= _CONFIDENCE_HIGH:
+        return "High"
+    if score >= _CONFIDENCE_MEDIUM:
+        return "Medium"
+    if score > 0:
+        return "Low"
+    return None
+
+
 def get_confidence_label(confidence) -> str:
     """Return human-readable confidence label."""
-    if isinstance(confidence, str) and confidence.lower() in {"high", "medium", "low"}:
-        return f"{confidence.capitalize()} confidence"
-    confidence = _confidence_score(confidence)
-    if confidence >= 0.8:
-        return "High confidence"
-    elif confidence >= 0.5:
-        return "Medium confidence"
-    elif confidence > 0:
-        return "Low confidence"
-    return "No confidence data"
+    band = _confidence_band(confidence)
+    return f"{band} confidence" if band else "No confidence data"
 
 
 def _clear_identity_state() -> None:
@@ -1139,7 +1190,7 @@ def _submit_query(text: str):
     call to the next rerun, so the question renders as a chat bubble right
     away instead of staying hidden behind a frozen loading line for however
     long Ollama takes (up to ~200s on CPU-only hardware, see T25)."""
-    now = datetime.now()
+    now = _local(datetime.now(timezone.utc))
     st.session_state.messages.append({
         "role": "user",
         "content": text,
@@ -1156,7 +1207,7 @@ def _submit_query(text: str):
 def _send_message(text: str, append_user: bool = True):
     """Append a user message (optional) + AI response with full metadata."""
     if append_user:
-        now = datetime.now()
+        now = _local(datetime.now(timezone.utc))
         st.session_state.messages.append({
             "role": "user",
             "content": text,
@@ -1170,7 +1221,7 @@ def _send_message(text: str, append_user: bool = True):
         session["title"] = text[:40] + ("..." if len(text) > 40 else "")
 
     response = get_ai_response(text)
-    now2 = datetime.now()
+    now2 = _local(datetime.now(timezone.utc))
     backend_session_id = response.get("session_id")
     if backend_session_id:
         st.session_state.session_id = backend_session_id
@@ -1422,9 +1473,11 @@ def render_chat_page():
                             )
 
                     confidence = _confidence_score(msg.get("confidence"), msg.get("confidence_score"))
-                    conf_color = "#10B981" if confidence > 0.8 else ("#D4A843" if confidence > 0.5 else "#EF4444")
+                    # Label and colour come from one band, so they cannot disagree.
+                    band = _confidence_band(msg.get("confidence"), msg.get("confidence_score"))
+                    conf_color = _BAND_COLOURS.get(band, _BAND_COLOURS["Low"])
                     conf_pct = int(confidence * 100)
-                    conf_label = get_confidence_label(msg.get("confidence", confidence))
+                    conf_label = f"{band} confidence" if band else "No confidence data"
                     has_confidence = msg.get("confidence") is not None or msg.get("confidence_score") is not None
                     confidence_html = (
                         f'<div class="confidence-bar"><div class="confidence-fill" '
@@ -1865,7 +1918,8 @@ def _render_document_table(student_view: bool = False):
         status, badge_class, status_note = _document_status(doc)
 
         uploaded_at = doc.get("uploaded_at") or doc.get("uploaded") or "—"
-        doc_uploaded = uploaded_at.split("T")[0] if "T" in uploaded_at else uploaded_at
+        uploaded_local = _local(uploaded_at)
+        doc_uploaded = uploaded_local.strftime("%Y-%m-%d") if uploaded_local else "—"
 
         cols = st.columns(_document_table_ratio(student_view))
         cols[0].markdown(f"📄 {doc_name}")
@@ -1922,7 +1976,7 @@ def _render_document_table(student_view: bool = False):
 
     st.divider()
     indexed, total_chunks = _document_totals(docs)
-    st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks · Semantic search ON")
+    st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks")
     unindexed = [d for d in docs if not (d.get("chunks") or 0)]
     if unindexed and not student_view:
         st.warning(
@@ -2053,7 +2107,7 @@ def _filter_sessions(sessions, course, period, query):
 
     days = _PERIOD_DAYS.get(period)
     if days:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = _local(datetime.now(timezone.utc)).replace(tzinfo=None) - timedelta(days=days)
         out = [s for s in out
                if (_session_moment(s) or cutoff) >= cutoff]
 

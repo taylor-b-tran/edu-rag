@@ -506,10 +506,11 @@ These users live in `fixtures/sample_responses.json`. Auth is in-memory — see 
 | `admin@uow.edu.au` | `PAEDIA_DEMO_ADMIN_PASSWORD` | Admin | All (bypasses enrollment check) |
 
 **Passwords are no longer written down here.** They come from the three
-variables above, set in your own gitignored `.env`. Leave them empty and
-`src/api/db.py` falls back to the old published values — acceptable for a
-checkout only you can reach, never for an instance anyone else can open. On the
-shared host they are set to generated values; ask the team lead for them.
+variables above, set in your own gitignored `.env`. Leave one empty and that
+account is created with a random password nobody knows — it exists, but cannot
+be signed into until the variable is set and the API restarted. There is no
+fallback to a known value. On the shared host they are set to generated values;
+ask the team lead for them.
 
 **Wrong password returns 401.** **Logout invalidates the token** — subsequent API calls return 401 until you log back in.
 
@@ -999,6 +1000,7 @@ This section is a fast path for grading. It assumes you've already done the setu
 ```powershell
 docker compose up -d --build
 docker compose exec api python -m src.document_processor.ingest_corpus   # once, if not already seeded
+$env:PAEDIA_DEMO_STUDENT_PASSWORD = "<the value in your .env>"            # the readiness check signs in as the student
 python scripts/check_demo_ready.py                                       # confirms all 5 services are healthy
 ```
 

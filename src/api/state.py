@@ -76,6 +76,7 @@ class APIState:
     _generator: Any = field(default=None, init=False, repr=False)
     _backend_mode: str = field(default="not_initialized", init=False, repr=False)
     _db_available: bool = field(default=False, init=False, repr=False)
+    _generator_lock: Any = field(default_factory=threading.Lock, init=False, repr=False)
     _auth_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
     warmup_status: dict[str, Any] = field(default_factory=lambda: {"status": "pending"},
                                           init=False, repr=False)
@@ -159,6 +160,8 @@ class APIState:
         try:
             from src.api import warmup
             warmup.warmup_async(self)
+            if not self.use_fixtures and os.environ.get("EDURAG_RETRIEVAL_WARMUP", "true").lower() not in {"0", "false", "no"}:
+                warmup.warmup_retrieval(self)
         except Exception as exc:
             logger.warning("Failed to schedule Ollama warm-up: %s", exc)
             self.warmup_status = {"status": "failed",
@@ -186,23 +189,30 @@ class APIState:
         return self._db_available
 
     def get_generator(self):
-        if self._generator is None:
-            from src.document_processor.ingest_corpus import EmbedderMismatchError
-            try:
-                from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
-                self._retriever = VectorRetriever()
-                self._generator = LLMResponseGeneration(retriever=self._retriever)
-                self._backend_mode = "chromadb"
-                print("  [APIState] RAG pipeline initialised (ChromaDB mode).")
-            except EmbedderMismatchError:
-                self._retriever = None
-                self._backend_mode = "embedder_mismatch"
-                raise
-            except Exception as exc:
-                print(f"  [APIState] RAG pipeline unavailable ({type(exc).__name__}: {exc}). Falling back to fixture mode.")
-                self._generator = _FixtureGenerator(self)
-                self._backend_mode = "fixture"
-        return self._generator
+        with self._generator_lock:
+            if self._generator is None:
+                from src.document_processor.ingest_corpus import EmbedderMismatchError
+                try:
+                    from src.document_processor.rag_pipeline import VectorRetriever, LLMResponseGeneration
+                    retriever = VectorRetriever()
+                    generator = LLMResponseGeneration(retriever=retriever)
+                    self._retriever = retriever
+                    self._generator = generator
+                    self._backend_mode = "chromadb"
+                    logger.info("RAG pipeline initialised (ChromaDB mode).")
+                except EmbedderMismatchError:
+                    self._retriever = None
+                    self._backend_mode = "embedder_mismatch"
+                    raise
+                except Exception:
+                    self._retriever = None
+                    if not self.use_fixtures:
+                        self._backend_mode = "not_initialized"
+                        raise
+                    logger.warning("RAG pipeline unavailable; explicit fixture mode enabled.")
+                    self._generator = _FixtureGenerator(self)
+                    self._backend_mode = "fixture"
+            return self._generator
 
     @_auth_synchronized
     def issue_tokens(self, user: dict[str, Any],
@@ -238,6 +248,13 @@ class APIState:
                     return None
             else:
                 db.insert_token_pair(*args)
+                # A new login is a natural moment to clear credentials that can
+                # no longer be used. Best effort: a login never fails over it.
+                try:
+                    db.prune_expired_tokens()
+                except Exception as exc:
+                    logger.warning("Expired-token pruning failed (%s: %s).",
+                                   type(exc).__name__, exc)
         elif refresh_token_to_rotate:
             # The caller holds _auth_lock across validation, consume and issue.
             if self.consume_refresh_token(refresh_token_to_rotate) is None:
@@ -261,7 +278,15 @@ class APIState:
             },
         }
 
-    def validate_bearer(self, authorization: str | None, *, report_store_error: bool = False) -> dict[str, Any] | None:
+    def validate_bearer(self, authorization: str | None, *, report_store_error: bool = True) -> dict[str, Any] | None:
+        """The caller's token payload, or None when there is no valid token.
+
+        A token store that cannot be read is not the same as a token that does
+        not exist. Answering it with None made every route say 401 during a
+        database outage, and the interface treats 401 as "signed out" - so a
+        brief outage ended real sessions. It now raises ServiceUnavailable,
+        which the app answers as 503: retry, still signed in.
+        """
         if not authorization:
             return None
         scheme, _, token = authorization.partition(" ")
@@ -298,7 +323,8 @@ class APIState:
                 logger.warning("Token lookup failed (%s: %s); refusing cached credentials.",
                                type(exc).__name__, exc)
                 if report_store_error:
-                    raise
+                    raise ServiceUnavailable(
+                        "Your sign-in could not be checked just now. Please retry.") from exc
                 return None
         else:
             payload = store.get(token)
@@ -791,6 +817,24 @@ class APIState:
                 logger.warning("Document reload failed (%s: %s); falling back to "
                                "this worker's cache.", type(exc).__name__, exc)
         return self.uploaded_documents
+
+    def display_filenames(self, stored_names) -> dict[str, str]:
+        """What each stored file was called by the person who uploaded it.
+
+        Chunks carry the stored name, which has a suffix so two uploads of the
+        same file stay apart, and which deletion uses to find a document's
+        chunks. A citation built from a chunk therefore showed
+        "notes-bc36086a.pdf" for a file the lecturer uploaded as "notes.pdf",
+        while the document table showed "notes.pdf". A name with no row maps to
+        itself, so a citation is never lost for want of a display name.
+        """
+        wanted = {name for name in stored_names if name}
+        names = {name: name for name in wanted}
+        for doc in self._refresh_documents():
+            stored = doc.get("filename")
+            if stored in wanted and doc.get("original_filename"):
+                names[stored] = doc["original_filename"]
+        return names
 
     def list_indexing_jobs(self) -> dict[str, dict[str, Any]]:
         """Read authoritative jobs; deleting a document cascades to its jobs."""

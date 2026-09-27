@@ -122,7 +122,8 @@ request timeout.
 **Fix — trigger warm-up again by hand, with a timeout long enough for a
 cold load:**
 ```powershell
-$login = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" -Method Post -ContentType "application/json" -Body '{"email":"lecturer@uow.edu.au","password":"lecturer123"}'
+# First set $env:PAEDIA_DEMO_LECTURER_PASSWORD and $env:PAEDIA_DEMO_STUDENT_PASSWORD in this shell to their values from the stack's .env; PowerShell does not read .env automatically.
+$login = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" -Method Post -ContentType "application/json" -Body (@{email="lecturer@uow.edu.au"; password=$env:PAEDIA_DEMO_LECTURER_PASSWORD} | ConvertTo-Json)
 $token = $login.access_token
 Invoke-RestMethod -Uri "http://localhost:5000/api/warmup" -Method Post -Headers @{Authorization = "Bearer $token"} -TimeoutSec 600
 python scripts/check_demo_ready.py
@@ -188,7 +189,7 @@ means the specific question isn't well answered by the current corpus. Try
 alternatives before assuming something regressed:
 
 ```powershell
-$env:PAEDIA_DEMO_QUESTION = "Explain the chunking strategy used in this course"
+$env:PAEDIA_DEMO_QUESTION = "What is a constraint satisfaction problem?"
 python scripts/check_demo_ready.py
 ```
 
@@ -196,10 +197,8 @@ python scripts/check_demo_ready.py
 
 ## 2. Choosing the actual demo question — this needs your input, not mine
 
-The script defaults to *"What is retrieval-augmented generation?"* because
-it's what the test corpus was built around, but I haven't seen the run-of-
-show (Task 1, Taylor) or whatever question you two rehearsed with when you
-recorded the fallback video. Whatever question ends up in the run-of-show:
+The script defaults to *"What is a decision tree?"*, a topic covered by
+the CSIT321 materials. Whatever question ends up in the run-of-show:
 
 1. Set `$env:PAEDIA_DEMO_QUESTION` to the real one and re-run the script
    above — confirm it still says `PASS` with real sources, not the fallback.

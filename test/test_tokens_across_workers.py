@@ -187,4 +187,9 @@ def test_a_database_error_cannot_resurrect_a_cached_credential(monkeypatch, shar
 
     monkeypatch.setattr(db_mod, "get_token", boom)
 
-    assert worker.validate_bearer("Bearer tok-1") is None
+    # The outage is reported as a 503 rather than read from this worker's cache;
+    # a caller that opts out of the error gets None. Neither returns the payload.
+    from werkzeug.exceptions import ServiceUnavailable
+    with pytest.raises(ServiceUnavailable):
+        worker.validate_bearer("Bearer tok-1")
+    assert worker.validate_bearer("Bearer tok-1", report_store_error=False) is None

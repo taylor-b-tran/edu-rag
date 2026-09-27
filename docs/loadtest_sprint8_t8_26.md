@@ -139,8 +139,9 @@ python scripts/loadtest_query.py `
     --output docs/loadtest_sprint8_t8_26.json
 ```
 
-If your admin account's password was changed from the seeded default
-(T8-41), pass it explicitly instead of relying on the fallback:
+The admin password has no default: it is the `PAEDIA_DEMO_ADMIN_PASSWORD`
+value in the stack's `.env`. Set it in the shell first (or pass
+`--admin-password`):
 
 ```powershell
 $env:PAEDIA_DEMO_ADMIN_PASSWORD = "<the real password>"

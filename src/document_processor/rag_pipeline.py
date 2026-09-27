@@ -10,6 +10,13 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course materials."
 
+# Confidence bands, by mean similarity of the chunks kept. These are the only thresholds: the
+# interface colours its bar from the band returned with each answer, and a test pins its copy
+# for bare scores to these values. Two scales that disagreed once put "High confidence" on a
+# gold bar.
+CONFIDENCE_HIGH = 0.60
+CONFIDENCE_MEDIUM = 0.35
+
 # T8-18: matches inline citations like [S1], [S2] in the model's answer, and
 # the trailing "Sources: S1, S2" line the evidence_cited/few_shot_cited
 # prompts ask the model to produce.
@@ -20,6 +27,49 @@ _SOURCES_LINE_RE = re.compile(r"(?im)^sources\s*:\s*(.+)$")
 # pass leaves it alone, the extractor never sees S3, and renumbering skips it.
 _CITATION_GROUP_RE = re.compile(r"\[\s*S\s*\d+(?:\s*,\s*S?\s*\d+)*\s*\]", re.IGNORECASE)
 _CITATION_NUMBER_RE = re.compile(r"\d+")
+
+
+# T10: our prompt's own section markers (e.g. [PAEDIA ANSWER]).
+# If a user's question contains one of these on purpose, it can trick
+# the model into thinking that section already started, and just
+# continue a fake answer instead of writing a real one.
+# The system prompt already tells the model to ignore this - this is
+# a backup check in the code so we don't have to rely on that alone.
+_PROMPT_SECTION_MARKERS = (
+    "STUDENT QUESTION", "PAEDIA ANSWER", "COURSE CONTEXT", "COURSE MATERIAL",
+    "HISTORY", "RECENT CONVERSATION", "LATEST QUESTION", "REWRITTEN QUESTION",
+    "NO COURSE MATERIAL FOUND",
+)
+_SECTION_MARKER_RE = re.compile(
+    r"\[\s*(" + "|".join(re.escape(m) for m in _PROMPT_SECTION_MARKERS) + r")\s*\]",
+    re.IGNORECASE,
+)
+
+# Citation-shaped brackets, like "[S1]" or "[S2, S4]".
+# Different reason for this one: if a course document's own text
+# happens to contain something that looks like "[S1]", the model
+# might copy it straight into its answer. Our code would then think
+# it's a real citation, when it's actually just text from the source.
+_CITATION_LOOKALIKE_RE = re.compile(r"\[\s*S\s*\d+(?:\s*,\s*S?\s*\d+)*\s*\]", re.IGNORECASE)
+
+
+def _sanitize_untrusted_text(text: str) -> str:
+    """Neutralise anything in user- or document-supplied text that looks like
+    one of this prompt's own structural markers or citation brackets, so it
+    can't be mistaken -- by the model, or by the citation-parsing code that
+    runs on its output -- for a real section boundary or a real citation.
+
+    Swaps the square brackets for a visually distinct pair rather than
+    deleting the text, so the content stays readable (a question that
+    genuinely asks about "[S1]" notation still makes sense) and nothing is
+    silently dropped.
+    """
+    if not text:
+        return text
+    text = _SECTION_MARKER_RE.sub(lambda m: f"\u27e6{m.group(1)}\u27e7", text)
+    text = _CITATION_LOOKALIKE_RE.sub(
+        lambda m: m.group(0).replace("[", "\u27e6").replace("]", "\u27e7"), text)
+    return text
 
 
 def _split_citation_groups(text: str) -> str:
@@ -122,6 +172,24 @@ def _strip_invalid_citation_markers(text: str, num_chunks: int) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
+def _strip_citations_for_history(text: str) -> str:
+    """Removes inline [Sn] markers and the trailing "Sources: ..." line from
+    a *past* answer before it gets replayed into a new prompt as history.
+
+    Those numbers only ever meant something against that earlier turn's own
+    retrieved chunks -- S2 in an old answer has nothing to do with S2 in the
+    current one. Carried forward unchanged they're just noise at best, and
+    at worst they can be read as citations against the current turn's chunk
+    list, pointing at the wrong source entirely.
+    """
+    if not text:
+        return text
+    cleaned = _INLINE_CITATION_RE.sub("", text)
+    cleaned = _SOURCES_LINE_RE.sub("", cleaned)
+    cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
@@ -315,18 +383,20 @@ class LLMResponseGeneration:
             for i, ch in enumerate(chunks, 1):
                 parts.append(
                     f"--- CONTEXT {i} | {ch.source_file} p.{ch.page_number} "
-                    f"[{ch.topic}] sim={ch.similarity:.2f} ---\n{ch.text}\n")
+                    f"[{ch.topic}] sim={ch.similarity:.2f} ---\n"
+                    f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
 
         hist = ""
         if history:
             lines = []
             for t in history[-3:]:
-                lines += [f"Student: {t.get('question','')}", f"Paedia: {t.get('answer','')}"]
+                lines += [f"Student: {_sanitize_untrusted_text(t.get('question',''))}",
+                          f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer','')))}"]
             hist = "\n[HISTORY]\n" + "\n".join(lines) + "\n"
 
         return (f"{sys_instr}{hist}\n[COURSE MATERIAL]\n{ctx}\n\n"
-                f"[STUDENT QUESTION]\n{query}\n\n[PAEDIA ANSWER]")
+                f"[STUDENT QUESTION]\n{_sanitize_untrusted_text(query)}\n\n[PAEDIA ANSWER]")
 
     def _build_prompt_evidence_cited(self, query, chunks, history=None, style=None, course_id=None):
         style = resolve_response_style(style)
@@ -347,24 +417,29 @@ class LLMResponseGeneration:
         if not chunks:
             ctx = f"[NO COURSE MATERIAL FOUND]\n{FALLBACK_LABEL}\n"
         else:
-            # Each chunk gets a short ID (S1, S2...) so the model can cite it easily
+            # Each chunk gets a short ID (S1, S2...) so the model can cite it easily.
+            # The chunk's own text is sanitized first (T10) so a document whose
+            # content happens to contain something shaped like "[S3]" can't be
+            # mistaken downstream for a citation the model actually made.
             parts = []
             for i, ch in enumerate(chunks, 1):
                 parts.append(
                     f"[S{i}] {ch.source_file} p.{ch.page_number} "
-                    f"[{ch.topic}] sim={ch.similarity:.2f}\n{ch.text}\n")
+                    f"[{ch.topic}] sim={ch.similarity:.2f}\n"
+                    f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
 
         hist = ""
         if history:
             lines = []
             for t in history[-3:]:
-                lines += [f"Student: {t.get('question','')}", f"Paedia: {t.get('answer','')}"]
+                lines += [f"Student: {_sanitize_untrusted_text(t.get('question',''))}",
+                          f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer','')))}"]
             hist = "\n[HISTORY]\n" + "\n".join(lines) + "\n"
 
         return (
             f"{sys_instr}{hist}\n[COURSE CONTEXT]\n{ctx}\n\n"
-            f"[STUDENT QUESTION]\n{query}\n\n"
+            f"[STUDENT QUESTION]\n{_sanitize_untrusted_text(query)}\n\n"
             "Required response format:\n"
             f"{_STYLE_ANSWER_FORMAT[style]}\n"
             "Sources: <list only the source IDs you actually used, e.g. S1, S2>\n\n"
@@ -400,9 +475,11 @@ class LLMResponseGeneration:
             return query
         recent = history[-2:]
         turns = "\n".join(
-            f"Student: {t.get('question', '')}\nPaedia: {t.get('answer', '')}"
+            f"Student: {_sanitize_untrusted_text(t.get('question', ''))}\n"
+            f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer', '')))}"
             for t in recent
         )
+        query = _sanitize_untrusted_text(query)
         rewrite_prompt = (
             "Rewrite the student's latest question as a single, fully "
             "self-contained question with no pronouns or references back to "
@@ -498,7 +575,7 @@ class LLMResponseGeneration:
         # Confidence is based on how close the retrieved chunks are, not on the LLM itself
         if not chunks: return "Low", 0.0
         avg = sum(c.similarity for c in chunks) / len(chunks)
-        label = "High" if avg >= 0.60 else ("Medium" if avg >= 0.35 else "Low")
+        label = "High" if avg >= CONFIDENCE_HIGH else ("Medium" if avg >= CONFIDENCE_MEDIUM else "Low")
         return label, round(avg, 3)
 
     @staticmethod
