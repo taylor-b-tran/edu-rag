@@ -13,6 +13,12 @@ class GenerationUnavailable(RuntimeError):
     """The model did not produce an answer; callers must not persist a turn."""
 
 
+def _unavailable(reason: str) -> GenerationUnavailable:
+    """Log at ERROR, then hand back the exception to raise."""
+    logger.error("Generation unavailable: %s", reason)
+    return GenerationUnavailable(reason)
+
+
 TOP_K = int(os.getenv("TOP_K", "5"))
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
@@ -214,6 +220,16 @@ def _strip_citations_for_history(text: str) -> str:
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+_ANSWER_LABEL_RE = re.compile(r"(?im)^[ \t]*answer[ \t]*:")
+
+
+def _has_answer_text(text: str) -> bool:
+    """True if anything is left once citations, Sources lines and the
+    'Answer:' label are removed."""
+    bare = _strip_citations_for_history(text)
+    bare = _ANSWER_LABEL_RE.sub("", bare)
+    return bool(re.search(r"\w", bare))
 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
@@ -637,11 +653,16 @@ class LLMResponseGeneration:
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
-        raw = _strip_sanitizer_marks(raw)
-        if not ok or not raw.strip():
+        raw = _strip_sanitizer_marks(raw)                     
+        if not ok:                                             
             raise GenerationUnavailable("The model did not return an answer.")
-        raw = _strip_invalid_citation_markers(
+        if not raw.strip():                                    
+            raise _unavailable("The model returned an empty answer.")
+        raw = _strip_invalid_citation_markers(                
             _split_citation_groups(raw), len(good))
+        if not _has_answer_text(raw):                          
+            raise _unavailable(
+                "The model returned only citation markers and no answer text.")
         conf, cscore = self._confidence(good)
 
         # T8-18: only report sources the model actually cited -- previously
