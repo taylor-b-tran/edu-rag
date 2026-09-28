@@ -57,7 +57,13 @@ def check_no_conflict_markers(paths: list[str]) -> list[str]:
             errors.append(f"{rel_path}: cannot decode as UTF-8")
             continue
         for line_number, line in enumerate(lines, start=1):
-            if line.startswith(CONFLICT_MARKERS):
+            stripped = line.rstrip("\n")
+            is_marker = (
+                stripped.rstrip() == "======="
+                or stripped.startswith("<<<<<<< ") or stripped.rstrip() == "<<<<<<<"
+                or stripped.startswith(">>>>>>> ") or stripped.rstrip() == ">>>>>>>"
+            )
+            if is_marker:
                 errors.append(f"{rel_path}:{line_number}: leftover merge-conflict marker")
     return errors
 
