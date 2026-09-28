@@ -21,7 +21,9 @@ CONFIDENCE_MEDIUM = 0.35
 # the trailing "Sources: S1, S2" line the evidence_cited/few_shot_cited
 # prompts ask the model to produce.
 _INLINE_CITATION_RE = re.compile(r"\[S(\d+)\]")
-_SOURCES_LINE_RE = re.compile(r"(?im)^sources\s*:\s*(.+)$")
+_SOURCES_LINE_RE = re.compile(r"(?im)^sources[ \t]*:[ \t]*(.+)$")
+_SOURCES_LINE_ANY_RE = re.compile(r"(?im)^[ \t]*sources[ \t]*:[^\n]*$")
+_SOURCES_LABEL_RE = re.compile(r"(?im)^([ \t]*)(sources)([ \t]*):")
 # Models do not always emit one marker per bracket. gemma4:12b writes "[S1, S3]"
 # often enough that treating it as literal text loses real citations: the strip
 # pass leaves it alone, the extractor never sees S3, and renumbering skips it.
@@ -69,7 +71,20 @@ def _sanitize_untrusted_text(text: str) -> str:
     text = _SECTION_MARKER_RE.sub(lambda m: f"\u27e6{m.group(1)}\u27e7", text)
     text = _CITATION_LOOKALIKE_RE.sub(
         lambda m: m.group(0).replace("[", "\u27e6").replace("]", "\u27e7"), text)
+    text = _SOURCES_LABEL_RE.sub(
+        lambda m: f"{m.group(1)}\u27e6{m.group(2)}\u27e7{m.group(3)}:", text)
     return text
+
+def _strip_sanitizer_marks(text: str) -> str:
+    """Remove the special brackets the sanitizer puts into prompts.
+
+    The model sees them in its input and sometimes repeats them. They must not
+    reach the reader, and they must not be able to pass for a citation, so they
+    are dropped (the text between them is kept) before anything reads the output.
+    """
+    if not text:
+        return text
+    return text.replace("\u27e6", "").replace("\u27e7", "")
 
 
 def _split_citation_groups(text: str) -> str:
@@ -184,8 +199,8 @@ def _strip_citations_for_history(text: str) -> str:
     """
     if not text:
         return text
-    cleaned = _INLINE_CITATION_RE.sub("", text)
-    cleaned = _SOURCES_LINE_RE.sub("", cleaned)
+    cleaned = _CITATION_GROUP_RE.sub("", text)
+    cleaned = _SOURCES_LINE_ANY_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
@@ -479,7 +494,7 @@ class LLMResponseGeneration:
             f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer', '')))}"
             for t in recent
         )
-        query = _sanitize_untrusted_text(query)
+        safe_query = _sanitize_untrusted_text(query)
         rewrite_prompt = (
             "Rewrite the student's latest question as a single, fully "
             "self-contained question with no pronouns or references back to "
@@ -488,10 +503,10 @@ class LLMResponseGeneration:
             "Output ONLY the rewritten question, nothing else \u2014 no "
             "preamble, no quotes.\n\n"
             f"[RECENT CONVERSATION]\n{turns}\n\n"
-            f"[LATEST QUESTION]\n{query}\n\n[REWRITTEN QUESTION]"
+            f"[LATEST QUESTION]\n{safe_query}\n\n[REWRITTEN QUESTION]"
         )
         rewritten, ok = self._call_ollama_lightweight(rewrite_prompt)
-        cleaned = rewritten.strip().strip('"').strip() if rewritten else ""
+        cleaned = _strip_sanitizer_marks(rewritten).strip().strip('"').strip() if rewritten else ""
         
         # Guard against a failed call or a degenerate/empty/runaway rewrite
         # silently making retrieval worse than just using the original text.
@@ -620,6 +635,7 @@ class LLMResponseGeneration:
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
+        raw = _strip_sanitizer_marks(raw)
         if ok:
             raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
         conf, cscore= self._confidence(good)
