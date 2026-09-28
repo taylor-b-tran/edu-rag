@@ -7,7 +7,15 @@ Chunks below `SIMILARITY_THRESHOLD` (default 0.30) are discarded entirely, so a 
 ## 2. Fixture Fallback
 Fallback activates when zero chunks pass the similarity threshold. In this state the answer is prefixed with `"Based on general knowledge — not verified against course materials."`, source references are empty, confidence is `"Low"` / `0.0`, and `is_fallback: true` is set in the response. The fallback does not refuse to answer — Ollama still generates from pre-trained weights with no course context, so the response may be generically correct but not aligned to the CSIT321 syllabus. The `is_fallback` flag is the authoritative indicator and must be checked before presenting any answer as ChromaDB-grounded.
 
-If Ollama is unreachable (`ConnectionError`), `_call_ollama` returns a structured error string with the restart instruction and any retrieved chunk summaries rather than raising. The HTTP status remains 200 in this path.
+If Ollama is unreachable, times out, reports an error, or returns an empty answer,
+generation raises `GenerationUnavailable`. The API returns a neutral HTTP 503,
+logs the failure, and stores no chat message. An uncited refusal that the course
+materials do not cover the question has no sources, Low / 0.0 confidence, and
+`is_fallback: true`. Uncited normal answers retain their retrieved sources.
+The refusal sentence is matched anywhere in an uncited answer, because gemma4:12b
+ends its refusals with it. An uncited answer that uses that exact sentence part-way
+through is therefore also treated as a refusal, and a refusal that cites a source
+keeps that source.
 
 ## 3. Remaining Risks
 | Risk | Severity | Status |

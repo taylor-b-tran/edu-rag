@@ -625,12 +625,16 @@ docker rm -f edurag-chromadb edurag-ollama-cpu edurag-postgres
 docker compose up -d
 ```
 
-### 12.3 Ollama returns `[Ollama not running]` in the chat
+### 12.3 Answer generation is temporarily unavailable
 
-The model is not pulled, or the Ollama container is unhealthy.
+An unavailable model, timeout, error response or empty model answer returns HTTP
+503 without storing a chat message. The API logs the failure; students receive a
+neutral retry message. Check API logs to distinguish model failures from a
+retrieval dependency outage. The model may not be pulled, or Ollama may be unhealthy.
 
 ```powershell
 docker compose ps ollama                       # status?
+docker compose logs api --tail=50              # generation or retrieval failure?
 docker compose exec ollama ollama list         # is the model present?
 docker compose logs ollama --tail=50           # any errors?
 ```
