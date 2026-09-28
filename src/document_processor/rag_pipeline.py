@@ -13,6 +13,12 @@ class GenerationUnavailable(RuntimeError):
     """The model did not produce an answer; callers must not persist a turn."""
 
 
+def _unavailable(reason: str) -> GenerationUnavailable:
+    """Log at ERROR, then hand back the exception to raise."""
+    logger.error("Generation unavailable: %s", reason)
+    return GenerationUnavailable(reason)
+
+
 TOP_K = int(os.getenv("TOP_K", "5"))
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
@@ -30,7 +36,9 @@ CONFIDENCE_MEDIUM = 0.35
 # the trailing "Sources: S1, S2" line the evidence_cited/few_shot_cited
 # prompts ask the model to produce.
 _INLINE_CITATION_RE = re.compile(r"\[S(\d+)\]")
-_SOURCES_LINE_RE = re.compile(r"(?im)^sources\s*:\s*(.+)$")
+_SOURCES_LINE_RE = re.compile(r"(?im)^sources[ \t]*:[ \t]*(.+)$")
+_SOURCES_LINE_ANY_RE = re.compile(r"(?im)^[ \t]*sources[ \t]*:[^\n]*$")
+_SOURCES_LABEL_RE = re.compile(r"(?im)^([ \t]*)(sources)([ \t]*):")
 # Models do not always emit one marker per bracket. gemma4:12b writes "[S1, S3]"
 # often enough that treating it as literal text loses real citations: the strip
 # pass leaves it alone, the extractor never sees S3, and renumbering skips it.
@@ -78,7 +86,20 @@ def _sanitize_untrusted_text(text: str) -> str:
     text = _SECTION_MARKER_RE.sub(lambda m: f"\u27e6{m.group(1)}\u27e7", text)
     text = _CITATION_LOOKALIKE_RE.sub(
         lambda m: m.group(0).replace("[", "\u27e6").replace("]", "\u27e7"), text)
+    text = _SOURCES_LABEL_RE.sub(
+        lambda m: f"{m.group(1)}\u27e6{m.group(2)}\u27e7{m.group(3)}:", text)
     return text
+
+def _strip_sanitizer_marks(text: str) -> str:
+    """Remove the special brackets the sanitizer puts into prompts.
+
+    The model sees them in its input and sometimes repeats them. They must not
+    reach the reader, and they must not be able to pass for a citation, so they
+    are dropped (the text between them is kept) before anything reads the output.
+    """
+    if not text:
+        return text
+    return text.replace("\u27e6", "").replace("\u27e7", "")
 
 
 def _split_citation_groups(text: str) -> str:
@@ -193,12 +214,22 @@ def _strip_citations_for_history(text: str) -> str:
     """
     if not text:
         return text
-    cleaned = _INLINE_CITATION_RE.sub("", text)
-    cleaned = _SOURCES_LINE_RE.sub("", cleaned)
+    cleaned = _CITATION_GROUP_RE.sub("", text)
+    cleaned = _SOURCES_LINE_ANY_RE.sub("", cleaned)
     cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+_ANSWER_LABEL_RE = re.compile(r"(?im)^[ \t]*answer[ \t]*:")
+
+
+def _has_answer_text(text: str) -> bool:
+    """True if anything is left once citations, Sources lines and the
+    'Answer:' label are removed."""
+    bare = _strip_citations_for_history(text)
+    bare = _ANSWER_LABEL_RE.sub("", bare)
+    return bool(re.search(r"\w", bare))
 
 # Which prompt version to use. Options: "baseline", "evidence_cited", "few_shot_cited"
 PROMPT_STRATEGY = os.getenv("PROMPT_STRATEGY", "evidence_cited")
@@ -296,7 +327,7 @@ def _course_label(course_id: str | None) -> str:
     code = (course_id or "").strip()
     return code if code else "your course"
 
-# Ollama generation settings — now adjustable without editing code 
+# Ollama generation settings — now adjustable without editing code
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
 OLLAMA_TOP_P = float(os.getenv("OLLAMA_TOP_P", "0.9"))
 # 220 was sized for the old "concise" default. F2 made "detailed" the default
@@ -488,7 +519,7 @@ class LLMResponseGeneration:
             f"Paedia: {_sanitize_untrusted_text(_strip_citations_for_history(t.get('answer', '')))}"
             for t in recent
         )
-        query = _sanitize_untrusted_text(query)
+        safe_query = _sanitize_untrusted_text(query)
         rewrite_prompt = (
             "Rewrite the student's latest question as a single, fully "
             "self-contained question with no pronouns or references back to "
@@ -497,11 +528,11 @@ class LLMResponseGeneration:
             "Output ONLY the rewritten question, nothing else \u2014 no "
             "preamble, no quotes.\n\n"
             f"[RECENT CONVERSATION]\n{turns}\n\n"
-            f"[LATEST QUESTION]\n{query}\n\n[REWRITTEN QUESTION]"
+            f"[LATEST QUESTION]\n{safe_query}\n\n[REWRITTEN QUESTION]"
         )
         rewritten, ok = self._call_ollama_lightweight(rewrite_prompt)
-        cleaned = rewritten.strip().strip('"').strip() if rewritten else ""
-        
+        cleaned = _strip_sanitizer_marks(rewritten).strip().strip('"').strip() if rewritten else ""
+
         # Guard against a failed call or a degenerate/empty/runaway rewrite
         # silently making retrieval worse than just using the original text.
         if not ok or not cleaned or len(cleaned) > 300:
@@ -613,7 +644,7 @@ class LLMResponseGeneration:
         top_k = TOP_K if top_k is None else top_k
         threshold = SIMILARITY_THRESHOLD if similarity_threshold is None else similarity_threshold
         style = resolve_response_style(response_style)
-    
+
         search_query = self._resolve_query_for_retrieval(query, history)
         all_chunks  = self._retriever.search(search_query, course_id=course_id, top_k=top_k)
         # Only keep chunks similar enough to be trustworthy
@@ -622,15 +653,18 @@ class LLMResponseGeneration:
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
                                     temperature=temperature, num_predict=num_predict)
-        if not ok:
-            raise GenerationUnavailable("The answer service is temporarily unavailable.")
-        raw = _strip_invalid_citation_markers(_split_citation_groups(raw), len(good))
-        substantive = _SOURCES_LINE_RE.sub("", _INLINE_CITATION_RE.sub("", raw))
-        if not re.search(r"\w", substantive):
-            logger.error("Answer generation returned an empty response after citation cleanup.")
-            raise GenerationUnavailable("The answer service is temporarily unavailable.")
-        conf, cscore= self._confidence(good)
-        
+        raw = _strip_sanitizer_marks(raw)                     
+        if not ok:                                             
+            raise GenerationUnavailable("The model did not return an answer.")
+        if not raw.strip():                                    
+            raise _unavailable("The model returned an empty answer.")
+        raw = _strip_invalid_citation_markers(                
+            _split_citation_groups(raw), len(good))
+        if not _has_answer_text(raw):                          
+            raise _unavailable(
+                "The model returned only citation markers and no answer text.")
+        conf, cscore = self._confidence(good)
+
         # T8-18: only report sources the model actually cited -- previously
         # source_references listed every chunk retrieval surfaced, even ones
         # the model never mentioned in its answer. If nothing can be confidently
