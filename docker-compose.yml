@@ -95,22 +95,6 @@ services:
       start_period: 20s
     networks:
       - edurag-net
-    # T10-15: reduced privilege. Runs as the unprivileged `edurag` user baked
-    # into docker/Dockerfile.demo (nothing here needs root), drops every
-    # Linux capability the base image grants by default, and blocks a
-    # process from regaining privileges it started without (setuid binaries,
-    # sudo -- neither is installed here, but this is the belt for the
-    # braces). root_fs is left read-write for now, not read-only: the repo
-    # is bind-mounted over /workspace for hot development, and gunicorn's
-    # --reload-adjacent tooling plus pip's own cache under
-    # /home/edurag/.cache both expect to write inside the container. Making
-    # this read-only is a reasonable next step but needs its own pass to
-    # find every write path first -- listed as follow-up, not silently
-    # skipped.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   streamlit:
     restart: unless-stopped
@@ -153,12 +137,6 @@ services:
       start_period: 30s
     networks:
       - edurag-net
-    # T10-15: same reasoning as the api service above — non-root `edurag`
-    # user from the image, every capability dropped, no privilege escalation.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   app:
     image: python:3.11-slim
@@ -191,18 +169,6 @@ services:
         condition: service_started
     networks:
       - edurag-net
-    # T10-15: this one stays root -- it's the interactive "docker compose
-    # run app sh" debugging container (profile: tools), used to poke at the
-    # bind-mounted repo, run one-off scripts, and occasionally pip install
-    # something ad hoc. Locking it down the same way as api/streamlit would
-    # turn routine debugging into a fight with permissions for no real
-    # security gain, since it's never started automatically (`profiles:
-    # tools`) and never exposed on a port. Capabilities are still dropped
-    # since that costs nothing here.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   postgres:
     restart: unless-stopped
@@ -226,23 +192,6 @@ services:
       start_period: 10s
     networks:
       - edurag-net
-    # T10-15: the official postgres image's entrypoint starts as root to
-    # chown/initialise a fresh data volume, then drops to the `postgres`
-    # user itself via gosu for the actual server process -- it is not root
-    # for the whole container lifetime the way api/streamlit/app were. A
-    # blind cap_drop: [ALL] breaks that first-run chown on an empty
-    # postgres_data volume, so the handful of capabilities initdb actually
-    # needs are added back explicitly instead of leaving the full default set.
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
-      - FOWNER
-    security_opt:
-      - no-new-privileges:true
 
   chromadb:
     restart: unless-stopped
@@ -261,17 +210,6 @@ services:
       - chromadb_data:/data
     networks:
       - edurag-net
-    # T10-15: chroma's own server process doesn't need any Linux capability
-    # beyond ordinary file and network I/O, so every capability is dropped
-    # outright here (unlike postgres, nothing in its startup needs a chown
-    # of an existing volume as root). Not marked non-root/read-only pending
-    # a live check that the image's own user can still write /data under
-    # those constraints -- see the sprint plan's "confirm the stack still
-    # starts cleanly" done-when condition.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   ollama:
     restart: unless-stopped
@@ -293,19 +231,6 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - edurag-net
-    # T10-15: capabilities dropped, same as the other services. Left as root
-    # and read-write deliberately: this stack runs on a GPU host, and while
-    # this compose file has no explicit `deploy.resources.reservations.devices`
-    # block, if the live host adds one (or an nvidia container-toolkit
-    # runtime override) out-of-band, forcing a non-root user here is the one
-    # change in this task most likely to silently break GPU access two days
-    # before the workshop. Verify locally first (no GPU in this environment);
-    # if `docker compose up ollama` still serves a model afterwards, the same
-    # non-root treatment as chromadb can follow in a later sprint.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
 networks:
   edurag-net:
@@ -316,4 +241,3 @@ volumes:
   postgres_data:
   chromadb_data:
   ollama_data:
-  

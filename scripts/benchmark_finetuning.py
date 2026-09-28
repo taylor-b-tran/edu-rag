@@ -162,12 +162,10 @@ def main():
     print(f"\nSaved: {OUT_JSON}")
     print(f"Saved: {OUT_MD}")
 
-    if any(r["per_query"][0]["confidence_score"] == 0.0 for r in all_results):
-        pass  # not a reliable "Ollama down" check on its own; see note below.
     print(
-        "\nNOTE: if Ollama wasn't running (ollama serve) with the model pulled,\n"
-        "the 'keyword_overlap' and 'citation_count' numbers above are not meaningful --\n"
-        "check a few raw answers in the JSON for the '[Ollama not running]' marker."
+        "\nNOTE: model outages, error responses and empty answers raise\n"
+        "GenerationUnavailable and abort the run rather than scoring outage hints.\n"
+        "Low confidence alone does not indicate an outage; inspect refusals and sources."
     )
 
 

@@ -32,6 +32,14 @@ def _state():
     return current_app.config["EDURAG_API_STATE"]
 
 
+def _is_generation_unavailable(exc):
+    try:
+        from src.document_processor.rag_pipeline import GenerationUnavailable
+    except Exception:
+        return False
+    return isinstance(exc, GenerationUnavailable)
+
+
 # T8-10: lets the UI render the picker from a single source of truth instead of hardcoding the five style names/labels
 # client-side. No auth required — this is static config, not user data.
 @query_bp.get("/response-styles")
@@ -223,8 +231,13 @@ def query():
             temperature=cfg.get("temperature"),
             num_predict=cfg.get("num_predict"),
         )
-    except Exception:
-        logger.exception("Generation failed for user %s", user.get("user_id"))
+    except Exception as exc:
+        if _is_generation_unavailable(exc):
+            # The pipeline has already logged why; a second traceback here
+            # would double every outage in the log.
+            logger.warning("Generation unavailable for user %s", user.get("user_id"))
+        else:
+            logger.exception("Generation failed for user %s", user.get("user_id"))
         return jsonify({
             "error": "generation_unavailable",
             "message": (

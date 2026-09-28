@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re as _re
 import sys
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.document_processor.rag_pipeline import (  # noqa: E402
+    GenerationUnavailable,
     LLMResponseGeneration,
     RetrievedChunk,
     _SOURCES_LINE_RE,
@@ -128,6 +130,7 @@ def test_answer_generation_is_unaffected_when_source_text_has_no_lookalikes():
     assert "[S1]" in r.answer
     assert r.source_refs[0]["source_file"] == "Week1.pdf"
 
+
 # Stale citations in replayed history 
 def test_strip_citations_for_history_removes_inline_markers():
     text = "RAG retrieves before generating [S1], which reduces hallucination [S2]."
@@ -168,7 +171,8 @@ def test_a_past_answers_citations_do_not_reach_the_new_prompt():
     assert "[S1]" not in history_section
     assert "Sources:" not in history_section
 
-    # The internal query-rewrite prompt is a prompt too 
+
+ # The internal query-rewrite prompt is a prompt too 
 def test_rewrite_prompt_neutralises_an_injected_marker_in_the_question():
     gen = _generator(chunks=[])
     captured = []
@@ -210,6 +214,7 @@ def _history_section(prompt):
 def _source_lines(prompt):
     """Lines that begin with "Sources:" -- what the citation code reads."""
     return _re.findall(r"(?im)^sources[ \t]*:.*$", prompt)
+
 
 # Filter call sites: the QUESTION inside history, on every strategy.
 # evidence_cited is the one production runs; it had no test of its own.
@@ -375,6 +380,18 @@ def test_generate_removes_sanitizer_marks_from_the_answer():
                       [chunk(1, "Week1.pdf", 2, "RAG retrieves first.")])
     assert "\u27e6" not in r.answer and "\u27e7" not in r.answer
     assert "RAG works" in r.answer
+
+
+def test_an_answer_of_only_sanitizer_marks_counts_as_empty():
+    with pytest.raises(GenerationUnavailable):
+        _run_generate("\u27e6\u27e7 \u27e6\u27e7", [chunk(1, "Week1.pdf", 2, "x")])
+
+
+def test_a_failed_model_call_raises_generation_unavailable():
+    gen = _generator(chunks=[chunk(1, "Week1.pdf", 2, "x")])
+    gen._call_ollama = lambda prompt, chunks=None, **kw: ("", False)
+    with pytest.raises(GenerationUnavailable):
+        gen.generate("What is RAG?")
 
 
 def test_a_mark_wrapped_citation_in_the_output_does_not_become_a_real_citation():

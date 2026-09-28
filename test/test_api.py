@@ -1,7 +1,16 @@
 from __future__ import annotations
 import io
 import uuid
+import pytest
 from src.api.app import create_app
+
+
+@pytest.fixture
+def generated_answer(monkeypatch):
+    """Successful route tests need a model response, not an offline error hint."""
+    from src.document_processor.rag_pipeline import LLMResponseGeneration
+    monkeypatch.setattr(LLMResponseGeneration, "_call_ollama",
+        lambda self, prompt, chunks=None, **kwargs: ("An explanation [S1]." if chunks else "A general explanation.", True))
 
 def _client():
     app = create_app()
@@ -60,7 +69,7 @@ def test_login_rejects_missing_fields():
 # ─── Query ────────────────────────────────────────────────────────────
 
 
-def test_query_returns_chromadb_answer_when_authenticated():
+def test_query_returns_chromadb_answer_when_authenticated(generated_answer):
     """Query endpoint should return a ChromaDB-backed answer with full response shape."""
     c = _client()
     token = _login(c, "student@uow.edu.au", "student123")
@@ -123,7 +132,7 @@ def test_query_returns_422_for_single_word_question():
     assert body["error"] == "ambiguous_query"
 
 
-def test_query_accepts_the_two_word_prompts_the_app_itself_suggests():
+def test_query_accepts_the_two_word_prompts_the_app_itself_suggests(generated_answer):
     """The suggested-prompt buttons offer "Summarise <document>", which is two
     words. With a three-word floor the first thing a new student clicked came
     back as an "Ambiguous Query" error banner — the app rejecting its own
@@ -141,7 +150,7 @@ def test_query_accepts_the_two_word_prompts_the_app_itself_suggests():
     assert response.status_code != 422, response.get_json()
 
 
-def test_query_off_topic_question_does_not_fabricate_citations():
+def test_query_off_topic_question_does_not_fabricate_citations(generated_answer):
     """Off-topic queries that pass the ambiguity gate must either return is_fallback=True
     OR drop to Low confidence with no citations -- they must NOT fabricate sources from
     the seeded corpus."""
@@ -273,7 +282,7 @@ def test_documents_returns_list_when_authenticated():
 # ─── Sessions ─────────────────────────────────────────────────────────
 
 
-def test_sessions_returns_collection_after_query():
+def test_sessions_returns_collection_after_query(generated_answer):
     c = _client()
     token = _login(c, "student@uow.edu.au", "student123")
 
