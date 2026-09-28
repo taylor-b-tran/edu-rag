@@ -16,25 +16,3 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
 COPY . .
-
-RUN mkdir -p /workspace/data/uploads /workspace/models/embedder_cache
-
-# T10-15: reverted for this sprint. A non-root `edurag` user was added here
-# and paired with cap_drop/security_opt in docker-compose.yml, but Taylor's
-# 27 Sept review of PR #134 caught two problems that only show up on the
-# live host, not in a fresh `docker compose up`:
-#   - uploads_data on the live host is already owned by root from every
-#     previous (root) container run. The first rebuild after switching to a
-#     non-root user would have every /api/upload return 500 (can't write
-#     into a directory it doesn't own), and every document delete would
-#     leave its file behind as unremovable garbage instead of actually
-#     freeing space.
-#   - the fixed uid this used (10001) has no HOME, and nothing that needs
-#     one (pip's cache, anything writing to ~/.cache) was checked before
-#     this went in.
-# Both are fixable, but need testing against a real live-volume copy first,
-# not assumed clean from a fresh `docker compose up -d --build`. Redo this
-# after the 1 Oct recording, on a temporary stack, with an explicit chown
-# step for the existing uploads_data volume and a real HOME for the user.
-# See docker-compose.yml's matching T10-15 comments on cap_drop/security_opt,
-# reverted for the same reason.

@@ -4,8 +4,9 @@
 **Owner:** Tung Phuong Anh Huynh
 **Checked by:** Andre
 **Sprint:** 10
-**Status:** Rewritten after Taylor's 27 Sept review of PR #134 (CI was red).
-Run against a real local Postgres below; all 30 cases pass.
+**Status:** Rewritten after Taylor's review of PR #134 (CI was red). All 30
+cases pass against a real Postgres, both locally (Section 2) and in CI on
+PR #136 (Section 4).
 
 **Definition of Done** (from the sprint plan)
 > The suite fails if either defect is reintroduced, and every new endpoint
@@ -51,6 +52,24 @@ T6 surface). Same "not yet covered" list as before, unchanged by this fix:
 | Python | 3.12.3 (CI pins 3.11; both run this file the same way — nothing here is version-sensitive) |
 | Postgres | local `postgres:16`-equivalent instance, disposable `edurag_test` database and role |
 | Test command | `python -m pytest test/test_sprint10_t12_permission_matrix.py -v` |
+
+**Running it locally — never against the live Postgres.** Do not use
+`docker compose up -d postgres`: on the GPU host that is the live database,
+and this suite creates and drops schemas in whatever it points at. Use a
+throwaway container on a different port:
+
+```powershell
+docker run --rm -d --name edurag-t12-pg -p 55432:5432 `
+  -e POSTGRES_USER=edurag_test -e POSTGRES_PASSWORD=t12_disposable `
+  -e POSTGRES_DB=edurag_test postgres:16
+$env:PAEDIA_TEST_POSTGRES_HOST = "127.0.0.1"
+$env:POSTGRES_PORT = "55432"
+$env:POSTGRES_USER = "edurag_test"
+$env:POSTGRES_PASSWORD = "t12_disposable"
+$env:POSTGRES_DB = "edurag_test"
+python -m pytest test/test_sprint10_t12_permission_matrix.py -v
+docker stop edurag-t12-pg
+```
 
 ---
 
@@ -117,6 +136,14 @@ this pattern:
 ```
 python -m pytest test/test_token_transactions_postgres.py test/test_student_self_enrolment_postgres.py test/test_demo_accounts_postgres.py test/test_sprint10_t12_permission_matrix.py -q
 ```
+
+**CI result:** PR #136's `CI / Python tests and fixture validation` job —
+which contains this Postgres step — passed, along with the Docker Compose
+validation and Demo stack smoke test checks. (An earlier run of that job failed
+on the Sprint 5 integration gate, not on this test: the gate's conflict-marker
+check used `startswith("=======")` and misread pytest's own `=====` banner
+lines inside this doc's code blocks. Fixed in
+`scripts/sprint5_integration_gate.py` by matching git's exact marker format.)
 
 ---
 

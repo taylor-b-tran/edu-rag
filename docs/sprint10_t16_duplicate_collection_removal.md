@@ -8,8 +8,14 @@
 27 Sept review of PR #134, point 5). No step-by-step terminal output was
 captured at the time it happened — this doc was only written up afterward.
 Sections 1–4 below are therefore **not** a record of what happened; they're
-what's known, what isn't, and the two-command plan to get real current-state
-evidence without needing local storage, a GPU, or reproducing the deletion.
+what's known, what isn't, and the plan to get real current-state evidence
+without needing local storage, a GPU, or reproducing the deletion.
+
+**The helper script `scripts/cleanup_duplicate_collection.py` has been
+removed** (Taylor's review of #136: the work is done, this doc is the record).
+It only ever did three things — list collections with chunk counts, delete a
+named non-active collection after a backup, and run one test retrieval — and
+Section 2 below does the two read-only ones with plain one-liners.
 
 **Background:** `src/document_processor/ingest_corpus.py` documents its own
 history — the collection was renamed `csit321_course` -> `edurag_course`
@@ -37,17 +43,15 @@ and only the second one is what this doc exists to fix.
 
 ## 2. Getting real, current output — no local GPU or storage needed
 
-The `--list` and `--verify` commands need `sentence-transformers`/`torch`/a
-ChromaDB client already installed and network access to the live host's
-ChromaDB — exactly what the `api` container already has, since it's already
-running there. Running them *inside that container* means whoever has
-SSH or Tailscale access to the host needs nothing beyond a terminal — no
-local install, no GPU, no laptop storage:
+Both checks below need the packages and network access the running `api`
+container already has (ChromaDB client, `sentence-transformers`), so they run
+*inside that container* — whoever has SSH or Tailscale access to the host
+needs only a terminal, no local install, GPU or storage. Both are read-only.
 
 ```powershell
-docker compose exec api python scripts/cleanup_duplicate_collection.py --list
+docker compose exec api python -c "from src.document_processor.ingest_corpus import get_chroma_client, COLLECTION; c=get_chroma_client(); [print(getattr(x,'name',x), c.get_collection(getattr(x,'name',x)).count()) for x in c.list_collections()]; print('active collection:', COLLECTION)"
 ```
-<PASTE FULL OUTPUT — should show only `edurag_course` now, with
+<PASTE FULL OUTPUT — should list only `edurag_course`, with
 `csit321_course` absent>
 
 ```
@@ -55,14 +59,18 @@ docker compose exec api python scripts/cleanup_duplicate_collection.py --list
 ```
 
 ```powershell
-docker compose exec api python scripts/cleanup_duplicate_collection.py --verify
+docker compose exec api python -c "from src.document_processor.rag_pipeline import VectorRetriever; r=VectorRetriever().search('What is retrieval-augmented generation?', course_id='CSIT321', top_k=3); print(len(r), 'chunks'); [print(x.source_file, x.page_number, round(x.similarity,4)) for x in r]"
 ```
-<PASTE FULL OUTPUT — should show real chunks returned with source files and
-similarity scores>
+<PASTE FULL OUTPUT — should show real chunks with source files and
+similarity scores, not zero results>
 
 ```
 <paste here>
 ```
+
+(These one-liners reuse the calls the removed script made; they have not been
+run against the live host yet — if one errors on a name, that is the first
+thing to fix, not a sign the deletion went wrong.)
 
 If you don't personally have host access, this is the one step in this doc
 that genuinely needs someone else (whoever ran the original deletion, or
@@ -121,6 +129,7 @@ turns up>
 
 ## 6. Sign-off
 
+- [x] Helper script removed from the repo (this doc is the record)
 - [ ] This file is a finalised file with real, current command output (Section 2)
 - [ ] Backup existence confirmed, not assumed (Section 3)
 - [x] Deletion itself confirmed done (24 Sept 2026, per Taylor's 27 Sept review)

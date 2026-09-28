@@ -15,9 +15,13 @@ problem: the live host's `uploads_data` volume is already owned by root from
 every previous (root) container run, so the first rebuild under the new user
 would 500 on every upload and leave orphaned files behind on every delete.
 
-**Both changes have been reverted in this PR** — `docker-compose.yml` no
-longer sets `cap_drop`/`security_opt`/`cap_add` on any service, and
-`docker/Dockerfile.demo` no longer creates or switches to the `edurag` user.
+**Both changes have been reverted in this PR.** `docker-compose.yml` and
+`docker/Dockerfile.demo` are restored to exactly the live version
+(`git checkout 33933a4 -- docker-compose.yml docker/Dockerfile.demo`), byte
+for byte, because Wednesday's deploy is restart-only and these two files must
+match what is already running. No explanation comments were left in those
+files for the same reason — the reasoning above is the record.
+
 Everything below is kept as the plan for redoing this properly after the
 1 Oct recording — a template for next time, not a report of something
 already verified. Do not run Section 2's commands against the live host in
@@ -166,6 +170,6 @@ Section 1.
 ## 4. Sign-off
 
 - [ ] This file is a finalised file with a fully running test
-- [x] Hardening reverted from this PR (`docker-compose.yml`,
-      `docker/Dockerfile.demo`) per Taylor's 27 Sept review
+- [x] `docker-compose.yml` and `docker/Dockerfile.demo` restored byte-identical
+      to the live commit 33933a4, per Taylor's review of #136
 - [ ] Follow-up task scheduled for after the 1 Oct recording
