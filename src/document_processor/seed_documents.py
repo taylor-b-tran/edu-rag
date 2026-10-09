@@ -212,12 +212,12 @@ SEED_DOCUMENTS = [
             "(1) privacy – student queries and course material never leave the institution's "
             "infrastructure; (2) cost – no per-token API charges during development and testing; "
             "(3) offline capability – the system works without internet access in lab environments. "
-            "Ollama exposes an HTTP API at http://localhost:11434 (or the CHROMA_HOST equivalent "
-            "in Docker). The generate endpoint accepts a model name, a prompt, and options such "
+            "Ollama exposes an HTTP API at http://localhost:11434 (in Docker, the address given by "
+            "the OLLAMA_HOST environment variable). The generate endpoint accepts a model name, a prompt, and options such "
             "as temperature and num_predict. "
-            "The default model is llama3.2, configurable via OLLAMA_MODEL environment variable. "
-            "In production, the same LLMResponseGeneration module can switch to the OpenAI API "
-            "by changing a single environment variable."
+            "The model is set by the OLLAMA_MODEL environment variable; the Docker Compose deployment "
+            "defaults to gemma4:12b. Generation always runs through Ollama; EduRAG has no cloud "
+            "LLM provider."
         ),
     },
     {
@@ -233,16 +233,14 @@ SEED_DOCUMENTS = [
             "and to state clearly when it cannot find relevant information; "
             "(2) an optional conversation history block containing the last three student–Paedia "
             "exchanges, injected so the model can resolve pronouns and follow-up questions; "
-            "if the prompt would exceed the context window, the oldest history turns are dropped; "
             "(3) a context block containing the top-k retrieved chunks, each labelled with its "
             "source file and page number; "
             "(4) the student's current question. "
             "When no chunks exceed the similarity threshold, the context block is replaced with "
             "a notice and the model is instructed to label its response as general knowledge "
             "not verified against course materials. "
-            "If the LLM provider is unreachable, the system returns a service-unavailable "
-            "message and preserves the retrieved citations so the operator can retry or "
-            "switch to the fallback OpenAI provider."
+            "If the model is unreachable, times out or returns nothing, the API answers with a "
+            "service-unavailable (HTTP 503) message, stores nothing, and the student can retry."
         ),
     },
     {
@@ -259,9 +257,10 @@ SEED_DOCUMENTS = [
             "typically under 100 ms for collections up to 10,000 chunks; "
             "(2) LLM generation – the time for Ollama to produce the answer token-by-token, "
             "which depends on model size, hardware (CPU vs GPU), and prompt length. "
-            "On GPU-accelerated hardware with qwen3:14b, generation averages 2-4 seconds. "
+            "On GPU-accelerated hardware, generation is much faster than on CPU-only hardware; "
+            "measure it on your own workload. "
             "On CPU-only hardware, generation can exceed 60 seconds for large models, "
-            "which is why llama3.2 (3B parameters) is used as the CPU-safe default."
+            "so a small model is the safer choice there."
         ),
     },
 
@@ -317,9 +316,10 @@ SEED_DOCUMENTS = [
         "text"       : (
             "EduRAG treats prompts, retrieved chunks, and uploaded files as untrusted input. "
             "Prompt injection is mitigated by placing system instructions at the highest priority "
-            "position and validating that retrieved chunks do not contain adversarial instruction "
-            "overrides before insertion into the prompt. "
-            "Uploaded documents are validated for MIME type and file size before any parsing. "
+            "position and neutralising any text in retrieved chunks that looks like one of the "
+            "prompt's own section markers or a citation bracket before insertion into the prompt. "
+            "Uploaded documents are checked for file extension, empty files and the 50 MB size "
+            "limit before any parsing. "
             "Passwords are hashed with bcrypt (cost factor >= 12) before storage in PostgreSQL. "
             "All API keys and secrets are loaded from environment variables; no secrets are "
             "hardcoded or committed to version control. "
@@ -337,16 +337,16 @@ SEED_DOCUMENTS = [
         "topic"      : "Security & Deployment",
         "week"       : "Week 7",
         "text"       : (
-            "EduRAG is deployed as a Docker Compose multi-container stack with four services: "
-            "the Flask API container, the ChromaDB vector store container (HTTP API on port 8000), "
-            "the PostgreSQL relational database container, and the Ollama LLM container. "
+            "EduRAG is deployed as a Docker Compose multi-container stack with five services: "
+            "the Flask API container, the Streamlit web interface container, the ChromaDB vector "
+            "store container (HTTP API on port 8000), the PostgreSQL relational database container, "
+            "and the Ollama LLM container. "
             "Persistent Docker volumes are used for uploaded files, relational data, and vector "
             "indexes so container restarts do not erase system state. "
             "The CHROMA_HOST and CHROMA_PORT environment variables tell the ingestion and "
             "retrieval code to connect to the ChromaDB HTTP service rather than a local "
             "PersistentClient, making the same Python code work in both local dev and Docker. "
-            "For sprint demonstrations, the LLM provider can switch from Ollama to the OpenAI "
-            "API by changing a single OPENAI_API_KEY environment variable."
+            "Generation always runs through Ollama; EduRAG has no cloud LLM provider."
         ),
     },
     {
@@ -360,7 +360,7 @@ SEED_DOCUMENTS = [
             "ChromaDB stores vector embeddings and supports similarity search — it is optimised "
             "for the retrieval step of the RAG pipeline. "
             "PostgreSQL stores relational data: user accounts, authentication tokens, course "
-            "enrolments, document metadata, upload records, and audit logs. "
+            "enrolments, document metadata, and upload records. "
             "Using ChromaDB for all storage is not appropriate because ChromaDB has no support "
             "for relational integrity, foreign key constraints, transactional writes, or "
             "complex joins. "
@@ -387,11 +387,12 @@ SEED_DOCUMENTS = [
             "encodes the question as a vector embedding using all-MiniLM-L6-v2; ChromaDB is "
             "queried for the top-5 most similar chunks filtered by the student's course_id; "
             "if chunks exceed the similarity threshold, they are inserted into a structured "
-            "prompt and sent to the Ollama LLM (llama3.2 or qwen3:14b); the answer is returned "
+            "prompt and sent to the Ollama LLM (gemma4:12b in the Docker Compose deployment); the answer is returned "
             "with source citations showing the originating PDF file and page number. "
             "If the system encounters an error, students should check that Ollama is running "
             "('ollama serve'), that ChromaDB is reachable, and that the corpus has been ingested. "
-            "Administrators can re-ingest the corpus via POST /api/ingest with force=true."
+            "Operators re-ingest the seed corpus from the command line with "
+            "python -m src.document_processor.ingest_corpus."
         ),
     },
 
