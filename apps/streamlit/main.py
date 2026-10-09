@@ -1021,15 +1021,12 @@ def render_login_page():
                               key="signup_email")
                 st.text_input("Username", placeholder="Choose a username",
                               key="signup_username")
-                s1, s2 = st.columns(2)
-                with s1:
-                    st.text_input("Password", type="password",
-                                  placeholder="At least 10 characters",
-                                  key="signup_password")
-                with s2:
-                    st.text_input("Confirm Password", type="password",
-                                  placeholder="Re-enter password",
-                                  key="signup_confirm")
+                st.text_input("Password", type="password",
+                              placeholder="At least 10 characters",
+                              key="signup_password")
+                st.text_input("Confirm Password", type="password",
+                              placeholder="Re-enter password",
+                              key="signup_confirm")
                 st.selectbox("I am a", ["Student", "Lecturer"],
                              key="signup_role",
                              format_func=lambda x: x)
@@ -2522,6 +2519,15 @@ def render_courses_page():
         st.info(f"Your questions and materials are scoped to **{_course_display_label(active_cid)}**.")
 
 
+# Column shares for the member list: User, Email, Role, Remove. The last column
+# used to take 1 share in 9, so the word "Remove" broke into "Remov / e" at any
+# window width. At a 900 px window the content area leaves about 430 px for the
+# row, and the button needs about 90 of them, so a test keeps the last column
+# above 20% of the row. The "Enrol" row below follows the same rule.
+_MEMBER_ROW_RATIO = [2.8, 2.7, 1.7, 2.1]
+_ADD_MEMBER_RATIO = [2.6, 1.8, 1.4]
+
+
 def render_course_management():
     """T05 — Courses & enrollments, backed by /api/courses (Sprint 7 T03).
 
@@ -2529,7 +2535,7 @@ def render_course_management():
     expander's arrow icon relies on a web font that doesn't load in some
     environments and renders as literal overlapping text instead of a glyph.
     """
-    st.markdown("#### Courses & Enrollments")
+    st.markdown("#### Courses & Enrolments")
     st.caption("Live from /api/courses — create courses and manage who's enrolled.")
 
     with st.container(border=True):
@@ -2568,15 +2574,16 @@ def render_course_management():
 
             members = api.get_course_members(code)
             if members:
-                mcols = st.columns([3, 3, 2, 1])
+                mcols = st.columns(_MEMBER_ROW_RATIO)
                 for col, header in zip(mcols, ["User", "Email", "Role", ""]):
                     col.markdown(f"**{header}**")
                 for m in members:
-                    mcols = st.columns([3, 3, 2, 1])
+                    mcols = st.columns(_MEMBER_ROW_RATIO)
                     mcols[0].write(m.get("username", "—"))
                     mcols[1].write(m.get("email", "—"))
                     mcols[2].write(str(m.get("membership_role", "—")).capitalize())
-                    if mcols[3].button("Remove", key=f"rm_{code}_{m.get('email')}"):
+                    if mcols[3].button("Remove", key=f"rm_{code}_{m.get('email')}",
+                                       use_container_width=True):
                         result = api.remove_course_member(code, m.get("email", ""))
                         if result.get("success"):
                             st.rerun()
@@ -2586,11 +2593,11 @@ def render_course_management():
                 st.caption("No members enrolled yet.")
 
             with st.form(f"add_member_form_{code}", clear_on_submit=True):
-                a1, a2, a3 = st.columns([3, 2, 1])
+                a1, a2, a3 = st.columns(_ADD_MEMBER_RATIO)
                 add_email = a1.text_input("Email", label_visibility="collapsed",
                                           placeholder="email@example.com")
                 add_role = a2.selectbox("Role", ["student", "lecturer"], label_visibility="collapsed")
-                if a3.form_submit_button("Enroll"):
+                if a3.form_submit_button("Enrol"):
                     if not add_email.strip():
                         st.error("Email is required.")
                     else:
@@ -2598,7 +2605,7 @@ def render_course_management():
                         if result.get("success"):
                             st.rerun()
                         else:
-                            st.error(result.get("error") or "Failed to enroll member.")
+                            st.error(result.get("error") or "Failed to enrol member.")
 
             if active:
                 if st.button("Deactivate course", key=f"deact_{code}"):
@@ -2642,7 +2649,7 @@ def render_admin_page():
     render_course_management()
     st.divider()
     st.markdown("#### User Management")
-    st.info("A system-wide user directory is not available here. Manage course membership in Courses & Enrollments above.")
+    st.info("A system-wide user directory is not available here. Manage course membership in Courses & Enrolments above.")
     st.markdown("#### System Settings")
     st.write("Use Tuning to view and save global or course settings.")
     if st.button("Open Tuning", key="admin_open_tuning"):
