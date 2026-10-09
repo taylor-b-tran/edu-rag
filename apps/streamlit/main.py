@@ -322,13 +322,12 @@ button[data-testid="stBaseButton-primary"]:hover {
 }
 .error-card strong { color: #7F1D1D; }
 
-/* ── Source chips — readable on hover ── */
+/* ── Source chips — labels, not links ── */
 .source-chip {
     display: inline-block; background: #F1F5F9; border: 1px solid #E2E8F0;
     border-radius: 16px; padding: 5px 14px; margin: 4px 6px 4px 0;
-    font-size: 0.8rem; color: #475569; cursor: pointer; transition: all 0.2s;
+    font-size: 0.8rem; color: #475569;
 }
-.source-chip:hover { background: #CCFBF1; border-color: #0D9488; color: #0D9488; }
 .source-label { font-size: 0.75rem; color: #64748B; margin-top: 8px; margin-bottom: 4px; font-weight: 500; }
 
 /* ── Confidence bar ── */
@@ -366,10 +365,8 @@ button[data-testid="stBaseButton-primary"]:hover {
 /* ── Session card (sidebar) ── */
 .session-card {
     background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px; padding: 8px 12px; margin: 4px 0; cursor: pointer;
-    transition: all 0.2s; color: #CBD5E1;
+    border-radius: 8px; padding: 8px 12px; margin: 4px 0; color: #CBD5E1;
 }
-.session-card:hover { background: rgba(255,255,255,0.1); }
 .session-card-active { border-color: #0D9488; background: rgba(13,148,136,0.15); }
 .session-card .session-title { font-size: 0.82rem; font-weight: 500; color: #E2E8F0; }
 .session-card .session-meta { font-size: 0.72rem; color: #94A3B8; margin-top: 2px; }
