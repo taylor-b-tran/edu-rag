@@ -91,3 +91,34 @@ def test_first_join_selects_course_and_updates_membership(ui):
     assert st.session_state.user["enrolled_courses"] == ["TEST101"]
     assert st.session_state.course_id == "TEST101"
     assert st.session_state.selected_course_id == "TEST101"
+
+
+# ── Staff are not offered a Join the server always refuses ──
+
+def _texts(mock):
+    return [str(c.args[0]) for c in mock.call_args_list if c.args]
+
+
+def test_lecturer_is_not_offered_a_join_the_server_refuses(ui):
+    st, api = ui
+    st.session_state.user["role"] = "Lecturer"
+    main.render_courses_page()
+    assert not any(str(c.kwargs.get("key", "")).startswith("join_") for c in st.button.call_args_list)
+    api.join_course.assert_not_called()
+    assert any("administrator" in t for t in _texts(st.caption) + _texts(st.info))
+
+
+def test_lecturer_without_courses_is_told_they_are_not_assigned(ui):
+    st, api = ui
+    st.session_state.user["role"] = "Lecturer"
+    main.render_courses_page()
+    assert "You are not assigned to any course yet." in _texts(st.info)
+
+
+def test_admin_is_not_offered_join(ui):
+    # Guard: an admin sees every active course under Your Courses, so there is
+    # nothing to join. Pins that behaviour.
+    st, api = ui
+    st.session_state.user["role"] = "Admin"
+    main.render_courses_page()
+    assert not any(str(c.kwargs.get("key", "")).startswith("join_") for c in st.button.call_args_list)
