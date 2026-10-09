@@ -429,12 +429,19 @@ class APIState:
             return None
         if not bcrypt.checkpw(password.encode("utf-8"), record["password_hash"].encode("utf-8")):
             return None
-        db.touch_last_login(record["user_id"])
+        status = record.get("approval_status", "approved")
+        # An account waiting for approval (or not approved) has not signed in,
+        # so it leaves no last-login time. The route reads `approval_status`
+        # and refuses it; it is only reachable here once the password is right,
+        # so the status is never revealed without the password.
+        if status == "approved":
+            db.touch_last_login(record["user_id"])
         return {
             "user_id": record["user_id"],
             "username": record["username"],
             "email": record["email"],
             "role": record["role"],
+            "approval_status": status,
             "enrolled_courses": db.get_enrolled_course_codes(record["user_id"]),
         }
 
@@ -458,6 +465,10 @@ class APIState:
                 from src.api import db
                 record = db.get_user_by_email(email)
                 if record is not None:
+                    # An account that is not (or is no longer) approved cannot
+                    # renew a login either.
+                    if record.get("approval_status", "approved") != "approved":
+                        return None
                     return {
                         "user_id": record["user_id"],
                         "username": record["username"],

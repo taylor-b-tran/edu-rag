@@ -82,7 +82,12 @@ def signup():
         }), 503
 
     from src.api import db
-    user, taken = db.create_user(username=username, email=email, role=role, password=password)
+    # A lecturer can give permissions that a student cannot (upload, delete,
+    # manage a course), so a lecturer who signs up for themselves waits for an
+    # administrator to approve the account. Students are unchanged.
+    extra = {"approval_status": "pending"} if role == "lecturer" else {}
+    user, taken = db.create_user(username=username, email=email, role=role,
+                                 password=password, **extra)
     if user is None:
         return jsonify({
             "error": "already_registered",
@@ -90,6 +95,12 @@ def signup():
         }), 409
 
     logger.info("New %s account created.", role)
+    if extra:
+        return jsonify({
+            "status": "pending_approval",
+            "message": "Your lecturer account has been created. "
+                       "An administrator must approve it before you can sign in.",
+        }), 202
     try:
         return jsonify(state.issue_tokens(user)), 201
     except Exception:
@@ -111,6 +122,19 @@ def login():
     user = _state().authenticate_user(email, password)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
+    # Reached only with the right password, so the answer below never tells a
+    # stranger whether an address has an account.
+    approval = user.get("approval_status", "approved")
+    if approval == "pending":
+        return jsonify({
+            "error": "pending_approval",
+            "message": "Your lecturer account is waiting for an administrator to approve it.",
+        }), 403
+    if approval == "rejected":
+        return jsonify({
+            "error": "account_rejected",
+            "message": "This lecturer account was not approved. Contact an administrator.",
+        }), 403
     try:
         return jsonify(_state().issue_tokens(user))
     except Exception:

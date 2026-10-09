@@ -285,10 +285,14 @@ class PaediaAPIClient:
         role must be "student" or "lecturer" — "admin" is rejected server-side.
 
         On 201 the response mirrors login: access_token, refresh_token, user object.
+        A lecturer gets 202 {"status": "pending_approval", "message": ...} and no
+        tokens: the account exists but an administrator must approve it first.
         Errors (400 weak password / bad role, 409 duplicate) return
         {"error": ..., "message": ...} where "message" is user-facing.
 
         Returns: { "success": bool, "user": dict, "jwt_token": str|None, "error": str|None }
+        For a pending lecturer: success False, "pending" True, and "error" holds
+        the message to show (it is not a failure, but nobody is signed in).
         """
         result = self._post("/api/auth/signup", {
             "email": email,
@@ -305,11 +309,39 @@ class PaediaAPIClient:
                 "jwt_token": self._jwt_token,
                 "error": None,
             }
+        if result and result.get("status") == "pending_approval":
+            return {"success": False, "pending": True, "user": {}, "jwt_token": None,
+                    "error": result.get("message") or "An administrator must approve your account before you can sign in."}
         # API returned an error — use the message field as-is
         error_msg = (
             result.get("message") or result.get("error") or "Signup failed."
         ) if result else "Cannot reach the server. Try again in a moment."
         return {"success": False, "user": {}, "jwt_token": None, "error": error_msg}
+
+    def get_pending_users(self) -> list:
+        """Lecturer accounts waiting for an administrator's decision (admin only).
+
+        Live API: GET /api/admin/users/pending
+        """
+        return self._read_list("/api/admin/users/pending", "users")
+
+    def approve_user(self, user_id: str) -> dict:
+        """Approve a waiting lecturer account (admin only). POST /api/admin/users/<id>/approve"""
+        return self._decide_user(user_id, "approve")
+
+    def reject_user(self, user_id: str) -> dict:
+        """Reject a lecturer account (admin only). POST /api/admin/users/<id>/reject"""
+        return self._decide_user(user_id, "reject")
+
+    def _decide_user(self, user_id: str, action: str) -> dict:
+        if self.config.use_fixtures:
+            return {"success": False, "error": "Approving accounts needs the live system."}
+        result = self._post(f"/api/admin/users/{user_id}/{action}", {})
+        if result is None:
+            return {"success": False, "error": "Accounts are unavailable right now."}
+        if result.get("_api_error"):
+            return {"success": False, "error": result.get("message") or result.get("error")}
+        return {"success": True, "error": None, "user": result.get("user", {})}
 
     def query(self, query_text: str, course_id: str, session_id: Optional[str] = None,
               response_style: Optional[str] = None) -> dict:

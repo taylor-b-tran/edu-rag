@@ -903,7 +903,8 @@ def _clear_identity_state() -> None:
     for key in ("authenticated", "jwt_token", "user", "messages", "sessions",
                 "active_session_id", "session_id", "course_id", "course_options",
                 "selected_course_id", "pending_send", "query_state", "current_page",
-                "history_load_pending", "_cached_prompts", "_cached_prompts_course"):
+                "history_load_pending", "_cached_prompts", "_cached_prompts_course",
+                "confirm_user_decision", "signup_notice"):
         st.session_state.pop(key, None)
     init_session_state()
 
@@ -952,6 +953,7 @@ def handle_signup_submit() -> None:
     password = st.session_state.get("signup_password", "")
     confirm = st.session_state.get("signup_confirm", "")
     role = st.session_state.get("signup_role", "student").lower()
+    st.session_state.signup_notice = None
 
     if not email or not username or not password:
         st.session_state.signup_error = "All fields are required."
@@ -961,7 +963,16 @@ def handle_signup_submit() -> None:
         return
 
     result = api.signup(email, username, password, role)
-    if result.get("success"):
+    if result.get("pending"):
+        # The account exists, but a lecturer has no access until an
+        # administrator approves it, so nobody is signed in. This is not an
+        # error: it is shown as a notice, and the sign-in page will say the
+        # same thing until the decision is made.
+        st.session_state.signup_error = None
+        st.session_state.signup_notice = result.get("error") or (
+            "Your lecturer account has been created. "
+            "An administrator must approve it before you can sign in.")
+    elif result.get("success"):
         # Auto-login: the signup response already contains tokens + user
         _clear_identity_state()
         user = _normalise_user_for_ui(result.get("user", {}))
@@ -1043,6 +1054,8 @@ def render_login_page():
                     if st.session_state.authenticated:
                         st.rerun()
 
+            if st.session_state.get("signup_notice"):
+                st.success(st.session_state.signup_notice)
             if st.session_state.get("signup_error"):
                 st.error(st.session_state.signup_error)
 
@@ -2736,6 +2749,74 @@ def render_course_management():
                         st.error(result.get("error") or "Failed to reactivate course.")
 
 
+def render_pending_lecturers() -> None:
+    """Lecturer accounts waiting for an administrator's decision.
+
+    A lecturer who signs up cannot sign in until an administrator approves the
+    account. Each decision is confirmed first, like deleting a document, and its
+    result is checked: a failed save is shown and never reads as done.
+    """
+    try:
+        pending = api.get_pending_users()
+    except APIReadError:
+        st.warning("Pending lecturer accounts could not be loaded. Please retry.")
+        return
+
+    st.markdown(f"#### Pending lecturer accounts ({len(pending)})")
+    if not pending:
+        st.caption("No accounts are waiting.")
+        return
+    st.caption("A lecturer who signs up cannot sign in until you approve the account.")
+
+    asking = st.session_state.get("confirm_user_decision")
+    for account in pending:
+        uid = account.get("user_id")
+        requested = _local(account.get("created_at"))
+        with st.container(border=True):
+            # st.text, not markdown: the name and address are typed by whoever
+            # signed up.
+            st.text(f"{account.get('username', '—')} · {account.get('email', '—')}")
+            st.caption("Requested " + (requested.strftime("%Y-%m-%d %H:%M") if requested else "—"))
+
+            if asking and asking.get("user_id") == uid:
+                approve = asking.get("action") == "approve"
+                if approve:
+                    st.warning("Approve this account? They will be able to sign in as a lecturer.")
+                else:
+                    st.warning("Reject this account? They will not be able to sign in.")
+                yes_col, no_col, _ = st.columns([1.6, 1.3, 3])
+                with yes_col:
+                    confirmed = st.button("Yes, approve" if approve else "Yes, reject",
+                                          key=f"{'approve' if approve else 'reject'}_yes_{uid}",
+                                          use_container_width=True)
+                with no_col:
+                    cancelled = st.button("Cancel", key=f"decision_no_{uid}", use_container_width=True)
+                if confirmed:
+                    result = api.approve_user(uid) if approve else api.reject_user(uid)
+                    st.session_state.confirm_user_decision = None
+                    if result.get("success"):
+                        st.toast("Account approved." if approve else "Account rejected.")
+                        st.rerun()
+                    else:
+                        st.error(result.get("error") or "Could not save the decision.")
+                elif cancelled:
+                    st.session_state.confirm_user_decision = None
+                    st.rerun()
+            else:
+                approve_col, reject_col, _ = st.columns([1.3, 1.3, 3.4])
+                with approve_col:
+                    approve_clicked = st.button("Approve", key=f"approve_{uid}", type="primary",
+                                                use_container_width=True)
+                with reject_col:
+                    reject_clicked = st.button("Reject", key=f"reject_{uid}", use_container_width=True)
+                if approve_clicked:
+                    st.session_state.confirm_user_decision = {"user_id": uid, "action": "approve"}
+                    st.rerun()
+                elif reject_clicked:
+                    st.session_state.confirm_user_decision = {"user_id": uid, "action": "reject"}
+                    st.rerun()
+
+
 def render_admin_page():
     st.markdown("### ⚙️ Admin Dashboard")
     st.markdown("<span class='status-badge' style='background:#FEE2E2; color:#991B1B;'>Admin</span>", unsafe_allow_html=True)
@@ -2752,6 +2833,8 @@ def render_admin_page():
         c4.metric("Backend mode", stats.get("mode", "unknown"), warmup.get("status", "unknown"))
         st.caption("Live document and course metrics. System-wide user and conversation totals are not available here.")
 
+    st.divider()
+    render_pending_lecturers()
     st.divider()
     render_course_management()
     st.divider()

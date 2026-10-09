@@ -147,6 +147,12 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- A lecturer who signs up has no access until an administrator approves the
+-- account. Every account that existed before this column keeps working: the
+-- default is 'approved', and ADD COLUMN fills the existing rows with it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'
+    CHECK (approval_status IN ('approved', 'pending', 'rejected'));
+
 CREATE TABLE IF NOT EXISTS courses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_code VARCHAR(32) NOT NULL UNIQUE,
@@ -646,7 +652,7 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, username, email, role, password_hash
+                SELECT id, username, email, role, password_hash, approval_status
                   FROM users
                  WHERE email = %s
                 """,
@@ -661,6 +667,7 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
         "email": row["email"],
         "role": row["role"],
         "password_hash": row["password_hash"],
+        "approval_status": row["approval_status"],
     }
 
 
@@ -674,7 +681,7 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
             try:
                 cur.execute(
                     """
-                    SELECT id, username, email, role
+                    SELECT id, username, email, role, approval_status
                       FROM users
                      WHERE id = %s
                     """,
@@ -690,11 +697,12 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
         "username": row["username"],
         "email": row["email"],
         "role": row["role"],
+        "approval_status": row["approval_status"],
     }
 
 
-def create_user(username: str, email: str, role: str,
-                password: str) -> tuple[dict[str, Any] | None, str | None]:
+def create_user(username: str, email: str, role: str, password: str,
+                approval_status: str = "approved") -> tuple[dict[str, Any] | None, str | None]:
     """Create an account.
 
     Returns (user, None) on success, or (None, reason) where reason is
@@ -702,18 +710,21 @@ def create_user(username: str, email: str, role: str,
     enforced by the table, not by the check below - the lookup afterwards only
     exists to say which field collided, so two simultaneous signups still
     cannot both succeed.
+
+    `approval_status` is "pending" for a lecturer who signed up for themselves:
+    the account exists but cannot sign in until an administrator approves it.
     """
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO users (username, email, role, password_hash)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO users (username, email, role, password_hash, approval_status)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
-                RETURNING id, username, email, role
+                RETURNING id, username, email, role, approval_status
                 """,
-                (username, email, role, password_hash),
+                (username, email, role, password_hash, approval_status),
             )
             row = cur.fetchone()
             if row is not None:
@@ -722,12 +733,69 @@ def create_user(username: str, email: str, role: str,
                     "username": row["username"],
                     "email": row["email"],
                     "role": row["role"],
+                    "approval_status": row["approval_status"],
                     "enrolled_courses": [],
                 }, None
 
             cur.execute("SELECT 1 FROM users WHERE email = %s", (email,))
             taken = "email" if cur.fetchone() else "username"
     return None, taken
+
+
+def list_users_by_approval_status(status: str) -> list[dict[str, Any]]:
+    """Lecturer accounts in one approval state, oldest first."""
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, username, email, role, approval_status, created_at
+                  FROM users
+                 WHERE role = 'lecturer' AND approval_status = %s
+                 ORDER BY created_at, username
+                """,
+                (status,),
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "user_id": str(row["id"]),
+            "username": row["username"],
+            "email": row["email"],
+            "role": row["role"],
+            "approval_status": row["approval_status"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
+
+
+def set_approval_status(user_id: str, status: str) -> dict[str, Any] | None:
+    """Set one account's approval state. None when there is no such account.
+
+    The caller has already checked that `user_id` is a well-formed UUID and
+    names a lecturer; this only writes. Repeating the same status is harmless.
+    """
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                   SET approval_status = %s, updated_at = NOW()
+                 WHERE id = %s
+                RETURNING id, username, email, role, approval_status
+                """,
+                (status, user_id),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "user_id": str(row["id"]),
+        "username": row["username"],
+        "email": row["email"],
+        "role": row["role"],
+        "approval_status": row["approval_status"],
+    }
 
 
 def get_enrolled_course_codes(user_id: str) -> list[str]:
