@@ -4,6 +4,7 @@ import os
 
 from flask import Flask
 
+from src.api.routes.admin_users import admin_users_bp
 from src.api.routes.auth import auth_bp
 from src.api.routes.courses import courses_bp
 from src.api.routes.settings import settings_bp
@@ -19,6 +20,7 @@ _ALLOWED_ORIGIN = os.environ.get("PAEDIA_ALLOWED_ORIGIN", "http://localhost:8501
 def register_routes(app: Flask) -> None:
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_users_bp)
     app.register_blueprint(query_bp)
     app.register_blueprint(documents_bp)
     app.register_blueprint(sessions_bp)
