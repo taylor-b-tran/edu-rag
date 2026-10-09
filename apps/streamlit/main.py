@@ -1127,7 +1127,7 @@ def render_sidebar():
             except APIReadError:
                 st.warning("Course documents could not be loaded. You can still use My Courses or sign out.")
         else:
-            st.caption("Join a course in My Courses to view its materials.")
+            st.caption(_no_course_hint(role))
         # Five by default, all of them on request. Only the first five used to
         # be listed while the line below reported the full count, so ten loaded
         # documents looked like five. The toggle resets when the course changes.
@@ -1278,22 +1278,54 @@ def _send_message(text: str, append_user: bool = True):
         session["message_count"] = len(session["messages"])
 
 
+# Joining is a student action: POST /api/courses/<code>/join refuses anyone else
+# (src/api/routes/courses.py). A lecturer is added to a course by an
+# administrator, so staff are told that instead of being offered a Join button
+# that can only fail.
+_STAFF_COURSE_HINT = ("Lecturers are added to a course by an administrator. "
+                      "Ask an administrator to add you to the courses you teach.")
+
+
+def _no_course_hint(role) -> str:
+    """One line saying what to do when the account has no course."""
+    role = str(role or "").lower()
+    if role == "lecturer":
+        return "Ask an administrator to add you to a course."
+    if role == "admin":
+        return "No active courses yet. Create or reactivate one in the Admin Dashboard."
+    return "Join a course in My Courses to view its materials."
+
+
 def _render_no_courses_notice() -> None:
     """Shown instead of the chat when the account is enrolled in nothing.
 
-    New accounts can browse available courses and join before asking questions.
+    Students can browse available courses and join before asking questions.
+    Lecturers wait to be added by an administrator, and an administrator who
+    sees this has no active course at all.
     """
+    role = str((st.session_state.get("user") or {}).get("role", "Student")).lower()
     st.markdown("### 💬 Ask your course materials")
-    st.info(
-        "**You are not enrolled in any course yet.**"
-    )
-    st.write(
-        "Open My Courses and join an available course to start asking questions."
-    )
-    st.caption("Nothing is wrong with your account - it just has no courses on it.")
-    if st.button("Browse courses", key="browse_courses_empty", type="primary"):
-        st.session_state.current_page = "courses"
-        st.rerun()
+    if role == "lecturer":
+        st.info("**You are not assigned to any course yet.**")
+        st.write(_STAFF_COURSE_HINT)
+        st.caption("Nothing is wrong with your account - it just has no courses on it.")
+    elif role == "admin":
+        st.info("**There are no active courses yet.**")
+        st.write("Create a course, or reactivate one, in the Admin Dashboard.")
+        if st.button("Open Admin Dashboard", key="open_admin_empty", type="primary"):
+            st.session_state.current_page = "admin"
+            st.rerun()
+    else:
+        st.info(
+            "**You are not enrolled in any course yet.**"
+        )
+        st.write(
+            "Open My Courses and join an available course to start asking questions."
+        )
+        st.caption("Nothing is wrong with your account - it just has no courses on it.")
+        if st.button("Browse courses", key="browse_courses_empty", type="primary"):
+            st.session_state.current_page = "courses"
+            st.rerun()
 
 
 def render_chat_page():
@@ -1717,7 +1749,8 @@ def render_doc_manager_page():
     course_options = st.session_state.get("course_options") or _course_options_for_user(st.session_state.user)
     current_course = _active_course()
     if not current_course:
-        st.info("You are not in any course yet, so there is nothing to manage here.")
+        st.info("You are not in any course yet, so there is nothing to manage here. "
+                + _no_course_hint(role))
         return
     if current_course not in course_options:
         course_options = [current_course] + list(course_options)
@@ -2414,6 +2447,9 @@ def render_courses_page():
 
     user = st.session_state.get("user") or {}
     role = user.get("role", "Student")
+    # Only a student can join a course (the API refuses everyone else), so
+    # nobody else is offered a Join button.
+    is_student = str(role).lower() == "student"
     active_cid = st.session_state.get("course_id")
     courses = _all_courses()
 
@@ -2499,13 +2535,19 @@ def render_courses_page():
                             st.session_state.confirm_leave = code
                             st.rerun()
     else:
-        st.info("You are not enrolled in any course yet.")
+        if is_student:
+            st.info("You are not enrolled in any course yet.")
+        elif str(role).lower() == "admin":
+            st.info("There are no active courses yet. Create or reactivate one in the Admin Dashboard.")
+        else:
+            st.info("You are not assigned to any course yet.")
 
     # ── Available courses to join (T8-05) ──
     if available:
         st.divider()
         st.markdown("#### Available Courses")
-        st.caption("Join a course to start asking questions about its materials.")
+        st.caption("Join a course to start asking questions about its materials." if is_student
+                   else _STAFF_COURSE_HINT)
         cols2 = st.columns(2, gap="medium")
         for idx, course in enumerate(available):
             code = course.get("course_code", "?")
@@ -2520,10 +2562,11 @@ def render_courses_page():
                         unsafe_allow_html=True,
                     )
                     # Materials are private until the user joins this course.
-                    st.caption("🟢 Active · Join to access course materials")
+                    st.caption("🟢 Active · Join to access course materials" if is_student
+                               else "🟢 Active")
 
-                    if st.button(f"Join {code}", key=f"join_{code}", type="primary",
-                                 use_container_width=True):
+                    if is_student and st.button(f"Join {code}", key=f"join_{code}", type="primary",
+                                                use_container_width=True):
                         result = api.join_course(code)
                         if result.get("success"):
                             if result.get("enrolled_courses") is not None:
