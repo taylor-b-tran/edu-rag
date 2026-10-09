@@ -17,7 +17,7 @@ The Sprint 4 version of this document explicitly stated: *"This sequence diagram
 5. Flask checks `is_enrolled(user, course_id)` — `403` if not enrolled.
 6. Flask calls `state.get_generator().generate(question, course_id=course_id)`.
 7. `VectorRetriever.search()` embeds the query (`all-MiniLM-L6-v2`) and runs a cosine-similarity search against ChromaDB, filtered by `course_id` metadata, `top_k=5`.
-8. Chunks below the 0.65 similarity threshold are dropped.
+8. Chunks with cosine similarity below 0.35 (distance above 0.65) are dropped.
 9. If any chunks remain, a grounded prompt is built and sent to Ollama (`qwen3:14b`); the model is kept warm by the Sprint 5 rev-3 startup warm-up (`src/api/warmup.py`) to avoid the ~45s cold-start penalty.
 10. If no chunk passed the threshold, the response is prefixed with `FALLBACK_LABEL` ("Based on general knowledge — not verified against course materials.") instead of failing or guessing silently.
 11. `record_session_message()` stores the exchange — **still in-memory via `APIState`**, not the formal `conversation_sessions`/`conversation_messages` Postgres tables from `db/migrations/001_initial_schema.sql` (see `erd_reconciliation_sprint5.md`).

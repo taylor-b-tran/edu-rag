@@ -211,7 +211,7 @@ No new architectural change has landed in Sprint 6 itself as of this writing —
 
 ### 15.1 Query flow — corrected
 
-`docs/architecture/seq_api_query.png` (Sprint 4) documented the fixture-backed query path and explicitly flagged an open "Sprint 5 Gap" toward live retrieval. That gap was closed in Sprint 5 but the diagram was never updated. The corrected flow is documented in `docs/architecture/seq_api_query_sprint5.md` and `docs/architecture/diagrams/seq_api_query_sprint5.svg`: real ChromaDB retrieval (course-scoped, top_k=5, 0.65 similarity threshold) and Ollama generation replace `query_fixture()`, and a new ambiguous-question short-circuit (HTTP 422) runs before retrieval.
+`docs/architecture/seq_api_query.png` (Sprint 4) documented the fixture-backed query path and explicitly flagged an open "Sprint 5 Gap" toward live retrieval. That gap was closed in Sprint 5 but the diagram was never updated. The corrected flow is documented in `docs/architecture/seq_api_query_sprint5.md` and `docs/architecture/diagrams/seq_api_query_sprint5.svg`: real ChromaDB retrieval (course-scoped, top_k=5, 0.35 similarity (0.65 distance) threshold) and Ollama generation replace `query_fixture()`, and a new ambiguous-question short-circuit (HTTP 422) runs before retrieval.
 
 ### 15.2 Data model — correction to §11
 

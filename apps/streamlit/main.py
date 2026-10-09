@@ -308,7 +308,7 @@ button[data-testid="stBaseButton-primary"]:hover {
 .ai-msg-fallback .msg-time { color: #64748B; font-size: 0.72rem; margin-top: 6px; }
 
 .fallback-label {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: flex; width: fit-content; align-items: center; gap: 6px;
     background: #FEF3C7; color: #92400E;
     padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 600;
     margin-bottom: 10px; border: 1px solid #FCD34D;
@@ -1114,7 +1114,7 @@ def render_sidebar():
             is_active = s["session_id"] == st.session_state.active_session_id
             card_class = "session-card session-card-active" if is_active else "session-card"
             title = _html.escape(s["title"][:30] + ("..." if len(s["title"]) > 30 else ""))
-            msg_count = len(s.get("messages", []))
+            msg_count = _saved_message_count(s.get("messages"))
             st.markdown(
                 f"<div class='{card_class}'>"
                 f"<div class='session-title'>💬 {title}</div>"
@@ -1276,12 +1276,15 @@ def _send_message(text: str, append_user: bool = True):
             "timestamp_full": now.isoformat(),
         })
 
-    # Update session title from first query
     session = get_active_session()
-    if session and session["title"] in ("New Chat", "Welcome Chat") and len(session["messages"]) <= 2:
-        session["title"] = text[:40] + ("..." if len(text) > 40 else "")
 
     response = get_ai_response(text)
+    # Name the chat after the first question that got an answer. A refused or failed
+    # turn is not saved by the API, so it must not name a chat that will not exist
+    # after a reload.
+    if (session and not response.get("error_type")
+            and session["title"] in ("New Chat", "Welcome Chat")):
+        session["title"] = text[:40] + ("..." if len(text) > 40 else "")
     now2 = _local(datetime.now(timezone.utc))
     backend_session_id = response.get("session_id")
     if backend_session_id:
@@ -1690,7 +1693,7 @@ def render_history_page():
     st.divider()
 
     # Combine real sessions with demo data
-    real_sessions = st.session_state.get("sessions", [])
+    real_sessions = _history_sessions(st.session_state.get("sessions", []))
     # Four invented conversations used to be merged in here unconditionally,
     # so every user saw the same fake history on their own account (T8-07).
     # All three controls above used to be rendered with their return values
@@ -1712,7 +1715,7 @@ def render_history_page():
         title = _html.escape(session.get("title", "Untitled"))
         course = _html.escape(session.get("course_id", "CSIT214"))
         created = _html.escape(session.get("created_at", "—"))
-        msg_count = session.get("message_count", len(session.get("messages", [])))
+        msg_count = _saved_message_count(session.get("messages"))
         preview = _html.escape(session.get("preview", f"{msg_count} messages in this session"))
         color = accent_colors[i % len(accent_colors)]
 
@@ -1831,9 +1834,9 @@ def render_doc_manager_page():
 
     uploaded_files = st.file_uploader(
         "Upload course materials",
-        type=["pdf", "pptx", "docx"],   # what the chunker supports; txt/md were refused by the API
+        type=list(_UPLOAD_TYPES),
         accept_multiple_files=True,
-        help="Drag and drop PDF, PPTX, DOCX, TXT, or MD files here. Max 50 MB per file.",
+        help=_upload_help_text(),
     )
 
     if "processed_uploads" not in st.session_state:
@@ -1853,6 +1856,15 @@ def render_doc_manager_page():
 
 
 MAX_UPLOAD_MB = 50
+
+# The file types the API accepts (chunker.SUPPORTED_EXTENSIONS). The help text is built from
+# this tuple so the two cannot drift apart; a test compares it with the chunker.
+_UPLOAD_TYPES = ("pdf", "pptx", "docx")
+
+
+def _upload_help_text() -> str:
+    names = ", ".join(t.upper() for t in _UPLOAD_TYPES[:-1]) + f" or {_UPLOAD_TYPES[-1].upper()}"
+    return f"Drag and drop {names} files here. Max {MAX_UPLOAD_MB} MB per file."
 
 
 def _run_real_upload_and_indexing(f, course_id):
@@ -2200,6 +2212,22 @@ def _session_haystack(session) -> str:
         parts.append(str(m.get("answer", "")))
         parts.append(str(m.get("content", "")))
     return " ".join(parts).lower()
+
+
+def _saved_message_count(messages) -> int:
+    """Messages in exchanges the server stored.
+
+    A turn that came back as an error was never saved (src/api/routes/query.py), so
+    it is not counted: after a reload it is gone, and the count should say the same.
+    """
+    answered = sum(1 for m in (messages or [])
+                   if m.get("role") == "assistant" and not m.get("error_type"))
+    return 2 * answered
+
+
+def _history_sessions(sessions):
+    """Conversations worth listing in Session History: at least one saved exchange."""
+    return [s for s in (sessions or []) if _saved_message_count(s.get("messages")) > 0]
 
 
 def _filter_sessions(sessions, course, period, query):
@@ -2817,6 +2845,28 @@ def render_pending_lecturers() -> None:
                     st.rerun()
 
 
+def _warmup_summary(warmup) -> str:
+    """One line saying how the model warm-up went, for the Admin Dashboard."""
+    w = warmup if isinstance(warmup, dict) else {}
+    if w.get("skipped"):
+        return "⏸️ Skipped — warm-up is turned off (EDURAG_OLLAMA_WARMUP)"
+    status = str(w.get("status") or "unknown").lower()
+    detail = str(w.get("error") or "").strip()[:120]
+    if status == "ok":
+        ms = w.get("elapsed_ms")
+        took = f" in {ms / 1000:.1f} s" if isinstance(ms, (int, float)) else ""
+        return f"✅ Ready ({w.get('model') or 'model'} loaded{took})"
+    if status == "degraded":
+        return f"⚠️ Degraded — {detail or 'the test answer did not complete'}"
+    if status == "failed":
+        return f"❌ Failed — {detail or 'no detail recorded'}"
+    if status == "running":
+        return "⏳ Running"
+    if status == "pending":
+        return "⏳ Not started yet"
+    return "❔ Unknown"
+
+
 def render_admin_page():
     st.markdown("### ⚙️ Admin Dashboard")
     st.markdown("<span class='status-badge' style='background:#FEE2E2; color:#991B1B;'>Admin</span>", unsafe_allow_html=True)
@@ -2830,7 +2880,8 @@ def render_admin_page():
         c2.metric("Documents", stats.get("documents", "—"), f"{stats.get('uploaded_documents', 0)} uploaded")
         c3.metric("Indexing jobs", stats.get("indexing_jobs", "—"))
         warmup = stats.get("warmup") or {}
-        c4.metric("Backend mode", stats.get("mode", "unknown"), warmup.get("status", "unknown"))
+        c4.metric("Backend mode", stats.get("mode", "unknown"))
+        c4.caption(f"Model warm-up: {_warmup_summary(warmup)}")
         st.caption("Live document and course metrics. System-wide user and conversation totals are not available here.")
 
     st.divider()

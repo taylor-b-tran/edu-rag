@@ -267,7 +267,7 @@ Edit `.env` if you need non-default ports — most teammates leave it as-is. Def
 | `DEFAULT_OLLAMA_MODEL` | `gemma4:12b` | The wrapper script in §6.1 overwrites this automatically based on your GPU tier. Set it manually only when using §6.2 manual compose. |
 | `POSTGRES_PASSWORD` | `edurag_dev_password` | Dev-only password. Do not commit changes |
 
-> **Never commit `.env`** — it is gitignored. If you add secrets (e.g. `OPENAI_API_KEY` for optional GPT fallback), they stay local.
+> **Never commit `.env`** — it is gitignored. If you add secrets, they stay local. No cloud API keys are needed: generation runs through Ollama only.
 
 ---
 
@@ -447,11 +447,11 @@ docker compose exec api python -m src.document_processor.ingest_corpus
 Expected output ends with:
 
 ```
-Upserted: 18 chunks into 'csit321_documents'
-Collection total: 90
+  [OK] Upserted 46 chunks  (…s)
+  [OK] Collection total: <number of chunks in the collection> chunks
 ```
 
-This loads 18 hand-prepared CSIT321 lecture chunks (Weeks 1–7) into ChromaDB using `sentence-transformers/all-MiniLM-L6-v2` (384-dim embeddings). The collection stays alive in the `chromadb_data` Docker volume between restarts.
+This loads 46 hand-prepared seed chunks (CSIT321 22, CSIT214 10, CSCI369 10, MATH202 4) into ChromaDB using `sentence-transformers/all-MiniLM-L6-v2` (384-dim embeddings). The collection stays alive in the `chromadb_data` Docker volume between restarts.
 
 > **You only need to run this once per fresh ChromaDB volume**. After `docker compose down -v` (which drops the volume), re-run it.
 
@@ -497,12 +497,12 @@ If you do not see the upload appear, see [§12.5](#125-upload-flow-broken).
 
 ## 10. Demo credentials
 
-These users live in `fixtures/sample_responses.json`. Auth is in-memory — see [§19.4](#194-known-limitations) for why, and what is actually Postgres-backed.
+These accounts are created in the PostgreSQL `users` table when the API starts, with bcrypt hashes of the three passwords below. Sign-in tokens are opaque rows in the `access_tokens` and `refresh_tokens` tables. The fixture login in `fixtures/sample_responses.json` applies only when there is no database and `PAEDIA_ALLOW_FIXTURE_AUTH=1` — see [§19.4](#194-known-limitations).
 
 | Email | Password | Role | Enrolled courses |
 |---|---|---|---|
-| `student@uow.edu.au` | `PAEDIA_DEMO_STUDENT_PASSWORD` | Student | CSIT214, CSIT321 |
-| `lecturer@uow.edu.au` | `PAEDIA_DEMO_LECTURER_PASSWORD` | Lecturer | CSIT214, CSIT321 |
+| `student@uow.edu.au` | `PAEDIA_DEMO_STUDENT_PASSWORD` | Student | CSIT321, CSCI203 |
+| `lecturer@uow.edu.au` | `PAEDIA_DEMO_LECTURER_PASSWORD` | Lecturer | CSIT321, CSCI203 |
 | `admin@uow.edu.au` | `PAEDIA_DEMO_ADMIN_PASSWORD` | Admin | All (bypasses enrollment check) |
 
 **Passwords are no longer written down here.** They come from the three
@@ -568,7 +568,7 @@ docker compose up -d
 ### Run tests inside the api container
 
 ```powershell
-docker compose exec api pytest test -q                    # full suite (112 tests)
+docker compose exec api pytest test -q                    # full suite (`pytest --collect-only -q` shows the count)
 docker compose exec api pytest test/test_api.py -q        # API tests only
 docker compose exec api pytest -k "test_query_returns" -q  # filtered
 ```
@@ -577,7 +577,7 @@ docker compose exec api pytest -k "test_query_returns" -q  # filtered
 
 ```powershell
 curl -X POST http://localhost:5000/api/warmup `
-  -H "Authorization: Bearer <admin or lecturer JWT>"
+  -H "Authorization: Bearer <admin or lecturer access token>"
 ```
 
 The API auto-warms on startup, but `/api/warmup` is available if VRAM gets evicted (Ollama unloads idle models after `OLLAMA_KEEP_ALIVE=5m`).
@@ -646,16 +646,16 @@ docker compose exec ollama ollama pull gemma4:12b   # or llama3.2
 docker compose restart api
 ```
 
-### 12.4 Getting fixture fallback instead of live answers
+### 12.4 Questions fail because the live pipeline did not start
 
-The chat returns a generic-sounding answer with `model_used: "fixture"` in the network tab. ChromaDB or Ollama is unreachable at API startup.
+Questions come back as `generation_unavailable` (HTTP 503) and `/api/health` reports a `mode` other than `chromadb`. ChromaDB or Ollama was unreachable at API startup. (Answers with `model_used: "fixture"` appear only when the API runs with `PAEDIA_USE_FIXTURES=true`.)
 
 ```powershell
 # Check what backend the API selected
 curl http://localhost:5000/api/health
 # Look for: "mode": "chromadb", "rag_available": true
 
-# If mode=fixture, force the API to retry
+# If mode is not_initialized, force the API to retry
 docker compose restart api
 # Then make any query — the API initialises the RAG pipeline lazily on first /api/query
 
@@ -667,7 +667,7 @@ docker compose exec api python -m src.document_processor.ingest_corpus
 
 Lecturer uploads a PDF but it does not appear in the student's document list.
 
-1. Confirm the lecturer selected a course they are enrolled in (CSIT321 or CSIT214 — see [§10](#10-demo-credentials)).
+1. Confirm the lecturer selected a course they are enrolled in (CSIT321 or CSCI203 — see [§10](#10-demo-credentials)).
 2. Confirm the upload returned 202:
    ```powershell
    docker compose logs api --tail=50 | Select-String upload
@@ -675,13 +675,13 @@ Lecturer uploads a PDF but it does not appear in the student's document list.
 3. Confirm indexing completed:
    ```powershell
    curl http://localhost:5000/api/documents?course_id=CSIT321 `
-     -H "Authorization: Bearer <lecturer JWT>"
+     -H "Authorization: Bearer <lecturer access token>"
    ```
    Look for the file with `"status": "indexed"`. If stuck on `processing` for > 60 s, check `docker compose logs api --tail=200 | Select-String "Error in background indexing"`.
 4. As student, confirm visibility:
    ```powershell
    curl http://localhost:5000/api/documents?course_id=CSIT321 `
-     -H "Authorization: Bearer <student JWT>"
+     -H "Authorization: Bearer <student access token>"
    ```
 
 ### 12.6 First query takes 45 s
@@ -775,7 +775,7 @@ Student / Lecturer / Admin
    │   Streamlit UI   │   apps/streamlit/main.py
    │   (port 8501)    │   Light-theme overrides, native Enter-login component
    └─────────┬────────┘
-             │  HTTP + JWT
+             │  HTTP + bearer token
              ▼
    ┌─────────────────────┐      ┌─────────────────────────┐
    │   Flask REST API    │─────▶│   Document Processor    │
@@ -798,29 +798,30 @@ Student / Lecturer / Admin
         │
         ▼
    ┌─────────────────┐
-   │   PostgreSQL    │   uploaded_documents, indexing_jobs — the only
-   │   (port 5432)   │   tables actually wired up (see §19.4). Users,
-   │                 │   courses, and sessions are still fixture/in-memory.
+   │   PostgreSQL    │   users, courses, enrolments, sessions, tokens,
+   │   (port 5432)   │   feedback, settings, uploads and indexing jobs
+   │                 │   (see §19.4).
    └─────────────────┘
 ```
 
 **Data flow on query** (`POST /api/query`):
 
-1. Auth: JWT validated against `APIState.access_tokens`.
+1. Auth: the opaque bearer token is checked against the PostgreSQL `access_tokens` table on every request, then a per-user limit of 10 requests a minute applies, and questions that are too vague get a 422.
 2. Enrollment: `APIState.is_enrolled(user, course_id)` — UUID/code normalization via `resolve_course()`.
 3. Embedding: query string → `all-MiniLM-L6-v2` → 384-dim vector.
-4. Retrieval: `VectorRetriever.search(query, course_id, top_k=5)` against ChromaDB with metadata filter `where={"course_id": {"$eq": course_id}}`.
-5. Confidence: average similarity of retrieved chunks → Low/Medium/High.
-6. Prompt: chunks + question + system instruction → the configured LLM (`gemma4:12b` by default) via Ollama.
-7. Response: answer text + source_references (file + page + similarity) + confidence + latency.
+4. Retrieval: `VectorRetriever.search(query, course_id, top_k)` against ChromaDB with metadata filter `where={"course_id": {"$eq": course_id}}`. `top_k` defaults to 5 and can be set per course in Tuning.
+5. Threshold: chunks below cosine similarity 0.35 are dropped. If none remain, the answer carries the fallback label.
+6. Confidence: the average similarity of the chunks that passed the threshold: High at 0.60 or above, Medium at 0.35 or above, otherwise Low. A refusal is always Low.
+7. Prompt: chunks + question + system instruction → the configured LLM (`gemma4:12b` by default) via Ollama.
+8. Response: answer text + the sources the model cited (renumbered to match `[S1]`, `[S2]` and showing the uploader's filename and page) + confidence + latency. If the model fails, the API returns HTTP 503 and stores nothing.
 
 **Data flow on upload** (`POST /api/upload`):
 
 1. Auth + RBAC: lecturer/admin only.
 2. Per-course enrollment check.
-3. File written to `<repo>/data/uploads/<filename>` (Docker: `/workspace/data/uploads/`).
+3. File written under a unique name, `<stem>-<8 hex digits><ext>`, in the `uploads_data` volume at `/workspace/data/uploads/`.
 4. `APIState.queue_upload()` inserts rows into PostgreSQL `uploaded_documents` + `indexing_jobs`.
-5. Background daemon thread:
+5. Background worker pool (a bounded `ThreadPoolExecutor`; `EDURAG_UPLOAD_THREAD_LIMIT`, default 3):
    - chunker → 1024-char chunks
    - embedder → 384-dim vectors
    - ChromaDB `upsert` with course_id metadata
@@ -834,11 +835,11 @@ Student / Lecturer / Admin
 edu-rag/
 ├── apps/
 │   ├── streamlit/                # Streamlit UI prototype
-│   │   ├── main.py               # entry point (1400+ lines, includes all pages)
+│   │   ├── main.py               # entry point (about 3,000 lines, includes all pages)
 │   │   ├── api_client.py         # HTTP client to Flask API
 │   │   └── components/login_form/  # native Streamlit Enter-login component
 │   └── integration/
-│       ├── backend/api.py        # Flask entry point
+│       ├── backend/api.py        # dev-server entry only; the stack runs gunicorn src.api.wsgi:app
 │       ├── start.sh / stop.sh    # legacy start scripts
 │       └── logs/                 # gitignored
 ├── src/
@@ -847,16 +848,16 @@ edu-rag/
 │   │   ├── state.py              # APIState: hot cache, PG hydration, warmup trigger
 │   │   ├── db.py                 # PostgreSQL persistence (Sprint 5 rev 2)
 │   │   ├── warmup.py             # Background Ollama warm-up (Sprint 5 rev 3)
-│   │   └── routes/               # auth, query, documents, sessions, health
+│   │   └── routes/               # auth, query, documents, sessions, health, courses, feedback, settings
 │   ├── document_processor/
 │   │   ├── chunker.py            # PDF/PPTX/DOCX → chunks
 │   │   ├── ingest_corpus.py      # seed corpus loader
 │   │   ├── offline_embedder.py   # FNV-1a fallback when sentence-transformers missing
 │   │   ├── rag_pipeline.py       # VectorRetriever + LLMResponseGeneration
-│   │   └── seed_documents.py     # in-repo CSIT321 chunks
+│   │   └── seed_documents.py     # in-repo seed chunks (four courses)
 │   └── vector_retriever/embedder.py
 ├── db/
-│   ├── migrations/               # PostgreSQL schema (users, courses, sessions, audit log)
+│   ├── migrations/               # design-time schema, not applied; the live schema is created by src/api/db.py
 │   └── seed/                     # development seed data
 ├── docs/
 │   ├── api/api_spec.yaml         # OpenAPI 3.0
@@ -874,7 +875,7 @@ edu-rag/
 ├── scripts/
 │   ├── start_stack.ps1 / .sh     # GPU-aware wrapper (Option A)
 │   └── sprint5_integration_gate.py   # CI demo-readiness gate
-├── test/                          # pytest: 112 tests (rev 3)
+├── test/                          # pytest suite (`pytest --collect-only -q` shows the count)
 ├── docker/Dockerfile.demo
 ├── docker-compose.yml             # base stack (CPU-safe)
 ├── docker-compose.gpu.yml         # GPU overlay (NVIDIA only)
@@ -897,10 +898,10 @@ edu-rag/
 | Chunking | LangChain `RecursiveCharacterTextSplitter` | 1.1.0 | 1024-char chunks, 0 overlap (Sprint 3 benchmark default) |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | 5.4.1 | 384-dim, fully local, ~22 MB model |
 | Vector store | ChromaDB | 1.5.8 | Metadata filtering, simple HTTP API, Docker-ready |
-| Relational DB | PostgreSQL | 16-alpine | Standard; auth/sessions/audit; psycopg3 with `dict_row` |
+| Relational DB | PostgreSQL | 16-alpine | Standard; auth, tokens, courses, sessions, feedback and settings, with no audit log; psycopg3 with `dict_row` |
 | Local LLM | Ollama + `gemma4:12b` (high tier), `qwen2.5:7b` (mid tier), or `llama3.2` (CPU) | Latest | Self-hosted; no external API; GPU-optional |
 | Containerisation | Docker Compose | v2 | CPU + GPU overlay variants |
-| Testing | Pytest + labelled query corpus | 8.3.3 | Unit, integration, retrieval evaluation; 112 tests pass on rev 3 |
+| Testing | Pytest + labelled query corpus | 8.3.3 | Unit, integration, retrieval evaluation |
 | CI | GitHub Actions | — | Python tests + fixture validation + Compose validation + Sprint 5 integration gate |
 
 ---
@@ -983,7 +984,7 @@ If CI fails on something unrelated to your change (account suspension, disk-full
 | Campus | University of Wollongong, Liverpool Campus (SWS) |
 | Group | Group 19 — Aletheia's Zetetes |
 | Supervisor | Prof. Jun Yan |
-| Sprint cadence | 4 × 2-week sprints (Sprint 3 was the architecture sprint; Sprint 4 wired the API + UI; Sprint 5 wires live RAG end-to-end; Sprint 6 is post-A3) |
+| Sprint cadence | 2-week sprints (Sprint 3 was the architecture sprint; Sprint 4 wired the API + UI; Sprint 5 wired live RAG end-to-end; the work now runs to Sprint 10) |
 
 This is an assessed final-year project but the engineering work — system design, API specification, retrieval tuning, privacy modelling, sprint delivery, and QA evidence — reflects professional software development practice rather than tutorial exercises.
 
@@ -995,8 +996,8 @@ This section is a fast path for grading. It assumes you've already done the setu
 
 ### 19.1 60-second orientation
 
-- **Product:** Paedia — a course Q&A assistant. A lecturer uploads course material; a student asks a question; the answer is generated only from that material, with page-level citations.
-- **What's real vs. simulated:** document upload, chunking, embedding, retrieval, and LLM generation are all live (ChromaDB + Ollama, no mocking). Authentication and course/session records are **fixture-backed**, not a real database — see [§19.4](#194-known-limitations).
+- **Product:** Paedia — a course Q&A assistant. A lecturer uploads course material; a student asks a question; the answer is generated only from that material, with citations to the file and the page or slide (DOCX files cite the file only).
+- **What's real vs. simulated:** document upload, chunking, embedding, retrieval, and LLM generation are all live (ChromaDB + Ollama, no mocking). Accounts, courses, enrolments and chat history are stored in PostgreSQL — see [§19.4](#194-known-limitations).
 - **Where to look first:** [`docs/rtm_a4.md`](docs/rtm_a4.md) maps every A2 requirement to its current status and evidence file. If you only read one document, read that one.
 
 ### 19.2 Fastest path to a live demo
@@ -1023,20 +1024,21 @@ If any of this doesn't work, [§12 Troubleshooting](#12-troubleshooting) covers 
 |---|---|---|
 | Functional requirements (all 33, individually) | Live demo per [§19.2](#192-fastest-path-to-a-live-demo) | [`docs/rtm_a4.md`](docs/rtm_a4.md) |
 | Non-functional requirements | — | [`docs/rtm_a4.md`](docs/rtm_a4.md) (NFR-001 to NFR-008) |
-| System architecture, as actually implemented | — | [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md), [`docs/architecture/seq_api_query_sprint5.md`](docs/architecture/seq_api_query_sprint5.md) |
+| System architecture (Sprint 5 snapshot) | — | [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md), [`docs/architecture/seq_api_query_sprint5.md`](docs/architecture/seq_api_query_sprint5.md) |
 | Retrieval/generation performance | — | [`docs/t10_embedding_benchmark.md`](docs/t10_embedding_benchmark.md), [`docs/finetuning_benchmark_sprint6.md`](docs/finetuning_benchmark_sprint6.md) |
 | Runs without a GPU (grading-machine safety) | `docker compose up -d` with no GPU overlay | [`docs/t25_gpu_free_verification.md`](docs/t25_gpu_free_verification.md) |
 | Fresh-machine setup actually works | — | [`docs/dry_run_2_cold_grader.md`](docs/dry_run_2_cold_grader.md) |
 | Full end-to-end sanity pass (all 3 roles, upload pipeline, what's real vs. fixture) | — | [`docs/vv_full_app_report_2026-08-03.md`](docs/vv_full_app_report_2026-08-03.md) |
-| Automated tests | `docker compose exec api pytest` | 118 tests, see [§11](#11-daily-operations) |
+| Automated tests | `docker compose exec api pytest` | see [§11](#11-daily-operations); `pytest --collect-only -q` shows the count |
 
 ### 19.4 Known limitations
 
 Stated here rather than left for you to discover:
 
-- **Auth, courses, and chat sessions are fixture/in-memory, not a real database.** Only document upload metadata (`uploaded_documents`, `indexing_jobs`) is actually persisted to PostgreSQL. The other 7 tables in `db/migrations/001_initial_schema.sql` were designed but never wired up. Full detail: [`docs/architecture/erd_reconciliation_sprint5.md`](docs/architecture/erd_reconciliation_sprint5.md).
-- **Retrieval accuracy has not been formally benchmarked** against a labelled query set (precision/recall). What's benchmarked is generation quality and speed, not retrieval correctness — see `rtm_a4.md` FR-028.
-- **Admin dashboard is read-only** — user management actions are disabled in this build, not wired to a backend.
+- **There is no audit log.** `/api/admin/audit-logs` always returns an empty list, and the running schema (`src/api/db.py`) creates no audit table.
+- **There is no system-wide user directory.** The Admin Dashboard manages courses, enrolments and Tuning, but it cannot list every user or show user and conversation totals.
+- **DOCX citations have no page.** PDF pages and PPTX slides are cited by number; a DOCX file is cited by name as page 1.
+- **Retrieval precision is capped by the corpus.** The Sprint 9 benchmark scored Precision@5 of 0.2 against an achievable ceiling of 0.22, with Recall@10 of 1.0 and MRR of 0.925 ([`docs/retrieval_benchmark_sprint9.md`](docs/retrieval_benchmark_sprint9.md)). No similarity threshold separates in-corpus from off-topic questions cleanly ([`docs/retrieval_tuning_sprint9.md`](docs/retrieval_tuning_sprint9.md)).
 
 None of these block the core demo flow (upload → index → ask → grounded answer with citations), which is fully live end to end.
 
