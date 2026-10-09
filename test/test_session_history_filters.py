@@ -120,3 +120,44 @@ def test_a_page_is_eight_and_the_rest_is_reachable():
     many = [session(str(i)) for i in range(20)]
     assert len(many[:main._HISTORY_PAGE]) == main._HISTORY_PAGE
     assert len(many[:main._HISTORY_PAGE * 3]) == 20
+
+
+# --- an empty chat is not a conversation -----------------------------------
+
+_USER = {"role": "user", "content": "q"}
+
+
+def test_an_empty_chat_is_not_a_conversation():
+    assert main._history_sessions([session("w", title="Welcome Chat")]) == []
+
+
+def test_a_chat_whose_only_turn_failed_is_not_a_conversation():
+    failed = [_USER, {"role": "assistant", "content": "too broad", "error_type": "api_http_error"}]
+    assert main._history_sessions([session("f", messages=failed)]) == []
+
+
+def test_an_answered_chat_is_a_conversation():
+    answered = session("a", messages=[_USER, {"role": "assistant", "content": "A"}])
+    assert main._history_sessions([answered, session("w", title="Welcome Chat")]) == [answered]
+
+
+def test_no_conversations_yet_can_be_shown(monkeypatch):
+    from unittest.mock import MagicMock
+
+    class State(dict):
+        __getattr__ = dict.__getitem__
+        __setattr__ = dict.__setitem__
+
+    st = MagicMock()
+    st.session_state = State(user={"role": "Student", "enrolled_courses": []},
+                             sessions=[session("w", title="Welcome Chat")])
+    st.selectbox.side_effect = lambda label, options, **kw: options[0]
+    st.text_input.return_value = ""
+    st.columns.side_effect = lambda spec, **kw: [MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec))]
+    api = MagicMock()
+    api.get_courses.return_value = []
+    monkeypatch.setattr(main, "st", st)
+    monkeypatch.setattr(main, "api", api)
+    main.render_history_page()
+    st.info.assert_any_call("No conversations yet.")
+    assert not any("Welcome Chat" in str(c.args[0]) for c in st.markdown.call_args_list)
