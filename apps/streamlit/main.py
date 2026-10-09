@@ -1205,6 +1205,34 @@ def render_sidebar():
 
 # ─── CHAT PAGE (T09+T10+T11: full overhaul) ───────────────────────
 
+def _scroll_to_latest() -> None:
+    """Scroll the chat to its end once the page has been drawn.
+
+    Streamlit keeps a chat pinned to the bottom only while the reader is
+    already there. A reader who had scrolled up to re-read an answer and then
+    asked the next question stayed at the top, so the new question, the
+    "Generating response..." line and the finished answer were all off screen
+    and the page looked frozen. The scrolling element is found by the class
+    `stMain`, which is on it whether or not it also carries the chat's own test
+    id. If the parent page cannot be reached the script does nothing, which is
+    the old behaviour.
+    """
+    nonce = st.session_state.get("_scroll_nonce", 0) + 1
+    st.session_state["_scroll_nonce"] = nonce   # a new element each time, so the script runs again
+    components.html(
+        f"<script>/* {nonce} */"
+        "(function () {"
+        " try {"
+        "  var m = window.parent.document.querySelector('section.stMain');"
+        "  if (!m) { return; }"
+        "  var go = function () { m.scrollTo({top: m.scrollHeight}); };"
+        "  go(); setTimeout(go, 250); setTimeout(go, 900); setTimeout(go, 2000);"
+        " } catch (e) {}"
+        "})();</script>",
+        height=0,
+    )
+
+
 def _submit_query(text: str):
     """Append the user's message and defer the (possibly slow) generation
     call to the next rerun, so the question renders as a chat bubble right
@@ -1329,6 +1357,9 @@ def _render_no_courses_notice() -> None:
 
 
 def render_chat_page():
+    # Taken at once so the request cannot outlive the run that was meant to
+    # honour it, whichever way this run leaves.
+    scroll_after_answer = bool(st.session_state.pop("scroll_after_answer", False))
     if not _course_options_for_user(st.session_state.get("user") or {}):
         _render_no_courses_notice()
         return
@@ -1609,9 +1640,16 @@ def render_chat_page():
             'on CPU-only hardware)</div>',
             unsafe_allow_html=True,
         )
+        # Bring the new question and the waiting line into view before the
+        # (slow) model call, then again once the answer has been drawn.
+        _scroll_to_latest()
         _send_message(pending_query, append_user=False)
         state_placeholder.empty()
+        st.session_state.scroll_after_answer = True
         st.rerun()
+
+    if scroll_after_answer:
+        _scroll_to_latest()
 
 
 # ─── SESSION HISTORY PAGE ──────────────────────────────────────────
