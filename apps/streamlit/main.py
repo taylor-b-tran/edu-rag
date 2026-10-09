@@ -378,6 +378,11 @@ button[data-testid="stBaseButton-primary"]:hover {
     transition: all 0.2s; color: #CBD5E1;
 }
 .doc-card:hover { background: rgba(255,255,255,0.1); }
+/* A long file name ends in an ellipsis; the full name is in the title attribute. */
+.doc-card-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 0.82rem; color: #CBD5E1;
+}
 
 /* ── Retrieval details ── */
 .retrieval-details {
@@ -1050,6 +1055,10 @@ def render_login_page():
 
 # ─── SIDEBAR (T09: readability + T11: session management) ─────────
 
+# How many documents the sidebar lists before "Show all".
+_SIDEBAR_DOCS_SHOWN = 5
+
+
 def render_sidebar():
     role = st.session_state.user.get("role", "Student")
 
@@ -1119,18 +1128,35 @@ def render_sidebar():
                 st.warning("Course documents could not be loaded. You can still use My Courses or sign out.")
         else:
             st.caption("Join a course in My Courses to view its materials.")
-        for doc in docs[:5]:
+        # Five by default, all of them on request. Only the first five used to
+        # be listed while the line below reported the full count, so ten loaded
+        # documents looked like five. The toggle resets when the course changes.
+        if st.session_state.get("sidebar_docs_course") != course_id:
+            st.session_state.sidebar_docs_course = course_id
+            st.session_state.sidebar_docs_all = False
+        if len(docs) <= _SIDEBAR_DOCS_SHOWN:
+            # Nothing to expand, so a later, longer list starts collapsed.
+            st.session_state.sidebar_docs_all = False
+        show_all = bool(st.session_state.get("sidebar_docs_all"))
+        for doc in (docs if show_all else docs[:_SIDEBAR_DOCS_SHOWN]):
             doc_name = _html.escape(doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown")
             status = str(doc.get("status", "pending")).lower()
             status_color = "#10B981" if status in ("indexed", "completed") else ("#F59E0B" if status == "processing" else "#EF4444")
             st.markdown(
                 f"<div class='doc-card'>"
                 f"<span>📄</span>"
-                f"<span style='flex:1; font-size:0.82rem; color: #CBD5E1;'>{doc_name}</span>"
-                f"<span style='width:10px; height:10px; border-radius:50%; background:{status_color}; display:inline-block;'></span>"
+                f"<span class='doc-card-name' title='{doc_name}'>{doc_name}</span>"
+                f"<span style='flex:0 0 10px; width:10px; height:10px; border-radius:50%; background:{status_color}; display:inline-block;'></span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
+        # A button rather than st.expander: the expander's arrow depends on a
+        # web font that does not load in every environment.
+        if len(docs) > _SIDEBAR_DOCS_SHOWN:
+            label = "Show fewer" if show_all else f"Show all {len(docs)}"
+            if st.button(label, key="sidebar_docs_toggle", use_container_width=True):
+                st.session_state.sidebar_docs_all = not show_all
+                st.rerun()
 
         st.divider()
         docs_count = len(docs)
