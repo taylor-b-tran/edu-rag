@@ -114,7 +114,9 @@ def login():
         body = request.get_json(force=False, silent=False) or {}
     except Exception:
         return jsonify({"error": "invalid JSON body"}), 400
-    email = (body.get("email") or "").strip()
+    # Lower-cased like sign-up: addresses are stored in lower case, so an exact
+    # lookup of "Student@..." would never find the account.
+    email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
     if not email or not password:
         return jsonify({"error": "email and password are required"}), 400
