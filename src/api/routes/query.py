@@ -1,3 +1,4 @@
+# Authors: Thanh Binh Tran, Thi Hong Ngoc Nguyen
 from __future__ import annotations
 
 import logging

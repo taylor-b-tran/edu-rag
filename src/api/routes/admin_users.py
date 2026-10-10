@@ -1,3 +1,4 @@
+# Authors: Thanh Binh Tran
 """Administrator approval of lecturer accounts.
 
 A lecturer who signs up for themselves has no access until an administrator
