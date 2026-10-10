@@ -2201,9 +2201,11 @@ def _render_document_table(student_view: bool = False):
 # setting, changes something else, and cannot explain why the first number
 # moved. The badge next to each control is the whole point of the screen.
 
-_COURSE_SCOPED_KEYS = ("top_k", "similarity_threshold", "response_style", "prompt_strategy")
+# prompt_strategy is deliberately not offered: the API stores and reports it, but the
+# answer pipeline reads its strategy once at start-up and never sees the stored value,
+# so changing it here would say "in effect" and change nothing.
+_COURSE_SCOPED_KEYS = ("top_k", "similarity_threshold", "response_style")
 _GLOBAL_ONLY_KEYS = ("ollama_model", "temperature", "num_predict")
-_PROMPT_STRATEGIES = ("baseline", "evidence_cited", "few_shot_cited")
 
 _KEY_HELP = {
     "top_k": "How many chunks retrieval hands the model. Measured on this host: "
@@ -2214,9 +2216,6 @@ _KEY_HELP = {
                             "qualifies and every answer falls back.",
     "response_style": "How answers are written for this course. Students can still "
                       "pick their own per question.",
-    "prompt_strategy": "Which prompt template builds the request. evidence_cited "
-                       "forces inline [S#] citations; few_shot_cited adds one "
-                       "worked example, which helps smaller models copy the format.",
     "ollama_model": "Which model is resident in the shared 16 GB of VRAM. Changing "
                     "this evicts the current one for everybody, which is why it is "
                     "admin-only and not per course.",
@@ -2438,14 +2437,6 @@ def _render_course_tuning(course_code: str, styles: list, style_default: str | N
                 value = st.selectbox(
                     "Response style", options, index=idx,
                     format_func=lambda s: style_labels.get(s, s),
-                    disabled=not override, key=f"val_{course_code}_{key}",
-                    label_visibility="collapsed",
-                )
-            else:  # prompt_strategy
-                options = list(_PROMPT_STRATEGIES)
-                idx = options.index(current) if current in options else 0
-                value = st.selectbox(
-                    "Prompt strategy", options, index=idx,
                     disabled=not override, key=f"val_{course_code}_{key}",
                     label_visibility="collapsed",
                 )

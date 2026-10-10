@@ -91,6 +91,16 @@ End-to-end demo flow:
 4. API retrieves top-5 most similar chunks (course-scoped via `course_id` metadata filter), formats them into a prompt, sends to Ollama.
 5. Ollama returns a grounded answer; the API returns it to Streamlit with file + page citations.
 
+### What each role can do
+
+| Role | Can do |
+|---|---|
+| **Student** | Create an account and sign in. Join or leave a course. Ask questions about the selected course and read answers with source tags such as `[S1]`, a confidence label and, when nothing close enough is found, a yellow "Based on general knowledge" warning. Open a source document at the cited page. Pick an answer style. Continue, search and delete past conversations. |
+| **Lecturer** | Everything a student can. Upload PDF, PPTX and DOCX files (up to 50 MB each) to a course they teach, follow each file's indexing status, open and delete documents, and tune retrieval settings for their course (Tuning). A new lecturer account has no access until an administrator approves it. |
+| **Administrator** | Everything a lecturer can, for every course. Create, deactivate and reactivate courses, enrol and remove members, approve or reject new lecturer accounts, change global settings, and read system status on the Admin Dashboard. Administrator accounts are created at installation, not from the sign-up page. |
+
+Answers come only from the materials uploaded to the selected course. Materials from different courses are never mixed.
+
 ---
 
 ## 2. System requirements
@@ -505,6 +515,8 @@ These accounts are created in the PostgreSQL `users` table when the API starts, 
 | `lecturer@uow.edu.au` | `PAEDIA_DEMO_LECTURER_PASSWORD` | Lecturer | CSIT321, CSCI203 |
 | `admin@uow.edu.au` | `PAEDIA_DEMO_ADMIN_PASSWORD` | Admin | All (bypasses enrollment check) |
 
+**More accounts.** Anyone can sign up as a student and then join any active course. A new **lecturer** account is created in a waiting state: it cannot sign in until an administrator approves it on the Admin Dashboard (accounts that existed before this rule count as approved). The email address is not case-sensitive at sign-in.
+
 **Passwords are no longer written down here.** They come from the three
 variables above, set in your own gitignored `.env`. Leave one empty and that
 account is created with a random password nobody knows — it exists, but cannot
@@ -587,6 +599,8 @@ The API auto-warms on startup, but `/api/warmup` is available if VRAM gets evict
 ```powershell
 docker compose exec api python -m src.document_processor.ingest_corpus
 ```
+
+> The seed corpus is 46 hand-written sample chunks for CSIT321, CSIT214, CSCI369 and MATH202. On a system that already holds real course material, running it adds those sample chunks to the same collection, so run it on a fresh volume only. Never add `--force`: it deletes and re-creates the whole collection, including everything lecturers have uploaded.
 
 ### Open a shell inside a container
 
@@ -1038,6 +1052,11 @@ Stated here rather than left for you to discover:
 - **There is no audit log.** `/api/admin/audit-logs` always returns an empty list, and the running schema (`src/api/db.py`) creates no audit table.
 - **There is no system-wide user directory.** The Admin Dashboard manages courses, enrolments and Tuning, but it cannot list every user or show user and conversation totals.
 - **DOCX citations have no page.** PDF pages and PPTX slides are cited by number; a DOCX file is cited by name as page 1.
+- **A sign-in lasts about one hour.** A browser tab that is reloaded keeps only its access token, so it returns to the sign-in page about an hour after the person signed in.
+- **No HTTPS in the tracked deployment.** The interface and API are served over HTTP, and the shared host is reached over a private network (Tailscale).
+- **Upload and delete rights follow the account type.** A lecturer account that is a student member of a course can still upload and delete there. New lecturer accounts need administrator approval before they have any access.
+- **Some features are absent:** password reset, chat export, an administrator user directory, and replacing a document in place (delete it, then upload the new one).
+- **Prompt Strategy is not offered in Tuning.** The API stores the value, but the answer pipeline reads its strategy once at start-up, so changing it per course would have no effect.
 - **Retrieval precision is capped by the corpus.** The Sprint 9 benchmark scored Precision@5 of 0.2 against an achievable ceiling of 0.22, with Recall@10 of 1.0 and MRR of 0.925 ([`docs/retrieval_benchmark_sprint9.md`](docs/retrieval_benchmark_sprint9.md)). No similarity threshold separates in-corpus from off-topic questions cleanly ([`docs/retrieval_tuning_sprint9.md`](docs/retrieval_tuning_sprint9.md)).
 
 None of these block the core demo flow (upload → index → ask → grounded answer with citations), which is fully live end to end.
