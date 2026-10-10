@@ -209,3 +209,76 @@ def test_the_tooltip_does_not_claim_to_have_read_the_vector_store():
     _, _, note = main._document_status({"status": "indexed", "chunks": 79})
     assert "vector store" not in note.lower()
     assert "79" in note
+
+
+# --- an upload that is still waiting is not a failed upload -----------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+def _uploaded(minutes_ago):
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat()
+
+
+def test_a_queued_upload_is_waiting_not_failed():
+    label, badge, _ = main._document_status({"status": "queued", "chunks": None})
+    assert label == "queued"
+    assert badge == "badge-pending"
+
+
+def test_indexing_status_queued_is_waiting_too():
+    assert main._document_status({"indexing_status": "queued"})[1] == "badge-pending"
+
+
+def test_a_recent_processing_row_is_neutral():
+    doc = {"status": "processing", "chunks": None, "uploaded_at": _uploaded(2)}
+    assert main._document_status(doc)[1] == "badge-processing"
+
+
+@pytest.mark.parametrize("status", ["queued", "pending", "processing"])
+def test_a_row_waiting_past_the_limit_is_shown_as_stalled(status):
+    doc = {"status": status, "chunks": None, "uploaded_at": _uploaded(main._STALLED_AFTER_MINUTES + 5)}
+    label, badge, note = main._document_status(doc)
+    assert (label, badge) == ("stalled", "badge-failed")
+    assert len(label) <= 11
+    assert "re-upload" in note.lower()
+
+
+def test_a_row_without_a_timestamp_is_never_called_stalled():
+    assert main._document_status({"status": "queued"})[0] == "queued"
+    assert main._document_status({"status": "queued", "uploaded_at": "not a date"})[0] == "queued"
+
+
+def test_sidebar_dot_is_not_red_for_work_in_progress():
+    assert main._document_status_dot({"status": "queued", "chunks": None}) != "#EF4444"
+    assert main._document_status_dot({"status": "processing", "chunks": None}) != "#EF4444"
+    assert main._document_status_dot({"status": "failed"}) == "#EF4444"
+    assert main._document_status_dot({"status": "indexed", "chunks": 5}) == "#10B981"
+    assert main._document_status_dot({"status": "queued", "uploaded_at": _uploaded(60)}) == "#EF4444"
+
+
+class _State(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+
+
+def test_reupload_warning_skips_uploads_still_in_progress(monkeypatch):
+    st = MagicMock()
+    st.session_state = _State(user={"role": "Lecturer", "name": "L", "enrolled_courses": ["TEST101"]},
+                              course_options=["TEST101"], course_id="TEST101")
+    st.columns.side_effect = lambda spec, **kw: [MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec))]
+    st.button.return_value = False
+    api = MagicMock()
+    api.get_documents.return_value = [
+        {"document_id": "d1", "original_filename": "week1.pdf", "status": "queued", "chunks": None},
+        {"document_id": "d2", "original_filename": "broken.pdf", "status": "failed", "chunks": None},
+    ]
+    monkeypatch.setattr(main, "st", st)
+    monkeypatch.setattr(main, "api", api)
+    main._render_document_table(student_view=False)
+    warning = " ".join(str(c.args[0]) for c in st.warning.call_args_list)
+    assert "broken.pdf" in warning
+    assert "week1.pdf" not in warning
