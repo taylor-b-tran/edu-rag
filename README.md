@@ -1052,7 +1052,8 @@ Stated here rather than left for you to discover:
 - **There is no audit log.** `/api/admin/audit-logs` always returns an empty list, and the running schema (`src/api/db.py`) creates no audit table.
 - **There is no system-wide user directory.** The Admin Dashboard manages courses, enrolments and Tuning, but it cannot list every user or show user and conversation totals.
 - **DOCX citations have no page.** PDF pages and PPTX slides are cited by number; a DOCX file is cited by name as page 1.
-- **A sign-in lasts about one hour.** A browser tab that is reloaded keeps only its access token, so it returns to the sign-in page about an hour after the person signed in.
+- **A sign-in lasts about one hour.** A browser tab that is reloaded keeps only its access token, so it returns to the sign-in page about an hour after the person signed in. When the token expires, the session ends and the sign-in page is shown; the refresh token is not kept in a cookie.
+- **The upload box caption says 200 MB.** The small caption under the upload box is Streamlit's own default (`Limit 200MB per file`). The enforced limit is 50 MB, and the help text beside the box says so.
 - **No HTTPS in the tracked deployment.** The interface and API are served over HTTP, and the shared host is reached over a private network (Tailscale).
 - **Upload and delete rights follow the account type.** A lecturer account that is a student member of a course can still upload and delete there. New lecturer accounts need administrator approval before they have any access.
 - **Some features are absent:** password reset, chat export, an administrator user directory, and replacing a document in place (delete it, then upload the new one).
