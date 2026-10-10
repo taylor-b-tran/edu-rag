@@ -105,7 +105,8 @@ def _bg_index_document(file_path: Path, course_id: str, document_id: str, job_id
             chunk_text = ch["text"]
             meta = ch["metadata"]
 
-            page_number = meta.get("page_number") or meta.get("slide_number") or 1
+            # 0 = no page (DOCX) because Chroma metadata cannot hold None
+            page_number = meta.get("page_number") or meta.get("slide_number") or 0
             topic = meta.get("topic") or "Uploaded Material"
             week = meta.get("week") or "General"
 

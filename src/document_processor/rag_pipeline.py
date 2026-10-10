@@ -350,7 +350,12 @@ class RetrievedChunk:
         return max(0.0, 1.0 - self.distance)
 
     def citation_label(self):
-        return f"{self.source_file} (p.{self.page_number})"
+        return f"{self.source_file} (p.{self.page_number})" if self.page_number else self.source_file
+
+
+def _page_tag(ch) -> str:
+    """Format ' p.{ch.page_number}' or '' if page_number is 0/falsy (e.g. DOCX)."""
+    return f" p.{ch.page_number}" if getattr(ch, "page_number", None) else ""
 
 @dataclass
 class GeneratedResponse:
@@ -382,10 +387,12 @@ class VectorRetriever:
         chunks = []
         for i, cid in enumerate(res["ids"][0]):
             meta = res["metadatas"][0][i]
+            source = meta.get("source_file", "Unknown")
+            page = 0 if source.lower().endswith(".docx") else int(meta.get("page_number", 0) or 0)
             chunks.append(RetrievedChunk(
                 chunk_id=cid, text=res["documents"][0][i],
-                source_file=meta.get("source_file","Unknown"),
-                page_number=int(meta.get("page_number",0)),
+                source_file=source,
+                page_number=page,
                 topic=meta.get("topic",""), week=meta.get("week",""),
                 distance=res["distances"][0][i]))
         return chunks
@@ -422,7 +429,7 @@ class LLMResponseGeneration:
             parts = []
             for i, ch in enumerate(chunks, 1):
                 parts.append(
-                    f"--- CONTEXT {i} | {ch.source_file} p.{ch.page_number} "
+                    f"--- CONTEXT {i} | {ch.source_file}{_page_tag(ch)} "
                     f"[{ch.topic}] sim={ch.similarity:.2f} ---\n"
                     f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
@@ -464,7 +471,7 @@ class LLMResponseGeneration:
             parts = []
             for i, ch in enumerate(chunks, 1):
                 parts.append(
-                    f"[S{i}] {ch.source_file} p.{ch.page_number} "
+                    f"[S{i}] {ch.source_file}{_page_tag(ch)} "
                     f"[{ch.topic}] sim={ch.similarity:.2f}\n"
                     f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
@@ -623,7 +630,7 @@ class LLMResponseGeneration:
         for ch in chunks:
             k = (ch.source_file, ch.page_number)
             if k not in at:
-                refs.append({"source_file": ch.source_file, "page": ch.page_number,
+                refs.append({"source_file": ch.source_file, "page": ch.page_number or None,
                              "topic": ch.topic, "week": ch.week,
                              "similarity": round(ch.similarity, 3)})
                 at[k] = len(refs)
@@ -704,5 +711,6 @@ if __name__ == "__main__":
     print(f"Fallback  : {r.is_fallback}")
     print("Sources:")
     for s in r.source_refs:
-        print(f"  \u2022 {s['source_file']} p.{s['page']} [{s['topic']}] sim={s['similarity']}")
+        page_str = f" p.{s['page']}" if s.get("page") else ""
+        print(f"  \u2022 {s['source_file']}{page_str} [{s['topic']}] sim={s['similarity']}")
     print(f"\nAnswer:\n{r.answer}")

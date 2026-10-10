@@ -898,6 +898,15 @@ def get_confidence_label(confidence) -> str:
     return f"{band} confidence" if band else "No confidence data"
 
 
+def _citation_page_label(src: dict) -> str:
+    """Format the citation page segment (e.g. 'p.4') or '' for pageless sources like DOCX."""
+    name = str(src.get("filename") or src.get("source_file") or src.get("source") or "")
+    if name.lower().endswith(".docx"):
+        return ""
+    page = src.get("page_number") or src.get("page")
+    return f"p.{page}" if page else ""
+
+
 _FLASH_KEY = "_flash_messages"
 _FLASH_LEVELS = ("success", "info", "warning", "error")
 # How long a queued message stays eligible to be drawn. st.rerun() starts a new run, and
@@ -1610,8 +1619,8 @@ def render_chat_page():
                             filename = _html.escape(str(
                                 src.get("filename") or src.get("source_file")
                                 or src.get("source") or "Document"))
-                            page_number = _html.escape(str(
-                                src.get("page_number") or src.get("page") or "?"))
+                            page_label = _citation_page_label(src)
+                            page_str = f" · {_html.escape(page_label)}" if page_label else ""
                             section = _html.escape(str(src.get("section") or src.get("topic") or ""))
                             section_str = f" · {section}" if section else ""
                             collection = _html.escape(str(src.get("collection_name", "")))
@@ -1619,7 +1628,7 @@ def render_chat_page():
                             sim_pct = int((src.get("similarity") or 0) * 100)
                             sources_html += (
                                 f'<span class="source-chip">'
-                                f'<strong>[S{position}]</strong> {filename} · p.{page_number}'
+                                f'<strong>[S{position}]</strong> {filename}{page_str}'
                                 f'{section_str} · {sim_pct}%{collection_str}'
                                 f'</span>'
                             )
