@@ -1,3 +1,4 @@
+# Authors: Tai Huynh, Thanh Binh Tran
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request

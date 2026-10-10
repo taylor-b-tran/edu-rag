@@ -1,3 +1,4 @@
+# Authors: Tung Phuong Anh Huynh
 SEED_DOCUMENTS = [
     # Week 1 – RAG Fundamentals
     {

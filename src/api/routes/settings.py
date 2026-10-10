@@ -1,3 +1,4 @@
+# Authors: Thanh Binh Tran
 """Live-reloadable configuration (T8-08).
 
 Two tiers, resolved per request so nothing needs a restart:

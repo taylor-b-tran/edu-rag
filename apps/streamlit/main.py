@@ -2,7 +2,7 @@
 Paedia — AI-Powered Course Assistant
 Streamlit UI Prototype — wired to Flask API via api_client.py
 CSIT321 Project 37 · Group 19 — Aletheia's Zetetes
-Author: Anmoldeep Singh (8443580)
+Authors: Anmoldeep Singh (8443580), Thanh Binh Tran, Tai Huynh
 
 Sprint 5 updates:
   S5-T09: Fixed readability/contrast — all text visible, buttons readable

@@ -1,6 +1,8 @@
 """
 Paedia API Client — HTTP layer for Flask WebApplication (Module 4)
 
+Authors: Anmoldeep Singh (8443580), Thanh Binh Tran, Tai Huynh
+
 Connects the Streamlit UI to the Flask REST API. Sample data is used only
 when PAEDIA_USE_FIXTURES is explicitly enabled. Live failures remain errors.
 

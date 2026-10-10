@@ -1,3 +1,4 @@
+# Authors: Thi Hong Ngoc Nguyen, Thanh Binh Tran
 import re
 import math
 import warnings

@@ -1,3 +1,4 @@
+# Authors: Thanh Binh Tran, Thi Hong Ngoc Nguyen
 import logging
 import os, re, requests
 from dataclasses import dataclass, field

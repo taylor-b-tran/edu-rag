@@ -1,3 +1,4 @@
+# Authors: Thi Hong Ngoc Nguyen, Tung Phuong Anh Huynh
 import logging
 import os, time
 # chromadb imported lazily inside get_chroma_client() — CI has no chromadb installed

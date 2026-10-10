@@ -1,3 +1,4 @@
+# Authors: Thanh Binh Tran, Tung Phuong Anh Huynh
 import os
 
 from src.api.app import app
