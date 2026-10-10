@@ -898,13 +898,64 @@ def get_confidence_label(confidence) -> str:
     return f"{band} confidence" if band else "No confidence data"
 
 
+_FLASH_KEY = "_flash_messages"
+_FLASH_LEVELS = ("success", "info", "warning", "error")
+# How long a queued message stays eligible to be drawn. st.rerun() starts a new run, and
+# Streamlit then often starts one or two more (the cookie component re-reports its
+# value), so a message that is removed when it is first drawn is gone before it can be
+# read. Drawn messages stay in the page until the next run replaces it, so a short
+# lifetime is enough: the next click after this time clears it.
+_FLASH_SECONDS = 15
+
+
+def _flash(text, level="success", slot="page"):
+    """Show `text` on the next run(s). Use it for any message that is followed by
+    st.rerun(): an alert drawn in the run that reruns is gone before it can be read.
+    The message belongs to the page it was queued on, and to `slot` within it."""
+    pending = dict(st.session_state.get(_FLASH_KEY) or {})
+    pending.setdefault(slot, []).append((
+        level if level in _FLASH_LEVELS else "info", str(text),
+        time.time(), st.session_state.get("current_page")))
+    st.session_state[_FLASH_KEY] = pending
+
+
+def _live_flashes(slot):
+    now = time.time()
+    page = st.session_state.get("current_page")
+    return [(level, text) for level, text, stamp, queued_on
+            in (st.session_state.get(_FLASH_KEY) or {}).get(slot, [])
+            if now - stamp < _FLASH_SECONDS and queued_on == page]
+
+
+def _show_flashes(slot="page"):
+    """Draw the messages queued for `slot` on this page that have not expired."""
+    for level, text in _live_flashes(slot):
+        getattr(st, level)(text)
+
+
+def _forget_flashes() -> None:
+    """Call at the end of a run that completed: drop what has expired, and what
+    belongs to a page the reader has left."""
+    now = time.time()
+    page = st.session_state.get("current_page")
+    kept = {}
+    for slot, items in (st.session_state.get(_FLASH_KEY) or {}).items():
+        fresh = [i for i in items if now - i[2] < _FLASH_SECONDS and i[3] == page]
+        if fresh:
+            kept[slot] = fresh
+    if kept:
+        st.session_state[_FLASH_KEY] = kept
+    else:
+        st.session_state.pop(_FLASH_KEY, None)
+
+
 def _clear_identity_state() -> None:
     """Drop the previous account's private UI data before reauthentication."""
     for key in ("authenticated", "jwt_token", "user", "messages", "sessions",
                 "active_session_id", "session_id", "course_id", "course_options",
                 "selected_course_id", "pending_send", "query_state", "current_page",
                 "history_load_pending", "_cached_prompts", "_cached_prompts_course",
-                "confirm_user_decision", "signup_notice"):
+                "confirm_user_decision", "signup_notice", _FLASH_KEY):
         st.session_state.pop(key, None)
     init_session_state()
 
@@ -1153,8 +1204,7 @@ def render_sidebar():
         show_all = bool(st.session_state.get("sidebar_docs_all"))
         for doc in (docs if show_all else docs[:_SIDEBAR_DOCS_SHOWN]):
             doc_name = _html.escape(doc.get("original_filename") or doc.get("filename") or doc.get("name") or "Unknown")
-            status = str(doc.get("status", "pending")).lower()
-            status_color = "#10B981" if status in ("indexed", "completed") else ("#F59E0B" if status == "processing" else "#EF4444")
+            status_color = _document_status_dot(doc)
             st.markdown(
                 f"<div class='doc-card'>"
                 f"<span>📄</span>"
@@ -1279,6 +1329,9 @@ def _send_message(text: str, append_user: bool = True):
     session = get_active_session()
 
     response = get_ai_response(text)
+    if response.get("status_code") == 401:
+        _end_expired_session()
+        return
     # Name the chat after the first question that got an answer. A refused or failed
     # turn is not saved by the API, so it must not name a chat that will not exist
     # after a reload.
@@ -1838,6 +1891,7 @@ def render_doc_manager_page():
         accept_multiple_files=True,
         help=_upload_help_text(),
     )
+    _show_flashes("upload")
 
     if "processed_uploads" not in st.session_state:
         st.session_state.processed_uploads = set()
@@ -1879,24 +1933,25 @@ def _run_real_upload_and_indexing(f, course_id):
     # sending, so the uploader sees a connection error instead of the 413 and
     # retries the same file. Catching it before the request avoids the race.
     if file_size == 0:
-        progress_placeholder.error(
-            f"{filename} is empty (0 bytes). Check it saved correctly.")
+        _flash(f"{filename} is empty (0 bytes). Check it saved correctly.", "error", "upload")
         return
     if file_size > MAX_UPLOAD_MB * 1024 * 1024:
-        progress_placeholder.error(
-            f"{filename} is {file_size / (1024*1024):.0f} MB. "
-            f"The limit is {MAX_UPLOAD_MB} MB - split it or compress it first.")
+        _flash(f"{filename} is {file_size / (1024*1024):.0f} MB. "
+               f"The limit is {MAX_UPLOAD_MB} MB - split it or compress it first.", "error", "upload")
         return
     progress_placeholder.info(f"Uploading {filename}...")
 
     res = api.upload_document(file_bytes, filename, course_id)
+    if res.get("status_code") == 401:
+        _end_expired_session()
+        return
     if not res.get("success"):
-        progress_placeholder.error(f"❌ Upload failed: {res.get('error', 'Unknown error')}")
+        _flash(f"❌ Upload failed: {res.get('error', 'Unknown error')}", "error", "upload")
         return
 
     job_id = res.get("job_id")
     if not job_id:
-        progress_placeholder.success(f"✅ {filename} — uploaded successfully!")
+        _flash(f"✅ {filename} — uploaded successfully!", "success", "upload")
         return
 
     stages = {
@@ -1912,15 +1967,16 @@ def _run_real_upload_and_indexing(f, course_id):
         progress = status_res.get("progress_percent", 0)
 
         if status == "completed":
-            progress_placeholder.success(f"✅ {filename} — uploaded and indexed successfully!")
+            _flash(f"✅ {filename} — uploaded and indexed successfully!", "success", "upload")
             break
         elif status == "unavailable":
-            progress_placeholder.error(status_res.get("error") or "Indexing status is unavailable.")
-            st.info("The upload was accepted, but indexing could not be confirmed. Check the document list before uploading again.")
+            _flash((status_res.get("error") or "Indexing status is unavailable.")
+                   + " The upload was accepted, but indexing could not be confirmed. "
+                   "Check the document list before uploading again.", "warning", "upload")
             break
         elif status == "failed":
             err_msg = status_res.get("error", "Unknown indexing error")
-            progress_placeholder.error(f"❌ Indexing failed for {filename}: {err_msg}")
+            _flash(f"❌ Indexing failed for {filename}: {err_msg}", "error", "upload")
             break
         else:
             msg = stages.get(status, "⏳ Processing...")
@@ -1955,6 +2011,33 @@ def _document_indexed_count(docs) -> int:
     return sum(1 for d in (docs or []) if _document_status(d)[0] == "indexed")
 
 
+# A job orphaned by an API restart stays queued or processing forever; nothing
+# recovers it. Past this age a waiting row is shown as stalled instead.
+_STALLED_AFTER_MINUTES = 15
+
+
+def _document_age_minutes(doc):
+    """Minutes since the upload, or None when the timestamp is missing or unreadable."""
+    stamp = doc.get("uploaded_at") or doc.get("uploaded")
+    if not stamp:
+        return None
+    when = _local(stamp)
+    if when is None:
+        return None
+    try:
+        return (datetime.now(timezone.utc) - when).total_seconds() / 60
+    except TypeError:
+        return None
+
+
+_STATUS_DOT = {"badge-indexed": "#10B981", "badge-processing": "#F59E0B", "badge-pending": "#94A3B8"}
+
+
+def _document_status_dot(doc) -> str:
+    """Sidebar dot colour, derived from the same badge the table shows."""
+    return _STATUS_DOT.get(_document_status(doc)[1], "#EF4444")
+
+
 def _document_status(doc):
     """(label, badge class, tooltip) for one document.
 
@@ -1976,10 +2059,14 @@ def _document_status(doc):
                     "No chunk count recorded, so it cannot be cited. Re-upload it.")
         return ("no chunks", "badge-failed",
                 "Marked indexed but holds no chunks, so it can never be cited. Re-upload it.")
-    if raw == "processing":
-        return "processing", "badge-processing", "Indexing is still running"
-    if raw == "pending":
-        return "pending", "badge-pending", "Queued for indexing"
+    if raw in ("pending", "queued", "processing"):
+        age = _document_age_minutes(doc)
+        if age is not None and age > _STALLED_AFTER_MINUTES:
+            return ("stalled", "badge-failed",
+                    f"Indexing has not finished after {_STALLED_AFTER_MINUTES} minutes. Re-upload it.")
+        if raw == "processing":
+            return "processing", "badge-processing", "Indexing is still running"
+        return raw, "badge-pending", "Queued for indexing"
     return raw, "badge-failed", f"Indexing status: {raw}"
 
 
@@ -2093,7 +2180,9 @@ def _render_document_table(student_view: bool = False):
     st.divider()
     indexed, total_chunks = _document_totals(docs)
     st.caption(f"{len(docs)} documents · {indexed} indexed · {total_chunks} chunks")
-    unindexed = [d for d in docs if not (d.get("chunks") or 0)]
+    # Only rows the badge calls failed: an upload that is still queued or processing
+    # has no chunks yet and must not be told to re-upload.
+    unindexed = [d for d in docs if _document_status(d)[1] == "badge-failed"]
     if unindexed and not student_view:
         st.warning(
             f"{len(unindexed)} document(s) have no indexed chunks and cannot be cited in "
@@ -2380,10 +2469,11 @@ def _render_course_tuning(course_code: str, styles: list, style_default: str | N
                     msg = f"Saved. In effect for {course_code} from the next question."
                     if cleared:
                         msg += f" Cleared: {', '.join(cleared)}."
-                    st.success(msg)
+                    _flash(msg, "success", f"tuning_{course_code}")
                     st.rerun()
                 else:
                     st.error(result.get("error") or "Could not save these settings.")
+        _show_flashes(f"tuning_{course_code}")
 
 
 def _render_global_tuning(styles: list):
@@ -2455,10 +2545,11 @@ def _render_global_tuning(styles: list):
             else:
                 result = api.update_global_settings(changes)
                 if result.get("success"):
-                    st.success("Saved. Applies to every course from the next question.")
+                    _flash("Saved. Applies to every course from the next question.", "success", "tuning_global")
                     st.rerun()
                 else:
                     st.error(result.get("error") or "Could not save these settings.")
+        _show_flashes("tuning_global")
 
 
 def render_settings_page():
@@ -2601,7 +2692,7 @@ def render_courses_page():
                                         left = _course_options_for_user(st.session_state.user)
                                         st.session_state.course_id = left[0] if left else None
                                         st.session_state.selected_course_id = st.session_state.course_id
-                                    st.success(f"Left {code}.")
+                                    _flash(f"Left {code}.")
                                     st.rerun()
                                 else:
                                     st.error(result.get("error", "Could not leave this course."))
@@ -2657,7 +2748,7 @@ def render_courses_page():
                             if not st.session_state.get("course_id"):
                                 st.session_state.course_id = code
                                 st.session_state.selected_course_id = code
-                            st.success(f"Enrolled in {code}!")
+                            _flash(f"Enrolled in {code}!")
                             st.rerun()
                         else:
                             st.error(result.get("error", "Enrolment failed."))
@@ -2701,7 +2792,7 @@ def render_course_management():
                         new_code.strip().upper(), new_name.strip(), new_desc.strip() or None
                     )
                     if result.get("success"):
-                        st.success(f"Created {new_code.strip().upper()}.")
+                        _flash(f"Created {new_code.strip().upper()}.")
                         _refresh_course_options()
                         st.rerun()
                     else:
@@ -2968,9 +3059,27 @@ def _flush_auth_cookie() -> None:
         pass  # A browser refusing cookies still permits an in-tab login.
 
 
+_SESSION_ENDED = "Your session has expired or ended. Please sign in again."
+
+
 def _forget_session() -> None:
     st.query_params.clear()
     st.session_state["_auth_cookie_write"] = (None, None)
+
+
+def _end_expired_session() -> None:
+    """A 401 that cannot be refreshed: end this tab's login locally.
+
+    A tab restored from the cookie holds only the access token, so once it expires
+    every request fails with no way to refresh. Going to the sign-in page in one
+    step beats a red error and a lost question. This must not call logout:
+    logout revokes the whole token family, which would sign out another tab of the
+    same login that can still refresh.
+    """
+    _forget_session()
+    _clear_identity_state()
+    st.session_state[_API_CLIENT_KEY] = PaediaAPIClient(APIConfig())
+    st.session_state.login_error = _SESSION_ENDED
 
 
 def _restore_session_from_cookie() -> bool:
@@ -3004,7 +3113,7 @@ def _restore_session_from_cookie() -> bool:
     if not result.get("success"):
         _forget_session()
         _clear_identity_state()
-        st.session_state.login_error = "Your session has expired or ended. Please sign in again."
+        st.session_state.login_error = _SESSION_ENDED
         return False
 
     user = _normalise_user_for_ui(result.get("user", {}))
@@ -3032,6 +3141,7 @@ def _render_app():
     # them, then works from the same answer.
     _reconcile_active_course()
     render_sidebar()
+    _show_flashes()
 
     page = st.session_state.current_page
     role = st.session_state.user.get("role", "Student")
@@ -3053,6 +3163,9 @@ def _render_app():
     else:
         st.session_state.current_page = "chat"
         st.rerun()
+    # Normal completion only (never in a finally: st.rerun() raises, and that must
+    # keep the message it just queued). Anything not shown by now is not wanted.
+    _forget_flashes()
 
 
 def main():
@@ -3061,17 +3174,15 @@ def main():
     try:
         _render_app()
     except APIReadError as exc:
+        if exc.status_code == 401:
+            # The server rejected the credential and this tab has no refresh token.
+            # Retrying cannot help, so go to the sign-in page rather than show an error.
+            _end_expired_session()
+            st.rerun()
         st.error(str(exc))
         st.caption("Data could not be loaded. Your current conversation has been kept.")
         if st.button("Retry", key="retry_api_read"):
             st.rerun()
-        if exc.status_code == 401:
-            # Forget a credential already rejected by the server; do not report logout.
-            if st.button("Sign in again", key="reauth_api_read"):
-                _forget_session()
-                _clear_identity_state()
-                st.session_state[_API_CLIENT_KEY] = PaediaAPIClient(APIConfig())
-                st.rerun()
     _flush_auth_cookie()
 
 

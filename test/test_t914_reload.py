@@ -236,3 +236,91 @@ def test_restored_widget_event_for_same_course_keeps_backend_session(ui):
     ui._change_chat_course()
     assert ui.st.session_state.session_id == "a"
     assert len(ui.st.session_state.messages) == 4
+
+
+# --- a tab restored from the cookie has no refresh token --------------------
+#
+# Once its access token expires every request is a 401 that cannot be
+# refreshed. The tab used to stop on a red "Authentication required" screen
+# with Retry and Sign in again, and the question the person had typed was lost.
+# It now goes to the sign-in page in one step.
+
+class _Rerun(Exception):
+    """st.rerun() stops the run; the tests need it to do the same."""
+
+
+def _expired_ui(ui, monkeypatch):
+    ui.st.session_state.authenticated = True
+    monkeypatch.setattr(ui.st, "rerun", Mock(side_effect=_Rerun))
+    monkeypatch.setattr(ui, "_flush_auth_cookie", lambda: None)
+    return ui
+
+
+def _assert_signed_out_locally(ui):
+    state = ui.st.session_state
+    assert state.authenticated is False
+    assert "sign in again" in (state.login_error or "").lower()
+    assert state["_auth_cookie_write"] == (None, None)
+    ui.api.clear_auth.assert_not_called()          # logout would revoke the whole token family
+    assert isinstance(state[ui._API_CLIENT_KEY], ui.PaediaAPIClient)
+
+
+def test_read_401_after_expiry_goes_straight_to_sign_in(ui, monkeypatch):
+    from api_client import APIReadError
+    ui = _expired_ui(ui, monkeypatch)
+    expired = APIReadError("/api/courses", {"status_code": 401, "message": "Authentication required."})
+    monkeypatch.setattr(ui, "_render_app", Mock(side_effect=expired))
+    with pytest.raises(_Rerun):
+        ui.main()
+    _assert_signed_out_locally(ui)
+
+
+def test_non_401_read_error_keeps_the_session_and_offers_retry(ui, monkeypatch):
+    from api_client import APIReadError
+    ui = _expired_ui(ui, monkeypatch)
+    outage = APIReadError("/api/courses", {"status_code": 503, "message": "Service unavailable."})
+    monkeypatch.setattr(ui, "_render_app", Mock(side_effect=outage))
+    monkeypatch.setattr(ui.st, "error", Mock())
+    monkeypatch.setattr(ui.st, "caption", Mock())
+    button = Mock(return_value=False)
+    monkeypatch.setattr(ui.st, "button", button)
+    ui.main()
+    assert ui.st.session_state.authenticated is True
+    assert any(c.kwargs.get("key") == "retry_api_read" for c in button.call_args_list)
+
+
+def test_query_401_ends_the_session_locally(ui, monkeypatch):
+    ui = _expired_ui(ui, monkeypatch)
+    monkeypatch.setattr(ui, "get_ai_response", lambda text: {
+        "answer": "Authentication required.", "error_type": "api_http_error", "status_code": 401})
+    ui.create_new_session()
+    ui._submit_query("Explain RAG retrieval")
+    ui._send_message("Explain RAG retrieval", append_user=False)
+    _assert_signed_out_locally(ui)
+    assert ui.st.session_state.get("messages") == []
+
+
+def test_non_401_query_error_keeps_the_session(ui, monkeypatch):
+    ui = _expired_ui(ui, monkeypatch)
+    monkeypatch.setattr(ui, "get_ai_response", lambda text: {
+        "answer": "Service unavailable.", "error_type": "api_http_error", "status_code": 503})
+    ui.create_new_session()
+    ui._submit_query("Explain RAG retrieval")
+    ui._send_message("Explain RAG retrieval", append_user=False)
+    assert ui.st.session_state.authenticated is True
+    assert ui.st.session_state["messages"][-1]["error_type"] == "api_http_error"
+
+
+def test_upload_401_ends_the_session_locally(ui, monkeypatch):
+    ui = _expired_ui(ui, monkeypatch)
+    ui.api.upload_document.return_value = {"success": False, "status_code": 401, "error": "Authentication required."}
+    monkeypatch.setattr(ui.st, "empty", Mock())
+
+    class Upload:
+        name = "a.pdf"
+
+        def getvalue(self):
+            return b"x"
+
+    ui._run_real_upload_and_indexing(Upload(), "CSIT321")
+    _assert_signed_out_locally(ui)
