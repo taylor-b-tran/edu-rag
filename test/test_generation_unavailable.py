@@ -108,11 +108,11 @@ def test_real_refusal_wording_is_recognised():
     ("The course materials do not contain an explanation of stride.", False),
     ("The COURSE MATERIALS\nDO NOT CONTAIN an explanation of stride.", False),
     ("A decision tree splits on features.", True),
-    ("The claim cannot be verified from the available course materials [S1].", True),
+    ("The claim cannot be verified from the available course materials [S1].", False),
     ("Decision trees split on feature values. The course materials do not contain a worked pruning example.", True),
     ("Decision trees split on feature values [S1]. The course materials do not contain a worked pruning example.", True),
 ])
-def test_only_uncited_refusal_clears_sources(monkeypatch, answer, covered):
+def test_explicit_refusal_clears_sources_even_with_a_citation(monkeypatch, answer, covered):
     gen = generator()
     monkeypatch.setattr(gen, "_call_ollama", lambda *a, **kw: (answer, True))
     result = gen.generate("Explain decision trees")
@@ -124,7 +124,8 @@ def test_only_uncited_refusal_clears_sources(monkeypatch, answer, covered):
         assert result.source_refs == []
         assert (result.confidence, result.confidence_score) == ("Low", 0.0)
         assert result.is_fallback
-        assert " ".join(answer.split()) in " ".join(result.answer.split())
+        expected = rp._strip_invalid_citation_markers(answer, 0)
+        assert " ".join(expected.split()) in " ".join(result.answer.split())
 
 
 @pytest.mark.parametrize("payload", [{"response": ""}, {"response": " \n "}, {},

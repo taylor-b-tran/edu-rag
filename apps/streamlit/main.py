@@ -42,6 +42,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from functools import lru_cache
 
 from api_client import PaediaAPIClient, APIConfig, APIReadError
+from auth_cookies import AuthCookies
 
 
 @lru_cache(maxsize=None)
@@ -478,8 +479,6 @@ class _SessionAPIClient:
 api = _SessionAPIClient()
 # Live selectors are populated from authorized course data, never seeded codes.
 COURSE_FALLBACKS = []
-LOGIN_COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "components", "login_form")
-login_form_component = components.declare_component("paedia_login_form", path=LOGIN_COMPONENT_DIR)
 
 
 # ─── DEMO CREDENTIALS ──────────────────────────────────────────────
@@ -1053,6 +1052,18 @@ def handle_signup_submit() -> None:
 
 # ─── LOGIN PAGE ─────────────────────────────────────────────────────
 
+def _render_basic_login():
+    with st.form("basic_login_form", clear_on_submit=True):
+        email = st.text_input("Email Address", key="basic_login_email")
+        password = st.text_input("Password", type="password", key="basic_login_password")
+        submitted = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+    if submitted:
+        st.session_state.login_email = email
+        st.session_state.login_password = password
+        handle_login_submit()
+        st.rerun()
+
+
 def render_login_page():
     col_l, col_c, col_r = st.columns([1, 2, 1])
 
@@ -1073,22 +1084,10 @@ def render_login_page():
 
         # ──────────── SIGN IN TAB ────────────
         with tab_login:
-            login_payload = login_form_component(
-                default_email=st.session_state.get("login_email", ""),
-                key="login_form_component",
-            )
+            _render_basic_login()
 
             if st.session_state.login_error:
                 st.error(st.session_state.login_error)
-
-            if isinstance(login_payload, dict) and login_payload.get("submitted"):
-                nonce = login_payload.get("nonce")
-                if nonce != st.session_state.get("last_login_nonce"):
-                    st.session_state.last_login_nonce = nonce
-                    st.session_state.login_email = login_payload.get("email", "")
-                    st.session_state.login_password = login_payload.get("password", "")
-                    handle_login_submit()
-                    st.rerun()
 
         # ──────────── SIGN UP TAB (T8-06) ────────────
         with tab_signup:
@@ -3010,25 +3009,8 @@ _AUTH_COOKIE_MAX_AGE = 3600  # matches PAEDIA_ACCESS_TOKEN_TTL
 
 
 def _cookies():
-    """A controller for this script run; None if the component is unavailable.
-
-    Constructed fresh every time on purpose. The controller reads the browser's
-    cookies once, in its constructor, and a Streamlit component returns its
-    default -- an empty dict -- on the run that mounts it, with the real value
-    arriving on the next. Caching the controller in session_state therefore
-    froze that first empty snapshot forever, and the cookie was written
-    correctly but never read back. The library already caches the cookie dict
-    itself in session_state under its own key; the object must not be cached
-    on top of that.
-    """
-    try:
-        from streamlit_cookies_controller import CookieController
-    except ImportError:
-        return None
-    try:
-        return CookieController()
-    except Exception:
-        return None
+    """Read initial-request cookies; write through an iframe-free component."""
+    return AuthCookies(st)
 
 
 def _remember_session(token: str | None) -> None:
@@ -3038,6 +3020,8 @@ def _remember_session(token: str | None) -> None:
     extend the one-hour cookie lifetime.
     """
     if token:
+        st.session_state["_auth_cookie_revision"] = uuid.uuid4().hex
+        st.session_state["_auth_cookie_override"] = token
         st.session_state["_auth_cookie_write"] = (
             token, datetime.now(timezone.utc) + timedelta(seconds=_AUTH_COOKIE_MAX_AGE))
 
@@ -3064,6 +3048,8 @@ _SESSION_ENDED = "Your session has expired or ended. Please sign in again."
 
 def _forget_session() -> None:
     st.query_params.clear()
+    st.session_state["_auth_cookie_revision"] = uuid.uuid4().hex
+    st.session_state["_auth_cookie_override"] = None
     st.session_state["_auth_cookie_write"] = (None, None)
 
 
@@ -3097,16 +3083,6 @@ def _restore_session_from_cookie() -> bool:
     except Exception:
         return False
     if not token:
-        # An empty read on the run that mounts the component is not "no
-        # cookie" -- it is "the component has not answered yet". Let the script
-        # finish so the component actually renders; it reruns the app itself
-        # once the browser sends the cookies back, and the restore succeeds on
-        # that pass.
-        #
-        # Do not "help" this along with st.rerun(): that aborts the run before
-        # the component is rendered, while leaving Streamlit's default {} in
-        # session_state under the library's key -- after which the library
-        # never declares the component again and the cookie is never read.
         return False
 
     result = api.get_current_user(token)
@@ -3184,6 +3160,8 @@ def main():
         if st.button("Retry", key="retry_api_read"):
             st.rerun()
     _flush_auth_cookie()
+    if st.session_state.get("_auth_cookie_write_failed"):
+        st.caption("Your browser did not save the sign-in cookie. Reloading will require signing in again.")
 
 
 if __name__ == "__main__":

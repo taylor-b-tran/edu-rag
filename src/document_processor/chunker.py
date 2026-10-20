@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
+from src.document_processor.source_context import pdf_source_context
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -269,6 +270,83 @@ def chunk_docx(
     return result
 
 
+def _pdf_page_text(page, chunk_size: int) -> str:
+    """Keep simple, visibly headed table rows together; retain the legacy fallback."""
+    raw = " ".join((page.get_text("text", sort=True) or "").split())
+    if not raw:
+        return raw
+    try:
+        import fitz
+
+        finder = page.find_tables()
+        tables = finder.tables
+        if not tables:
+            return raw
+        spans = [
+            span
+            for block in page.get_text("dict")["blocks"]
+            for line in block.get("lines", [])
+            for span in line["spans"]
+            if span["text"].strip()
+        ]
+
+        def inside(rect, bbox):
+            x0, y0, x1, y1 = bbox
+            return rect.contains(fitz.Point((x0 + x1) / 2, (y0 + y1) / 2))
+
+        eligible = []
+        for table in tables:
+            rows = table.extract()
+            if table.header.external or len(rows) < 2 or table.col_count < 2:
+                continue
+            if any(len(row) != table.col_count or any(value is None for value in row)
+                   for row in rows):
+                continue
+            if any(cell is None for row in table.rows for cell in row.cells):
+                continue
+            headers = [" ".join(value.split()) for value in rows[0]]
+            if not all(headers) or len(set(h.casefold() for h in headers)) != len(headers):
+                continue
+            rect = fitz.Rect(table.bbox)
+            header_rect = fitz.Rect(table.rows[0].bbox)
+            header_spans = [span for span in spans if inside(header_rect, span["bbox"])]
+            body_spans = [span for span in spans if inside(rect, span["bbox"])
+                          and not inside(header_rect, span["bbox"])]
+            # A grid alone cannot establish that its first row is a header.
+            # Conservatively require a bold header and some regular body text.
+            if not header_spans or not all(span["flags"] & 16 for span in header_spans):
+                continue
+            if not any(not (span["flags"] & 16) for span in body_spans):
+                continue
+            if any(other is not table and rect.intersects(fitz.Rect(other.bbox))
+                   for other in tables):
+                continue
+            serialised = [
+                " | ".join(f"{header}: {' '.join(value.split())}"
+                           for header, value in zip(headers, row))
+                for row in rows[1:]
+            ]
+            if any(len(row) > chunk_size for row in serialised):
+                continue
+            eligible.append((rect, "\n".join(serialised)))
+        if not eligible:
+            return raw
+
+        lines = {}
+        for x0, y0, x1, y1, word, block, line, _ in page.get_text("words", sort=True):
+            if any(inside(rect, (x0, y0, x1, y1)) for rect, _ in eligible):
+                continue
+            entry = lines.setdefault((block, line), {"x": x0, "y": y0, "words": []})
+            entry["words"].append(word)
+        parts = [(line["y"], line["x"], " ".join(line["words"]))
+                 for line in lines.values()]
+        parts.extend((rect.y0, rect.x0, text) for rect, text in eligible)
+        return "\n".join(text for _, _, text in sorted(parts))
+    except Exception:
+        logger.debug("PDF table detection failed; using plain text", exc_info=True)
+        return raw
+
+
 def extract_and_chunk(
     path: str | Path,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
@@ -328,10 +406,22 @@ def extract_and_chunk(
 
     result: List[Dict[str, Any]] = []
     with fitz.open(str(path)) as pdf:
+        exercise_context = None
         for page_num, page in enumerate(pdf, start=1):
-            raw = " ".join((page.get_text("text", sort=True) or "").split())
+            source_context, exercise_context = pdf_source_context(
+                page.get_text("text", sort=True) or "", page_num, exercise_context)
+            raw = _pdf_page_text(page, chunk_size)
             if not raw.strip():
                 continue
+            # Short titles beside large images are not the slide's readable body.
+            # Keep the text for discovery, but tell retrieval not to infer image content.
+            short_text = len(raw.strip()) < 160 and len(raw.split()) <= 20
+            image_info = page.get_image_info() if short_text else []
+            visual_area = max(((info["bbox"][2] - info["bbox"][0]) *
+                               (info["bbox"][3] - info["bbox"][1])
+                               for info in image_info), default=0)
+            sparse_visual = short_text and visual_area >= page.rect.width * page.rect.height * .25
+            quality = {"text_quality": "image_text_sparse"} if sparse_visual else {}
             chunks = chunk_text(raw, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
             for chunk in chunks:
                 result.append({
@@ -340,6 +430,8 @@ def extract_and_chunk(
                         "page_number": page_num,
                         "source": path.name,
                         "format": "pdf",
+                        **source_context,
+                        **quality,
                     },
                 })
 

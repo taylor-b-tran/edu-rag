@@ -118,13 +118,18 @@ def _bg_index_document(file_path: Path, course_id: str, document_id: str, job_id
             ids.append(doc_id)
             texts.append(chunk_text)
             embeddings.append(emb)
-            metadatas.append({
+            stored_metadata = {
                 "course_id": course_id,
                 "source_file": file_path.name,
                 "page_number": page_number,
                 "topic": topic,
                 "week": week
-            })
+            }
+            for key in ("source_scope", "source_kind", "source_context", "context_page",
+                        "source_section", "source_items", "text_quality"):
+                if key in meta:
+                    stored_metadata[key] = meta[key]
+            metadatas.append(stored_metadata)
 
         state.update_job(job_id, progress_percent=90)
 

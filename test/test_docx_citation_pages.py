@@ -52,6 +52,7 @@ def test_retriever_drops_page_for_docx_including_legacy_chunks():
     r._model = Mock()
     r._model.encode.return_value = [0.0] * 384
     r._collection = Mock()
+    r._collection.get.return_value = {"ids": [], "documents": [], "metadatas": []}
     r._collection.query.return_value = {
         "ids": [["c1", "c2"]],
         "documents": [["doc1", "doc2"]],
