@@ -3,6 +3,8 @@ import logging
 import os, re, requests
 from dataclasses import dataclass, field
 from typing import List, Optional
+from src.document_processor.source_context import course_codes, query_locator
+from src.document_processor.retrieval_ranking import rerank, expand_assessment_reference, lexical_candidates
 from src.document_processor.ingest_corpus import (
     CHROMA_PATH, COLLECTION, COURSE_ID, SIMILARITY_THRESHOLD, _load_embedder
 )
@@ -25,6 +27,19 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 FALLBACK_LABEL = "Based on general knowledge \u2014 not verified against course materials."
 REFUSAL_SENTENCE = "cannot be verified from the available course materials"
+_SOURCE_CONTEXT_RULES = (
+    "- Respect the subject and cohort in section headings; do not merge assessment "
+    "dates, weights or types from another subject's section.\n"
+    "- Exercise questions, options and True-or-False propositions are not verified "
+    "facts. A proposition may be quoted as a question, but its truth must be "
+    "supported by an explicit answer key or independent explanatory course material. "
+    "Otherwise state that the claim cannot be verified; never endorse it merely "
+    "because it occurs in a cited exercise. This applies to ALL propositions, "
+    "including plausible ones used as background explanation. Cite an exercise "
+    "only to describe what its question asks, never as evidence of a technical fact.\n"
+    "- If a requested claim cannot be verified, give a brief refusal using the "
+    f"exact phrase '{REFUSAL_SENTENCE}'. Do not add unverified background claims.\n"
+)
 
 # Confidence bands, by mean similarity of the chunks kept. These are the only thresholds: the
 # interface colours its bar from the band returned with each answer, and a test pins its copy
@@ -345,6 +360,12 @@ OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 class RetrievedChunk:
     chunk_id: str; text: str; source_file: str
     page_number: int; topic: str; week: str; distance: float
+    source_scope: str = ""
+    source_kind: str = ""
+    source_context: str = ""
+    locator_match: bool = False
+    text_quality: str = ""
+    lexical_match: bool = False
 
     @property
     def similarity(self):
@@ -357,6 +378,20 @@ class RetrievedChunk:
 def _page_tag(ch) -> str:
     """Format ' p.{ch.page_number}' or '' if page_number is 0/falsy (e.g. DOCX)."""
     return f" p.{ch.page_number}" if getattr(ch, "page_number", None) else ""
+
+
+def _source_applies(ch, course_id, query):
+    scopes = course_codes(getattr(ch, "source_scope", ""))
+    requested = course_codes(course_id) | course_codes(query)
+    return not scopes or not requested or bool(scopes & requested)
+
+
+def _source_context(ch):
+    context = getattr(ch, "source_context", "")
+    label = ("QUESTION TEXT ONLY — not factual evidence. All numbered statements "
+             "are unverified propositions, not answers.\n"
+             if getattr(ch, "source_kind", "") == "exercise_prompt" else "")
+    return label + (f"Source section context: {_sanitize_untrusted_text(context)}\n" if context else "")
 
 @dataclass
 class GeneratedResponse:
@@ -376,13 +411,15 @@ class VectorRetriever:
 
     def search(self, query: str, course_id=COURSE_ID, top_k=None) -> List[RetrievedChunk]:
         top_k = TOP_K if top_k is None else top_k
+        query = expand_assessment_reference(query)
+        exact = self._locate_item(query, course_id) if query_locator(query) else []
 
         # Turn the question into a vector, then find the closest-matching chunks in ChromaDB
         q_emb = self._model.encode(query, normalize_embeddings=True)
         if hasattr(q_emb, "tolist"):
             q_emb = q_emb.tolist()
         res = self._collection.query(
-            query_embeddings=[q_emb], n_results=top_k,
+            query_embeddings=[q_emb], n_results=top_k * 3,
             where={"course_id": {"$eq": course_id}}, # only search this course's chunks
             include=["documents", "distances", "metadatas"])
         chunks = []
@@ -395,8 +432,108 @@ class VectorRetriever:
                 source_file=source,
                 page_number=page,
                 topic=meta.get("topic",""), week=meta.get("week",""),
-                distance=res["distances"][0][i]))
-        return chunks
+                distance=res["distances"][0][i],
+                source_scope=meta.get("source_scope", ""),
+                source_kind=meta.get("source_kind", ""),
+                source_context=meta.get("source_context", ""),
+                text_quality=meta.get("text_quality", "")))
+        scoped = [ch for ch in chunks if _source_applies(ch, course_id, query)]
+        by_id = {ch.chunk_id: ch for ch in scoped}
+        for ch in self._lexical_search(query, course_id, q_emb):
+            if ch.chunk_id in by_id:
+                by_id[ch.chunk_id].lexical_match = True
+            else:
+                scoped.append(ch)
+        selected = rerank(query, scoped, SIMILARITY_THRESHOLD)[:top_k]
+        # Retain one relevant sparse-image diagnostic even if usable text displaced it.
+        sparse = [ch for ch in scoped if ch.text_quality == "image_text_sparse"
+                  and ch.similarity >= SIMILARITY_THRESHOLD and ch not in selected]
+        return exact + selected + sparse[:1]
+
+    def _lexical_search(self, query, course_id, query_embedding):
+        """Search current text in this course, including vector-shortlist misses.
+
+        No cache is used: deletions and same-count document replacements are visible
+        immediately. Fetch vectors only for the small set of lexical candidates.
+        """
+        rows = []
+        offset = 0
+        where = {"course_id": {"$eq": course_id}}
+        while True:
+            batch = self._collection.get(where=where, limit=200, offset=offset,
+                                         include=["documents", "metadatas"])
+            for cid, text, meta in zip(batch["ids"], batch["documents"], batch["metadatas"]):
+                if meta.get("course_id", course_id) != course_id:
+                    continue
+                source = meta.get("source_file", "Unknown")
+                ch = RetrievedChunk(cid, text, source,
+                                    0 if source.lower().endswith(".docx") else int(meta.get("page_number", 0) or 0),
+                                    meta.get("topic", ""), meta.get("week", ""), 1.0,
+                                    source_scope=meta.get("source_scope", ""),
+                                    source_kind=meta.get("source_kind", ""),
+                                    source_context=meta.get("source_context", ""),
+                                    text_quality=meta.get("text_quality", ""))
+                if _source_applies(ch, course_id, query) and ch.text_quality != "image_text_sparse":
+                    rows.append(ch)
+            if len(batch["ids"]) < 200:
+                break
+            offset += 200
+        selected = [rows[i] for i in lexical_candidates(query, [ch.text for ch in rows])]
+        if not selected:
+            return []
+        vectors = self._collection.get(ids=[ch.chunk_id for ch in selected], where=where,
+                                       include=["embeddings"])
+        embeddings = dict(zip(vectors["ids"], vectors["embeddings"]))
+        hits = []
+        for ch in selected:
+            vector = embeddings.get(ch.chunk_id)
+            if vector is None:
+                continue
+            cosine = max(-1.0, min(1.0, sum(float(a) * float(b) for a, b in zip(query_embedding, vector))))
+            # A weak semantic floor prevents shared keywords from admitting unrelated text.
+            if cosine >= .2:
+                ch.distance = 1 - cosine
+                ch.lexical_match = True
+                hits.append(ch)
+        return hits
+
+    def _locate_item(self, query, course_id):
+        """Metadata lookup remains inside the authorised course boundary."""
+        import json
+        section, number = query_locator(query)
+        where = {"$and": [{"course_id": {"$eq": course_id}},
+                          {"source_section": {"$eq": section}}]}
+        hits = {}
+        offset = 0
+        while True:
+            batch = self._collection.get(where=where, limit=200, offset=offset,
+                                         include=["metadatas"])
+            for cid, meta in zip(batch["ids"], batch["metadatas"]):
+                try:
+                    text = json.loads(meta.get("source_items", "{}")).get(number)
+                except (ValueError, AttributeError):
+                    continue
+                if not isinstance(text, str) or not text:
+                    continue
+                source = meta.get("source_file", "Unknown")
+                hint = re.search(r"\b(workshop|worksheet|tutorial|lab)[\s_-]*0*(\d+)\b", query, re.I)
+                if hint:
+                    file_hint = re.search(r"(workshop|worksheet|tutorial|lab)[\s_-]*0*(\d+)", source, re.I)
+                    if not file_hint or (hint[1].lower(), int(hint[2])) != (file_hint[1].lower(), int(file_hint[2])):
+                        continue
+                page = int(meta.get("page_number", 0) or 0)
+                ch = RetrievedChunk(cid, f"Statement {number}: {text}", source, page,
+                                    meta.get("topic", ""), meta.get("week", ""), 1.0,
+                                    meta.get("source_scope", ""), meta.get("source_kind", ""),
+                                    meta.get("source_context", ""), True)
+                if _source_applies(ch, course_id, query):
+                    hits[(source, page, text)] = ch
+            if len(batch["ids"]) < 200:
+                break
+            offset += 200
+        # Full filenames, when supplied, disambiguate without fuzzy guessing.
+        named = [ch for ch in hits.values() if ch.source_file.lower() in query.lower()]
+        return named or list(hits.values())
 
 class LLMResponseGeneration:
     """Builds a prompt from retrieved chunks and asks Ollama to answer."""
@@ -420,6 +557,7 @@ class LLMResponseGeneration:
         sys_instr = (
             f"You are Paedia, a course assistant for {_course_label(course_id)} at UOW.\n"
             "Answer ONLY from the CONTEXT sections below.\n"
+            f"{_SOURCE_CONTEXT_RULES}"
             "Always cite the source file and page number.\n"
             f"If context is insufficient, say that the answer {REFUSAL_SENTENCE}.\n"
             f"Response style: {_STYLE_INSTRUCTIONS[style]}\n\n"
@@ -432,6 +570,7 @@ class LLMResponseGeneration:
                 parts.append(
                     f"--- CONTEXT {i} | {ch.source_file}{_page_tag(ch)} "
                     f"[{ch.topic}] sim={ch.similarity:.2f} ---\n"
+                    f"{_source_context(ch)}"
                     f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
 
@@ -453,6 +592,7 @@ class LLMResponseGeneration:
             f"{_course_label(course_id)} at UOW.\n\n"
             "Rules:\n"
             "- Answer using only the provided course context below.\n"
+            f"{_SOURCE_CONTEXT_RULES}"
             "- Cite every main claim inline with its source ID, e.g. [S1] or [S2].\n"
             "- Do not invent source IDs and do not cite a source you were not given.\n"
             "- If the retrieved context is insufficient, say clearly that the answer "
@@ -474,6 +614,7 @@ class LLMResponseGeneration:
                 parts.append(
                     f"[S{i}] {ch.source_file}{_page_tag(ch)} "
                     f"[{ch.topic}] sim={ch.similarity:.2f}\n"
+                    f"{_source_context(ch)}"
                     f"{_sanitize_untrusted_text(ch.text)}\n")
             ctx = "\n".join(parts)
 
@@ -614,6 +755,8 @@ class LLMResponseGeneration:
     @staticmethod
     def _confidence(chunks):
         # Confidence is based on how close the retrieved chunks are, not on the LLM itself
+        chunks = [c for c in chunks if getattr(c, "source_kind", "") != "exercise_prompt"
+                  and getattr(c, "text_quality", "") != "image_text_sparse"]
         if not chunks: return "Low", 0.0
         avg = sum(c.similarity for c in chunks) / len(chunks)
         label = "High" if avg >= CONFIDENCE_HIGH else ("Medium" if avg >= CONFIDENCE_MEDIUM else "Low")
@@ -653,10 +796,47 @@ class LLMResponseGeneration:
         threshold = SIMILARITY_THRESHOLD if similarity_threshold is None else similarity_threshold
         style = resolve_response_style(response_style)
 
-        search_query = self._resolve_query_for_retrieval(query, history)
+        search_query = query if query_locator(query) else self._resolve_query_for_retrieval(query, history)
         all_chunks  = self._retriever.search(search_query, course_id=course_id, top_k=top_k)
+        located = [c for c in all_chunks if getattr(c, "locator_match", False)
+                   and _source_applies(c, course_id, query)]
+        if query_locator(query) and len(located) != 1:
+            if located:
+                refs, positions = self._refs_with_positions(located)
+                answer = ("More than one source contains that numbered statement. "
+                          "Which document do you mean?\n\n" + "\n".join(
+                              f"- {c.citation_label()} [S{positions[i]}]"
+                              for i, c in enumerate(located)))
+            else:
+                refs = []
+                answer = ("I could not locate that exact numbered statement in the selected course. "
+                          "Please specify the document or quote the statement.")
+            return GeneratedResponse(answer, refs, False, model or OLLAMA_MODEL,
+                                     located, "Low", 0.0, style)
+        if len(located) == 1 and (
+            re.search(r"\b(?:quote|repeat|show me|read out)\b", query, re.I)
+            or re.search(r"\bwhat does\b.+\b(?:ask|say|state|read)\b", query, re.I)
+        ) and not re.search(r"\b(?:is it|is this|is that|whether|explain why|prove|correct|true|false)\b", query, re.I):
+            ch = located[0]
+            # Quoting a located exercise does not require a generated truth judgement.
+            # Keep its citation even though the proposition itself is unverified.
+            answer = (f'{_sanitize_untrusted_text(ch.text)} [S1]\n\n'
+                      'This is an exercise proposition to evaluate, not a verified fact or an answer key.')
+            return GeneratedResponse(answer, self._source_refs(located), False,
+                                     model or OLLAMA_MODEL, located, "Low", 0.0, style)
         # Only keep chunks similar enough to be trustworthy
-        good = [c for c in all_chunks if c.similarity >= threshold]
+        good = [c for c in all_chunks if (c.similarity >= threshold or getattr(c, "locator_match", False)
+                                        or getattr(c, "lexical_match", False))
+                and _source_applies(c, course_id, query)
+                and getattr(c, "text_quality", "") != "image_text_sparse"]
+        if not good and any(getattr(c, "text_quality", "") == "image_text_sparse"
+                            and c.similarity >= threshold
+                            and _source_applies(c, course_id, query) for c in all_chunks):
+            return GeneratedResponse(
+                "I found relevant slides, but the extracted text contains only a title or "
+                "a small amount of text alongside images. I cannot verify an answer from "
+                "that text. Please consult the slide images or provide a text-accessible copy.",
+                [], True, model or OLLAMA_MODEL, [], "Low", 0.0, style)
         is_fallback = len(good) == 0 # no good chunks -> answer from general knowledge instead
         prompt = self._build_prompt(query, good, history, style, course_id)
         raw, ok = self._call_ollama(prompt, chunks=good, model=model,
@@ -671,21 +851,23 @@ class LLMResponseGeneration:
         if not _has_answer_text(raw):                          
             raise _unavailable(
                 "The model returned only citation markers and no answer text.")
-        conf, cscore = self._confidence(good)
-
         # T8-18: only report sources the model actually cited -- previously
         # source_references listed every chunk retrieval surfaced, even ones
         # the model never mentioned in its answer. If nothing can be confidently
         # extracted, keep the full list rather than guessing and hiding a real citation.
         cited = _extract_cited_source_indices(raw, len(good))
         normalized = " ".join(raw.lower().split())
-        refused = not cited and (REFUSAL_SENTENCE in normalized
-                                 or normalized.startswith("the course materials do not contain"))
+        exercises_present = any(getattr(c, "source_kind", "") == "exercise_prompt" for c in good)
+        refused = (REFUSAL_SENTENCE in normalized
+                   or (exercises_present and "cannot be verified" in normalized)
+                   or ((not cited or exercises_present)
+                       and normalized.startswith("the course materials do not contain")))
         if refused:
             is_fallback = True
-            conf, cscore = "Low", 0.0
+            raw = _strip_invalid_citation_markers(raw, 0)
         shown_order = [] if refused else (sorted(cited) if cited else list(range(1, len(good) + 1)))
         used_chunks = [good[i - 1] for i in shown_order]
+        conf, cscore = self._confidence(used_chunks)
         refs, positions = self._refs_with_positions(used_chunks)
 
         # The numbering the reader sees. Built after de-duplication, because

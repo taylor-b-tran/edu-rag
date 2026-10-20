@@ -46,7 +46,6 @@ def ui(monkeypatch):
     api.get_courses.return_value = []
     monkeypatch.setattr(main, "st", st)
     monkeypatch.setattr(main, "api", api)
-    monkeypatch.setattr(main, "login_form_component", lambda **kw: None)
     return st, api
 
 
