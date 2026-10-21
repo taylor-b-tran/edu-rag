@@ -15,10 +15,10 @@ The review is based on the following Sprint 3 artifacts:
 - `docs/prompt_strategy.md`
 - `docs/ollama_model_selection.md`
 - `docs/meetings/sprint3_internal_demo.md`
-- `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/test_queries.json`
-- `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/sample_manifest.md`
-- `Team_Contributions/Namaratne/docs/risk_register_sprint3.md`
-- `Team_Contributions/Anmoldeep Singh/docs/ui_state.md`
+- `tests/test_queries.json`
+- `data/sample_manifest.md`
+- `docs/architecture/risk_register_sprint3.md`
+- `docs/ui/ui_state.md`
 
 These artifacts show that the Sprint 3 PoC already uses course-scoped retrieval, source references, a fallback label, and a draft confidence scheme. They also show that evaluation is still provisional because the larger labelled query corpus was not fully used during the first benchmark pass.
 
@@ -72,9 +72,9 @@ This ethics review aligns with the wider Sprint 3 design in the following ways:
 - `docs/prompt_strategy.md` defines grounded answering, citations, fallback wording, and prompt-injection resistance.
 - `docs/rag_config.md` defines a provisional similarity threshold and emphasises fallback when no chunk passes the threshold.
 - `notebooks/rag_poc.ipynb` demonstrates a working local RAG flow over course material and includes a fallback path for off-topic behaviour.
-- `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/test_queries.json` expands the evaluation scope beyond a small notebook-only demo.
-- `Team_Contributions/Namaratne/docs/risk_register_sprint3.md` identifies hallucination, parsing failure, indexing failure, and cross-course leakage as active risks.
-- `Team_Contributions/Anmoldeep Singh/docs/ui_state.md` shows the intended user-facing controls around authentication, role separation, and visible fallback behaviour.
+- `tests/test_queries.json` expands the evaluation scope beyond a small notebook-only demo.
+- `docs/architecture/risk_register_sprint3.md` identifies hallucination, parsing failure, indexing failure, and cross-course leakage as active risks.
+- `docs/ui/ui_state.md` shows the intended user-facing controls around authentication, role separation, and visible fallback behaviour.
 
 ## 7. Sprint 4 Follow-Up Actions
 
