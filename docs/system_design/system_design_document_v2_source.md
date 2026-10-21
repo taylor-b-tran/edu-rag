@@ -191,19 +191,19 @@ The highest-priority Sprint 4 handoff items are:
 | Prompt strategy | `docs/prompt_strategy.md` |
 | Model selection | `docs/ollama_model_selection.md` |
 | Demo checkpoint | `docs/meetings/sprint3_internal_demo.md` |
-| UI state | `Team_Contributions/Anmoldeep Singh/docs/ui_state.md` |
-| Design system | `Team_Contributions/Anmoldeep Singh/docs/design_system.md` |
-| Wireframes | `Team_Contributions/Anmoldeep Singh/docs/wireframes/*.png` |
-| Test queries | `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/test_queries.json` |
-| Corpus manifest | `Team_Contributions/Tung Phuong Anh Huynh/sprint3_extracted/sample_manifest.md` |
-| ERD changes | `Team_Contributions/Namaratne/docs/erd_v2_changes.md` |
-| DFD changes | `Team_Contributions/Namaratne/docs/dfd_v2_changes.md` |
-| Risk register | `Team_Contributions/Namaratne/docs/risk_register_sprint3.md` |
-| Storage sizing | `Team_Contributions/Namaratne/docs/storage_sizing.md` |
-| Tai API spec | `Team_Contributions/Tai Huynh/docs/api_spec.yaml` |
-| Tai privacy policy | `Team_Contributions/Tai Huynh/docs/privacy_policy.md` |
-| Tai ethics review | `Team_Contributions/Tai Huynh/docs/ethics_review_sprint3.md` |
-| Tai Sprint 4 kickoff | `Team_Contributions/Tai Huynh/docs/sprint_4_kickoff.md` |
+| UI state | `docs/ui/ui_state.md` |
+| Design system | `docs/ui/design_system.md` |
+| Wireframes | `docs/ui/wireframes/*.png` |
+| Test queries | `tests/test_queries.json` |
+| Corpus manifest | `data/sample_manifest.md` |
+| ERD changes | `docs/architecture/erd_v2_changes.md` |
+| DFD changes | `docs/architecture/dfd_v2_changes.md` |
+| Risk register | `docs/architecture/risk_register_sprint3.md` |
+| Storage sizing | `docs/architecture/storage_sizing.md` |
+| Tai API spec | `docs/api/api_spec.yaml` |
+| Tai privacy policy | `docs/governance/privacy_policy.md` |
+| Tai ethics review | `docs/governance/ethics_review_sprint3.md` |
+| Tai Sprint 4 kickoff | `docs/meetings/sprint_4_kickoff.md` |
 
 ## 15. Sprint 5/6 Architecture Reconciliation (added 26 Jul 2026, Sprint 6 T05/T06)
 
